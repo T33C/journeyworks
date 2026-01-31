@@ -1,0 +1,543 @@
+meta:
+  bank: HSBC
+  purpose: "Synthetic customer support call transcript generator spec for demos (fabricated data)."
+  version: 1
+  default_channel: "phone"
+  speakers:
+    customer: "Customer"
+    agent: "Agent"
+  output_schema:
+    transcript_fields:
+      - transcript_id
+      - event_id
+      - event_name
+      - channel
+      - scenario_id
+      - journey_type
+      - sentiment
+      - outcome
+      - turns
+
+generation:
+  transcripts_per_event: 100
+  seed: 12345
+
+  # Controls how "long" calls are, per scenario
+  call_length:
+    short_turns: [6, 8]     # inclusive min,max
+    medium_turns: [8, 12]
+    long_turns: [12, 18]
+    distribution:
+      short: 0.45
+      medium: 0.45
+      long: 0.10
+
+  # High-level labels you can use for journey mapping dashboards
+  sentiments:
+    distribution:
+      positive: 0.18
+      neutral: 0.22
+      negative: 0.60
+
+  outcomes:
+    distribution:
+      resolved: 0.55
+      partial: 0.25
+      escalated: 0.15
+      unresolved: 0.05
+
+  # Agent tone affects wording (but stays professional)
+  agent_tone:
+    distribution:
+      warm: 0.45
+      neutral: 0.40
+      formal: 0.15
+
+  # Customer temperament affects intensity and phrasing
+  customer_temperament:
+    distribution:
+      calm: 0.35
+      frustrated: 0.45
+      angry: 0.20
+
+events:
+  - event_id: E01
+    event_name: Mobile Banking App Redesign
+    event_type: Product_Update
+  - event_id: E02
+    event_name: Savings Account Linked to Base Rate
+    event_type: Product_Launch
+  - event_id: E03
+    event_name: Nationwide Banking Outage
+    event_type: Service_Incident
+  - event_id: E04
+    event_name: Charity Partnership Announcement
+    event_type: Philanthropy
+  - event_id: E05
+    event_name: Premier Account Eligibility Changes
+    event_type: Policy_Change
+  - event_id: E06
+    event_name: Sports Sponsorship Deal
+    event_type: Marketing
+  - event_id: E07
+    event_name: Mortgage Rate Increase
+    event_type: Pricing_Change
+  - event_id: E08
+    event_name: Digital Cheque Imaging Upgrade
+    event_type: Technology_Update
+  - event_id: E09
+    event_name: Fraud Alert Spike
+    event_type: Security_Incident
+  - event_id: E10
+    event_name: New Junior ISA Launch
+    event_type: Product_Launch
+  - event_id: E11
+    event_name: Branch Closures Announcement
+    event_type: Operational_Change
+  - event_id: E12
+    event_name: International Transfer Fee Reduction
+    event_type: Pricing_Change
+  - event_id: E13
+    event_name: Contact Centre System Upgrade
+    event_type: Internal_Change
+  - event_id: E14
+    event_name: Credit Card Rewards Revamp
+    event_type: Product_Update
+  - event_id: E15
+    event_name: Open Banking Dashboard Release
+    event_type: Technology_Launch
+  - event_id: E16
+    event_name: Travel Insurance Partnership
+    event_type: Partnership
+  - event_id: E17
+    event_name: Green Finance Initiative
+    event_type: Sustainability
+  - event_id: E18
+    event_name: System Maintenance Downtime
+    event_type: Planned_Maintenance
+  - event_id: E19
+    event_name: KYC Refresh Campaign
+    event_type: Compliance
+  - event_id: E20
+    event_name: Wealth Management Webinar Series
+    event_type: Education
+
+# Journey types are reusable across events; each event maps onto a subset.
+journey_types:
+  - id: JT_APP_LOGIN
+    name: "App login / access issue"
+  - id: JT_APP_NAV
+    name: "App usability / feature discovery"
+  - id: JT_PRODUCT_INFO
+    name: "Product information / eligibility"
+  - id: JT_PRICING_DISPUTE
+    name: "Pricing / interest / fee dispute"
+  - id: JT_OUTAGE
+    name: "Outage status / reassurance"
+  - id: JT_COMPENSATION
+    name: "Compensation / complaint handling"
+  - id: JT_FRAUD
+    name: "Fraud block / card security"
+  - id: JT_ACCOUNT_OPEN
+    name: "Account opening / onboarding"
+  - id: JT_BRANCH_ACCESS
+    name: "Branch closure / access needs"
+  - id: JT_TRANSFER_TRACKING
+    name: "Transfer tracking / delays"
+  - id: JT_REWARDS
+    name: "Rewards / points queries"
+  - id: JT_OPEN_BANKING
+    name: "Open Banking linking / refresh"
+  - id: JT_INSURANCE
+    name: "Insurance purchase / claims boundary"
+  - id: JT_MORTGAGE
+    name: "Mortgage affordability / rate changes"
+  - id: JT_COMPLIANCE_KYC
+    name: "KYC refresh / document upload"
+  - id: JT_EDUCATION_EVENTS
+    name: "Webinar / education event support"
+  - id: JT_GENERAL_FEEDBACK
+    name: "General brand feedback"
+
+# For each event, define which journeys are likely and their relative frequency.
+event_journey_mix:
+  E01: { JT_APP_NAV: 0.55, JT_APP_LOGIN: 0.30, JT_GENERAL_FEEDBACK: 0.15 }
+  E02: { JT_PRODUCT_INFO: 0.45, JT_PRICING_DISPUTE: 0.40, JT_ACCOUNT_OPEN: 0.15 }
+  E03: { JT_OUTAGE: 0.45, JT_COMPENSATION: 0.40, JT_APP_LOGIN: 0.15 }
+  E04: { JT_GENERAL_FEEDBACK: 0.70, JT_PRODUCT_INFO: 0.30 }
+  E05: { JT_PRODUCT_INFO: 0.35, JT_COMPENSATION: 0.40, JT_GENERAL_FEEDBACK: 0.25 }
+  E06: { JT_PRODUCT_INFO: 0.30, JT_GENERAL_FEEDBACK: 0.70 }
+  E07: { JT_MORTGAGE: 0.65, JT_PRICING_DISPUTE: 0.25, JT_COMPENSATION: 0.10 }
+  E08: { JT_APP_NAV: 0.25, JT_PRODUCT_INFO: 0.20, JT_COMPENSATION: 0.15, JT_GENERAL_FEEDBACK: 0.40 }
+  E09: { JT_FRAUD: 0.70, JT_COMPENSATION: 0.20, JT_GENERAL_FEEDBACK: 0.10 }
+  E10: { JT_ACCOUNT_OPEN: 0.55, JT_PRODUCT_INFO: 0.30, JT_APP_LOGIN: 0.15 }
+  E11: { JT_BRANCH_ACCESS: 0.70, JT_COMPENSATION: 0.10, JT_GENERAL_FEEDBACK: 0.20 }
+  E12: { JT_PRODUCT_INFO: 0.30, JT_PRICING_DISPUTE: 0.25, JT_TRANSFER_TRACKING: 0.45 }
+  E13: { JT_OUTAGE: 0.25, JT_COMPENSATION: 0.50, JT_GENERAL_FEEDBACK: 0.25 }
+  E14: { JT_REWARDS: 0.70, JT_PRICING_DISPUTE: 0.20, JT_COMPENSATION: 0.10 }
+  E15: { JT_OPEN_BANKING: 0.75, JT_APP_LOGIN: 0.10, JT_GENERAL_FEEDBACK: 0.15 }
+  E16: { JT_INSURANCE: 0.75, JT_PRODUCT_INFO: 0.15, JT_COMPENSATION: 0.10 }
+  E17: { JT_PRODUCT_INFO: 0.35, JT_GENERAL_FEEDBACK: 0.65 }
+  E18: { JT_OUTAGE: 0.50, JT_APP_LOGIN: 0.20, JT_COMPENSATION: 0.30 }
+  E19: { JT_COMPLIANCE_KYC: 0.80, JT_APP_LOGIN: 0.10, JT_COMPENSATION: 0.10 }
+  E20: { JT_EDUCATION_EVENTS: 0.75, JT_PRODUCT_INFO: 0.10, JT_GENERAL_FEEDBACK: 0.15 }
+
+# Scenario templates: "structured conversation" skeletons with slot fills.
+# The generator will pick one that matches the journey_type and expand it.
+scenario_library:
+  JT_APP_LOGIN:
+    - scenario_id: S_APP_LOGIN_1
+      length: short
+      opening:
+        - "Hi, I can't log into the HSBC app — it keeps looping on the sign-in screen."
+        - "Hello, my app login isn't working after the latest update."
+        - "I’m locked out of the app and I need to make a payment today."
+      agent_moves:
+        - "Confirm identity and ask device/OS details."
+        - "Suggest basic troubleshooting steps: restart app, update, reinstall."
+        - "Offer alternative access (online banking) and reset guidance."
+      closings:
+        resolved:
+          - "Okay, that worked — I'm back in now. Thanks."
+        partial:
+          - "It's better, but it still feels unstable. I’ll try again later."
+        escalated:
+          - "I’ll escalate this to our technical team and arrange a callback."
+        unresolved:
+          - "I still can't access it. This is really disruptive."
+
+  JT_APP_NAV:
+    - scenario_id: S_APP_NAV_1
+      length: medium
+      opening:
+        - "Since the new app layout, I can't find where to manage standing orders."
+        - "Where did you move the transfers screen? I’m going in circles."
+        - "The app redesign is confusing — I used to do this in two taps."
+      agent_moves:
+        - "Explain where the feature has moved and guide step-by-step."
+        - "Offer to send a help link or in-app guidance."
+        - "Capture feedback about UI and accessibility."
+      closings:
+        resolved:
+          - "Found it now — still not great, but at least I know where it is."
+        partial:
+          - "Okay, I can do it this time, but it's not intuitive."
+        escalated:
+          - "I’m escalating your feedback to the app team and logging the issue."
+        unresolved:
+          - "No, it's still not showing for me. Something is wrong."
+
+  JT_PRODUCT_INFO:
+    - scenario_id: S_PRODUCT_INFO_1
+      length: short
+      opening:
+        - "I saw a new HSBC product mentioned — can you explain how it works?"
+        - "Can you tell me if I'm eligible for this account and how to apply?"
+        - "I got an email about changes — what does this mean for me?"
+      agent_moves:
+        - "Explain key terms, eligibility, and where to apply."
+        - "Set expectations: what HSBC can/can’t advise."
+        - "Offer follow-up materials and next steps."
+      closings:
+        resolved:
+          - "That clears it up, thanks."
+        partial:
+          - "I understand, but I’ll need to think about it."
+        escalated:
+          - "I’ll refer you to the specialist team for the detailed criteria."
+        unresolved:
+          - "This still doesn't make sense — the email was too vague."
+
+  JT_PRICING_DISPUTE:
+    - scenario_id: S_PRICING_1
+      length: medium
+      opening:
+        - "My interest/payment/fees don't match what I expected — can you explain?"
+        - "Why has the rate changed again? I didn’t agree to this."
+        - "I think I've been charged incorrectly."
+      agent_moves:
+        - "Check account details and explain how calculation works."
+        - "Acknowledge frustration and log a complaint if needed."
+        - "Offer alternatives: different product or review."
+      closings:
+        resolved:
+          - "Okay, I see where the numbers came from now."
+        partial:
+          - "I still don’t like it, but at least I understand."
+        escalated:
+          - "I’m raising a formal investigation for you."
+        unresolved:
+          - "No, I want this corrected immediately. I'm not satisfied."
+
+  JT_OUTAGE:
+    - scenario_id: S_OUTAGE_1
+      length: short
+      opening:
+        - "Is HSBC down? I can't access the app or make a card payment."
+        - "I’m seeing errors everywhere — what’s going on?"
+        - "My payments failed today. Is there an outage?"
+      agent_moves:
+        - "Confirm incident status and provide ETA if known."
+        - "Apologise and offer workarounds."
+        - "Log impact for compensation review."
+      closings:
+        resolved:
+          - "Alright, thanks for confirming — I'll try again later."
+        partial:
+          - "Still inconvenient, but I appreciate the update."
+        escalated:
+          - "I’ll log this as a complaint and ensure follow-up."
+        unresolved:
+          - "I can't run my day like this. I need immediate access."
+
+  JT_COMPENSATION:
+    - scenario_id: S_COMP_1
+      length: medium
+      opening:
+        - "Because of the issue, I missed a payment/was charged extra — what will HSBC do?"
+        - "I want to complain and request compensation."
+        - "Your service disruption cost me money."
+      agent_moves:
+        - "Gather details, apologise, explain complaint process."
+        - "Set expectations on timelines and outcomes."
+        - "Offer interim support and case reference."
+      closings:
+        resolved:
+          - "Okay, I’ll wait for the outcome. Thanks for logging it."
+        partial:
+          - "I’m not thrilled, but I’ll wait for your response."
+        escalated:
+          - "I’m escalating your complaint due to the financial impact."
+        unresolved:
+          - "No, that's not acceptable. I want a manager now."
+
+  JT_FRAUD:
+    - scenario_id: S_FRAUD_1
+      length: long
+      opening:
+        - "My card was blocked for suspected fraud and I'm travelling — I need help urgently."
+        - "I got a fraud alert but the transaction was mine."
+        - "HSBC declined my payment and now my card is frozen."
+      agent_moves:
+        - "Verify identity carefully."
+        - "Explain fraud controls and unblock if safe."
+        - "Discuss travel notification and best practice."
+        - "Offer emergency alternatives."
+      closings:
+        resolved:
+          - "It works now. Please don’t block it again — that was stressful."
+        partial:
+          - "Okay, it’s unblocked, but I’m worried it’ll happen again."
+        escalated:
+          - "I’m escalating to the fraud team for monitoring and follow-up."
+        unresolved:
+          - "I still can’t pay. This is a disaster."
+
+  JT_ACCOUNT_OPEN:
+    - scenario_id: S_OPEN_1
+      length: medium
+      opening:
+        - "I'm trying to open an account and the app keeps failing at the last step."
+        - "What documents do I need for this new account?"
+        - "I started the application but it timed out."
+      agent_moves:
+        - "Explain steps and required documents."
+        - "Offer to complete via phone or branch alternatives."
+        - "Confirm expected timelines."
+      closings:
+        resolved:
+          - "Great, it's submitted now — thanks."
+        partial:
+          - "I’ll upload the documents later today."
+        escalated:
+          - "I’ll refer this to the onboarding team to complete for you."
+        unresolved:
+          - "It still won’t submit. I'm giving up for now."
+
+  JT_BRANCH_ACCESS:
+    - scenario_id: S_BRANCH_1
+      length: medium
+      opening:
+        - "Why is my local branch closing? I need help with cash services."
+        - "This closure makes banking harder for my parents."
+        - "What alternative do I have if I don't use apps?"
+      agent_moves:
+        - "Explain available alternatives (Post Office, digital, phone)."
+        - "Address vulnerable customer options."
+        - "Log feedback and complaints."
+      closings:
+        resolved:
+          - "Alright, I’ll try the Post Office option."
+        partial:
+          - "I still think it’s a bad decision, but I understand the alternatives."
+        escalated:
+          - "I’m escalating your concerns as a vulnerable customer case."
+        unresolved:
+          - "No, this isn’t workable for me."
+
+  JT_TRANSFER_TRACKING:
+    - scenario_id: S_TRANSFER_1
+      length: short
+      opening:
+        - "My international transfer hasn’t arrived. Can you track it?"
+        - "How long should this transfer take? It's been days."
+        - "Is there a fee change? Also, where is my money?"
+      agent_moves:
+        - "Check transfer reference and explain timelines."
+        - "Clarify fees and cut-off times."
+        - "Set expectations for tracing/escalation."
+      closings:
+        resolved:
+          - "Okay, thanks — I’ll wait until tomorrow."
+        partial:
+          - "I’ll wait, but I’m worried."
+        escalated:
+          - "I’m raising a trace request now."
+        unresolved:
+          - "I need this resolved today. This is urgent."
+
+  JT_REWARDS:
+    - scenario_id: S_REWARDS_1
+      length: medium
+      opening:
+        - "My rewards points value looks different after the changes."
+        - "I can’t redeem points the way I used to."
+        - "Did HSBC reduce rewards without telling customers properly?"
+      agent_moves:
+        - "Explain scheme changes and redemption options."
+        - "Check points balance and recent activity."
+        - "Offer complaint logging for dissatisfaction."
+      closings:
+        resolved:
+          - "Okay, I can redeem it that way. Thanks."
+        partial:
+          - "I’m still unhappy with the change, but I understand it now."
+        escalated:
+          - "I’ll log a complaint and escalate your feedback."
+        unresolved:
+          - "No, this is a downgrade. I'm not accepting this."
+
+  JT_OPEN_BANKING:
+    - scenario_id: S_OB_1
+      length: medium
+      opening:
+        - "My other bank keeps disconnecting from HSBC Open Banking."
+        - "The dashboard isn’t refreshing and my balances are wrong."
+        - "I linked accounts yesterday and it failed today."
+      agent_moves:
+        - "Explain reauthorisation and refresh timing."
+        - "Troubleshoot permissions."
+        - "Collect diagnostics and escalate if persistent."
+      closings:
+        resolved:
+          - "Okay, relinking worked."
+        partial:
+          - "It’s working now, but I expect this to happen again."
+        escalated:
+          - "I’m escalating this to the Open Banking support team."
+        unresolved:
+          - "Still broken. I’ll stop using the dashboard."
+
+  JT_INSURANCE:
+    - scenario_id: S_INS_1
+      length: short
+      opening:
+        - "If I buy travel insurance through HSBC, who handles claims?"
+        - "The terms weren’t clear — can you explain the exclusions?"
+        - "I want to buy it but I need clarity first."
+      agent_moves:
+        - "Explain partner vs HSBC responsibilities."
+        - "Clarify key exclusions at a high level."
+        - "Direct to policy documents."
+      closings:
+        resolved:
+          - "Okay, that’s clear."
+        partial:
+          - "I’ll read the policy details and decide."
+        escalated:
+          - "I’ll transfer you to the insurance partner line for specifics."
+        unresolved:
+          - "I don’t trust this if it’s not clearly explained."
+
+  JT_MORTGAGE:
+    - scenario_id: S_MORT_1
+      length: long
+      opening:
+        - "My mortgage payment increased and I’m struggling — what are my options?"
+        - "Why did my rate change? I need a clear explanation."
+        - "I want to discuss switching to a fixed rate."
+      agent_moves:
+        - "Explain base rate impacts and product terms."
+        - "Discuss options: fixed, term change, budgeting support."
+        - "Set expectations on offers and affordability checks."
+      closings:
+        resolved:
+          - "Okay, let’s proceed with the fixed-rate quote."
+        partial:
+          - "I’ll review the numbers and call back."
+        escalated:
+          - "I’m escalating to the mortgage team for a full review."
+        unresolved:
+          - "This isn’t acceptable — I’m considering moving lenders."
+
+  JT_COMPLIANCE_KYC:
+    - scenario_id: S_KYC_1
+      length: medium
+      opening:
+        - "My account was restricted because I didn’t upload documents in time."
+        - "The document upload keeps failing."
+        - "Why do you keep asking for the same ID every year?"
+      agent_moves:
+        - "Explain regulatory requirement and deadlines."
+        - "Help with upload steps and acceptable documents."
+        - "Unrestrict account after verification (if possible)."
+      closings:
+        resolved:
+          - "Okay, documents uploaded and access restored."
+        partial:
+          - "Uploaded, but I’m still annoyed about the process."
+        escalated:
+          - "I’m escalating because your account remains restricted."
+        unresolved:
+          - "It’s still blocked. This is unacceptable."
+
+  JT_EDUCATION_EVENTS:
+    - scenario_id: S_WEBINAR_1
+      length: short
+      opening:
+        - "I missed the webinar — is there a replay?"
+        - "I can’t register for the event. The link errors."
+        - "Will the webinar give personalised advice?"
+      agent_moves:
+        - "Explain registration steps and replay availability."
+        - "Clarify advice boundaries."
+        - "Offer support and alternative resources."
+      closings:
+        resolved:
+          - "Great, thanks."
+        partial:
+          - "Okay, I’ll try registering again later."
+        escalated:
+          - "I’ll escalate the broken link to the events team."
+        unresolved:
+          - "Still can’t access it — I’ll skip it."
+
+  JT_GENERAL_FEEDBACK:
+    - scenario_id: S_FEEDBACK_1
+      length: short
+      opening:
+        - "I just wanted to share feedback about the recent HSBC announcement."
+        - "I’m calling because I’m disappointed with how HSBC handled this."
+        - "I’ve got a suggestion — where can I send it?"
+      agent_moves:
+        - "Acknowledge feedback and log it."
+        - "Offer official channels and next steps."
+      closings:
+        resolved:
+          - "Thanks for listening."
+        partial:
+          - "I hope it actually gets seen."
+        escalated:
+          - "I’m escalating your feedback due to the nature of the concern."
+        unresolved:
+          - "Feels pointless — I don’t think HSBC cares."
