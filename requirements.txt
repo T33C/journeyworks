@@ -1,0 +1,7 @@
+#Python 3.13
+# For MacOs, you will need to run: CMAKE_ARGS="-DGGML_METAL=ON -DGGML_OPENMP=OFF" pip install --no-cache-dir --force-reinstall llama-cpp-python
+
+weaviate-client
+sentence-transformers
+llama-cpp-python
+pyyaml
