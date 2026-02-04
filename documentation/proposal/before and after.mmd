@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph Before["❌ TODAY"]
+        direction TB
+        B1["Manual Classification"]
+        B2["Slow Insights"]
+        B3["Inconsistent Tagging"]
+        B4["Hidden Trends"]
+        B5["Reactive Only"]
+    end
+
+    subgraph Arrow[" "]
+        TRANSFORM["🚀"]
+    end
+
+    subgraph After["✅ WITH AI PLATFORM"]
+        direction TB
+        A1["Automated Classification"]
+        A2["Instant Insights"]
+        A3["Consistent & Accurate"]
+        A4["Proactive Alerts"]
+        A5["Deep Research"]
+    end
+
+    Before --> Arrow --> After
+
+    style Before fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style After fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Arrow fill:#ffffff,stroke:#ffffff

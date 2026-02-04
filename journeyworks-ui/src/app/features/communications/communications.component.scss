@@ -1,0 +1,122 @@
+.communications-page {
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 500;
+  }
+
+  .subtitle {
+    margin: 4px 0 0;
+    color: #666;
+    font-size: 14px;
+  }
+}
+
+.filters-card {
+  margin-bottom: 24px;
+
+  mat-card-content {
+    padding: 16px;
+  }
+
+  .filters-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+
+    mat-form-field {
+      flex: 1;
+      min-width: 150px;
+      max-width: 200px;
+    }
+
+    mat-form-field:first-child {
+      flex: 2;
+      max-width: 300px;
+    }
+  }
+}
+
+.table-card {
+  .loading-container {
+    padding: 48px;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  .customer-link,
+  .subject-link {
+    color: #1976d2;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  .topics {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+
+    mat-chip {
+      font-size: 10px;
+      min-height: 20px;
+      padding: 2px 8px;
+    }
+  }
+
+  .channel-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .direction-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      color: #999;
+    }
+  }
+
+  .sentiment-label {
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+
+  .priority-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+
+    &.priority-low {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+
+    &.priority-medium {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+
+    &.priority-high {
+      background: #ffebee;
+      color: #d32f2f;
+    }
+
+    &.priority-urgent {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+  }
+}

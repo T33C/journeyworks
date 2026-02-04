@@ -1,0 +1,181 @@
+<div class="research-page">
+  <div class="research-container">
+    <!-- Chat Area -->
+    <div class="chat-area">
+      <div class="chat-header">
+        <h1>Research Assistant</h1>
+        <div class="header-actions">
+          <button
+            mat-icon-button
+            (click)="toggleReasoning()"
+            [matTooltip]="showReasoning() ? 'Hide reasoning' : 'Show reasoning'"
+          >
+            <mat-icon>psychology</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            (click)="clearConversation()"
+            matTooltip="New conversation"
+          >
+            <mat-icon>refresh</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages-container" #messagesContainer>
+        @if (messages().length === 0) {
+          <div class="welcome-state">
+            <mat-icon class="welcome-icon">psychology_alt</mat-icon>
+            <h2>Ask me anything about your customer data</h2>
+            <p>
+              I can help you analyze communications, identify trends, find
+              at-risk customers, and more.
+            </p>
+
+            <div class="suggestion-chips">
+              @for (suggestion of suggestions(); track suggestion) {
+                <button mat-stroked-button (click)="useSuggestion(suggestion)">
+                  {{ suggestion }}
+                </button>
+              }
+            </div>
+          </div>
+        } @else {
+          @for (message of messages(); track message.id) {
+            <div class="message" [class]="'message-' + message.role">
+              <div class="message-avatar">
+                <mat-icon>{{
+                  message.role === "user" ? "person" : "smart_toy"
+                }}</mat-icon>
+              </div>
+              <div class="message-content">
+                <div
+                  class="message-text"
+                  [innerHTML]="message.content | slice: 0 : 10000"
+                ></div>
+
+                @if (message.sources?.length) {
+                  <div class="message-sources">
+                    <span class="sources-label">Sources:</span>
+                    @for (source of message.sources; track source.id) {
+                      <mat-chip [matTooltip]="source.snippet">
+                        <mat-icon>{{ getSourceIcon(source.type) }}</mat-icon>
+                        {{ source.title }}
+                      </mat-chip>
+                    }
+                  </div>
+                }
+
+                <span class="message-time">{{
+                  message.timestamp | date: "shortTime"
+                }}</span>
+              </div>
+            </div>
+          }
+
+          @if (isLoading()) {
+            <div class="message message-assistant">
+              <div class="message-avatar">
+                <mat-icon>smart_toy</mat-icon>
+              </div>
+              <div class="message-content">
+                <div class="thinking-indicator">
+                  <mat-spinner diameter="20"></mat-spinner>
+                  <span>{{ currentThinking() }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        @if (
+          messages().length > 0 && suggestions().length > 0 && !isLoading()
+        ) {
+          <div class="follow-up-suggestions">
+            @for (suggestion of suggestions(); track suggestion) {
+              <button
+                mat-stroked-button
+                (click)="useSuggestion(suggestion)"
+                class="suggestion-btn"
+              >
+                {{ suggestion }}
+              </button>
+            }
+          </div>
+        }
+
+        <div class="input-row">
+          <mat-form-field appearance="outline" class="query-input">
+            <input
+              matInput
+              [(ngModel)]="currentQuery"
+              (keyup.enter)="sendQuery()"
+              placeholder="Ask a question about your customer data..."
+              [disabled]="isLoading()"
+              #queryInput
+            />
+          </mat-form-field>
+          <button
+            mat-fab
+            color="primary"
+            (click)="sendQuery()"
+            [disabled]="!currentQuery.trim() || isLoading()"
+          >
+            <mat-icon>send</mat-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reasoning Panel -->
+    @if (showReasoning() && lastReasoningSteps().length > 0) {
+      <div class="reasoning-panel">
+        <h3>Agent Reasoning</h3>
+        <div class="reasoning-steps">
+          @for (step of lastReasoningSteps(); track step.step) {
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                <mat-panel-title>
+                  Step {{ step.step }}: {{ step.action }}
+                </mat-panel-title>
+              </mat-expansion-panel-header>
+              <div class="step-content">
+                <div class="step-thought">
+                  <strong>Thought:</strong> {{ step.thought }}
+                </div>
+                @if (step.observation) {
+                  <div class="step-observation">
+                    <strong>Observation:</strong> {{ step.observation }}
+                  </div>
+                }
+              </div>
+            </mat-expansion-panel>
+          }
+        </div>
+
+        @if (lastSources().length > 0) {
+          <h3>Sources Used</h3>
+          <div class="sources-list">
+            @for (source of lastSources(); track source.id) {
+              <div class="source-item">
+                <mat-icon>{{ getSourceIcon(source.type) }}</mat-icon>
+                <div class="source-info">
+                  <span class="source-title">{{ source.title }}</span>
+                  <span class="source-snippet">{{ source.snippet }}</span>
+                  <span class="source-score"
+                    >Relevance:
+                    {{ source.relevanceScore * 100 | number: "1.0-0" }}%</span
+                  >
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

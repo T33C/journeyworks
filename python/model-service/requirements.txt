@@ -1,0 +1,10 @@
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+sentence-transformers>=2.3.0
+transformers>=4.30.0
+torch>=2.0.0 --index-url https://download.pytorch.org/whl/cpu
+# Using cpu-only torch for broader compatibility in this example
+# If you have a CUDA-enabled GPU and want to use it, install the appropriate torch version:
+# e.g., pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pydantic>=2.0.0
+accelerate>=0.20.0 # Often helpful for transformers, especially on CPU

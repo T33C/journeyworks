@@ -1,0 +1,210 @@
+<div class="customer-detail">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+    </div>
+  } @else {
+    @if (customer(); as cust) {
+      <!-- Breadcrumb -->
+      <div class="breadcrumb">
+        <a routerLink="/communications">Communications</a>
+        <mat-icon>chevron_right</mat-icon>
+        <span>{{ cust.name }}</span>
+      </div>
+
+      <!-- Customer Header -->
+      <mat-card class="header-card">
+        <mat-card-content>
+          <div class="customer-header">
+            <div class="customer-avatar">
+              <mat-icon>business</mat-icon>
+            </div>
+            <div class="customer-info">
+              <h1>{{ cust.name }}</h1>
+              <div class="customer-meta">
+                <span class="tier-badge" [class]="getTierClass(cust.tier)">
+                  {{ cust.tier | titlecase }} Tier
+                </span>
+                @if (cust.riskLevel) {
+                  <span
+                    class="risk-badge"
+                    [class]="getRiskClass(cust.riskLevel)"
+                  >
+                    {{ cust.riskLevel | titlecase }} Risk
+                  </span>
+                }
+              </div>
+              <div class="customer-contact">
+                <span><mat-icon>email</mat-icon> {{ cust.email }}</span>
+                @if (cust.accountManager) {
+                  <span
+                    ><mat-icon>person</mat-icon> {{ cust.accountManager }}</span
+                  >
+                }
+              </div>
+            </div>
+            <div class="customer-stats">
+              <div class="stat">
+                <span class="stat-value">{{ cust.totalCommunications }}</span>
+                <span class="stat-label">Communications</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value">{{ cust.openCases }}</span>
+                <span class="stat-label">Open Cases</span>
+              </div>
+              @if (cust.healthScore) {
+                <div
+                  class="stat health-stat"
+                  [class]="getHealthScoreClass(cust.healthScore)"
+                >
+                  <span class="stat-value">{{ cust.healthScore }}</span>
+                  <span class="stat-label">Health Score</span>
+                </div>
+              }
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <div class="content-grid">
+        <!-- Health Report -->
+        @if (healthReport(); as report) {
+          <mat-card class="health-card">
+            <mat-card-header>
+              <mat-card-title>
+                <mat-icon>monitor_heart</mat-icon>
+                Customer Health
+              </mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="health-overview">
+                <div
+                  class="health-score"
+                  [class]="getHealthScoreClass(report.healthScore)"
+                >
+                  <span class="score-value">{{ report.healthScore }}</span>
+                  <span class="score-label">Health Score</span>
+                </div>
+                <div class="health-trend" [class]="getTrendClass(report.trend)">
+                  <mat-icon>{{ getTrendIcon(report.trend) }}</mat-icon>
+                  <span>{{ report.trend | titlecase }}</span>
+                </div>
+              </div>
+
+              @if (report.riskFactors.length > 0) {
+                <div class="risk-factors">
+                  <h4>Risk Factors</h4>
+                  <ul>
+                    @for (factor of report.riskFactors; track factor) {
+                      <li>
+                        <mat-icon>warning</mat-icon>
+                        {{ factor }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              @if (report.recommendations.length > 0) {
+                <div class="recommendations">
+                  <h4>Recommendations</h4>
+                  <ul>
+                    @for (rec of report.recommendations; track rec) {
+                      <li>
+                        <mat-icon>lightbulb</mat-icon>
+                        {{ rec }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              <div class="last-updated">
+                Last updated: {{ report.lastUpdated | date: "medium" }}
+              </div>
+            </mat-card-content>
+          </mat-card>
+        }
+
+        <!-- Recent Communications -->
+        <mat-card class="communications-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>mail</mat-icon>
+              Recent Communications
+            </mat-card-title>
+            <a
+              mat-button
+              color="primary"
+              routerLink="/communications"
+              [queryParams]="{ customerId: cust.id }"
+            >
+              View All
+            </a>
+          </mat-card-header>
+          <mat-card-content>
+            <table mat-table [dataSource]="communications()">
+              <ng-container matColumnDef="subject">
+                <th mat-header-cell *matHeaderCellDef>Subject</th>
+                <td mat-cell *matCellDef="let row">
+                  <a
+                    [routerLink]="['/communications', row.id]"
+                    class="subject-link"
+                  >
+                    {{ row.subject || "(No subject)" }}
+                  </a>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="channel">
+                <th mat-header-cell *matHeaderCellDef>Channel</th>
+                <td mat-cell *matCellDef="let row">
+                  <mat-icon [matTooltip]="row.channel">{{
+                    getChannelIcon(row.channel)
+                  }}</mat-icon>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="sentiment">
+                <th mat-header-cell *matHeaderCellDef>Sentiment</th>
+                <td mat-cell *matCellDef="let row">
+                  <span [class]="getSentimentClass(row.sentiment)">
+                    {{ row.sentiment?.label || "N/A" }}
+                  </span>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef>Status</th>
+                <td mat-cell *matCellDef="let row">
+                  <span
+                    class="status-badge"
+                    [class]="getStatusClass(row.status)"
+                  >
+                    {{ row.status.replace("_", " ") }}
+                  </span>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="timestamp">
+                <th mat-header-cell *matHeaderCellDef>Time</th>
+                <td mat-cell *matCellDef="let row">
+                  {{ row.timestamp | date: "short" }}
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+            </table>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    } @else {
+      <div class="error-state">
+        <mat-icon>error_outline</mat-icon>
+        <h2>Customer not found</h2>
+        <a mat-button routerLink="/communications">Back to Communications</a>
+      </div>
+    }
+  }
+</div>

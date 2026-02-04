@@ -1,0 +1,36 @@
+flowchart LR
+    subgraph Sources["📥 DATA SOURCES"]
+        direction TB
+        S1[📧 Emails]
+        S2[📄 Letters]
+        S3[📞 Calls]
+        S4[📱 Social Media]
+    end
+
+    subgraph OnPrem["🏢 YOUR INFRASTRUCTURE"]
+        direction TB
+        I[Secure Data<br/>Processing & Storage]
+        D[(Customer Data<br/>Stays On-Prem)]
+        A[Analytics &<br/>Dashboards]
+    end
+
+    subgraph Cloud["☁️ CLOUD AI"]
+        direction TB
+        AI[🤖 AI Services<br/>Classification • Sentiment<br/>Understanding • Research]
+    end
+
+    subgraph Users["👤 USERS"]
+        direction TB
+        U1[📊 Analysts]
+        U2[📈 Managers]
+        U3[✅ Compliance]
+    end
+
+    Sources --> OnPrem
+    OnPrem <-->|PII-Masked<br/>Data Only| Cloud
+    OnPrem --> Users
+
+    style Sources fill:#e3f2fd,stroke:#1976d2
+    style OnPrem fill:#e8f5e9,stroke:#388e3c
+    style Cloud fill:#fff3e0,stroke:#f57c00
+    style Users fill:#f3e5f5,stroke:#7b1fa2

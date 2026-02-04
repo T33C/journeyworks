@@ -1,0 +1,306 @@
+<div class="communication-detail">
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+    </div>
+  } @else {
+    @if (communication(); as comm) {
+      <!-- Breadcrumb -->
+      <div class="breadcrumb">
+        <a routerLink="/communications">Communications</a>
+        <mat-icon>chevron_right</mat-icon>
+        <span>{{ comm.subject || "Communication Detail" }}</span>
+      </div>
+
+      <div class="detail-layout">
+        <!-- Main Content -->
+        <div class="main-content">
+          <mat-card class="header-card">
+            <mat-card-header>
+              <div class="header-row">
+                <div class="header-info">
+                  <mat-icon class="channel-icon">{{
+                    getChannelIcon(comm.channel)
+                  }}</mat-icon>
+                  <div class="header-text">
+                    <h1>{{ comm.subject || "(No subject)" }}</h1>
+                    <div class="meta">
+                      <span
+                        >From:
+                        <a
+                          [routerLink]="['/customers', comm.customerId]"
+                          class="customer-link"
+                          >{{ comm.customerName }}</a
+                        >
+                      </span>
+                      <span class="divider">•</span>
+                      <span>{{ comm.timestamp | date: "medium" }}</span>
+                      <span class="divider">•</span>
+                      <span>{{ comm.direction | titlecase }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="header-actions">
+                  <button mat-button [matMenuTriggerFor]="statusMenu">
+                    <span
+                      class="status-badge"
+                      [class]="getStatusClass(comm.status)"
+                    >
+                      {{ comm.status.replace("_", " ") | titlecase }}
+                    </span>
+                    <mat-icon>arrow_drop_down</mat-icon>
+                  </button>
+                  <mat-menu #statusMenu="matMenu">
+                    <button mat-menu-item (click)="updateStatus('open')">
+                      Open
+                    </button>
+                    <button mat-menu-item (click)="updateStatus('in_progress')">
+                      In Progress
+                    </button>
+                    <button mat-menu-item (click)="updateStatus('resolved')">
+                      Resolved
+                    </button>
+                    <button mat-menu-item (click)="updateStatus('escalated')">
+                      Escalated
+                    </button>
+                  </mat-menu>
+                </div>
+              </div>
+            </mat-card-header>
+          </mat-card>
+
+          <mat-card class="content-card">
+            <mat-card-header>
+              <mat-card-title>Message Content</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="message-content">{{ comm.content }}</div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Details</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="detail-item">
+                <span class="label">Priority</span>
+                <span class="value priority-{{ comm.priority }}">{{
+                  comm.priority | titlecase
+                }}</span>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="detail-item">
+                <span class="label">Channel</span>
+                <span class="value">{{ comm.channel | titlecase }}</span>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <div class="detail-item">
+                <span class="label">Assigned To</span>
+                <span class="value">{{ comm.assignedTo || "Unassigned" }}</span>
+              </div>
+
+              @if (comm.caseId) {
+                <mat-divider></mat-divider>
+                <div class="detail-item">
+                  <span class="label">Case ID</span>
+                  <span class="value">{{ comm.caseId }}</span>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Sentiment Analysis</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              @if (comm.sentiment) {
+                <div
+                  class="sentiment-display"
+                  [class]="getSentimentClass(comm.sentiment)"
+                >
+                  <div class="sentiment-score">
+                    {{ comm.sentiment.score * 100 | number: "1.0-0" }}
+                  </div>
+                  <div class="sentiment-label">
+                    {{ comm.sentiment.label | titlecase }}
+                  </div>
+                  <div class="sentiment-confidence">
+                    {{ comm.sentiment.confidence * 100 | number: "1.0-0" }}%
+                    confidence
+                  </div>
+                </div>
+              } @else {
+                <p class="no-data">No sentiment analysis available</p>
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Topics</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              @if (comm.topics?.length) {
+                <div class="topics-list">
+                  @for (topic of comm.topics; track topic) {
+                    <mat-chip>{{ topic }}</mat-chip>
+                  }
+                </div>
+              } @else {
+                <p class="no-data">No topics identified</p>
+              }
+            </mat-card-content>
+          </mat-card>
+
+          <!-- AI Classification Card -->
+          @if (comm.aiClassification) {
+            <mat-card class="ai-classification-card">
+              <mat-card-header>
+                <mat-icon class="ai-icon">psychology</mat-icon>
+                <mat-card-title>AI Classification</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="detail-item">
+                  <span class="label">Category</span>
+                  <span class="value">{{
+                    comm.aiClassification.category.replace("-", " ") | titlecase
+                  }}</span>
+                </div>
+
+                <mat-divider></mat-divider>
+
+                <div class="detail-item">
+                  <span class="label">Product</span>
+                  <span class="value">{{
+                    comm.aiClassification.product.replace("-", " ") | titlecase
+                  }}</span>
+                </div>
+
+                <mat-divider></mat-divider>
+
+                <div class="detail-item">
+                  <span class="label">Issue Type</span>
+                  <span class="value">{{
+                    comm.aiClassification.issueType
+                  }}</span>
+                </div>
+
+                <mat-divider></mat-divider>
+
+                <div class="detail-item">
+                  <span class="label">Urgency</span>
+                  <span
+                    class="value urgency-{{ comm.aiClassification.urgency }}"
+                  >
+                    {{ comm.aiClassification.urgency | titlecase }}
+                  </span>
+                </div>
+
+                <mat-divider></mat-divider>
+
+                <div class="detail-item">
+                  <span class="label">Confidence</span>
+                  <span class="value"
+                    >{{
+                      comm.aiClassification.confidence * 100 | number: "1.0-0"
+                    }}%</span
+                  >
+                </div>
+
+                @if (comm.aiClassification.rootCause) {
+                  <mat-divider></mat-divider>
+                  <div class="detail-item vertical">
+                    <span class="label">Root Cause</span>
+                    <span class="value">{{
+                      comm.aiClassification.rootCause
+                    }}</span>
+                  </div>
+                }
+
+                @if (comm.aiClassification.suggestedAction) {
+                  <mat-divider></mat-divider>
+                  <div class="detail-item vertical">
+                    <span class="label">Suggested Action</span>
+                    <span class="value action-text">{{
+                      comm.aiClassification.suggestedAction
+                    }}</span>
+                  </div>
+                }
+
+                @if (comm.aiClassification.regulatoryFlags?.length) {
+                  <mat-divider></mat-divider>
+                  <div class="detail-item vertical">
+                    <span class="label">Regulatory Flags</span>
+                    <div class="regulatory-flags">
+                      @for (
+                        flag of comm.aiClassification.regulatoryFlags;
+                        track flag
+                      ) {
+                        <mat-chip color="warn">{{ flag }}</mat-chip>
+                      }
+                    </div>
+                  </div>
+                }
+              </mat-card-content>
+            </mat-card>
+          }
+
+          <!-- Message Thread Card -->
+          @if (comm.messages?.length) {
+            <mat-card class="thread-card">
+              <mat-card-header>
+                <mat-card-title
+                  >Message Thread ({{ comm.messages!.length }})</mat-card-title
+                >
+              </mat-card-header>
+              <mat-card-content>
+                <div class="thread-messages">
+                  @for (msg of comm.messages!; track msg.id) {
+                    <div
+                      class="thread-message"
+                      [class.customer]="msg.sender === 'customer'"
+                      [class.agent]="msg.sender === 'agent'"
+                      [class.system]="msg.sender === 'system'"
+                    >
+                      <div class="message-header">
+                        <span class="sender">{{ msg.sender | titlecase }}</span>
+                        <span class="timestamp">{{
+                          msg.timestamp | date: "short"
+                        }}</span>
+                      </div>
+                      <div class="message-body">{{ msg.content }}</div>
+                      @if (msg.sentiment !== undefined) {
+                        <div
+                          class="message-sentiment"
+                          [class.negative]="msg.sentiment < -0.3"
+                          [class.positive]="msg.sentiment > 0.3"
+                        >
+                          Sentiment: {{ msg.sentiment | number: "1.2-2" }}
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="error-state">
+        <mat-icon>error_outline</mat-icon>
+        <h2>Communication not found</h2>
+        <a mat-button routerLink="/communications">Back to Communications</a>
+      </div>
+    }
+  }
+</div>

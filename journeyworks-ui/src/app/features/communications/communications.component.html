@@ -1,0 +1,228 @@
+<div class="communications-page">
+  <div class="page-header">
+    <h1>Communications</h1>
+    <p class="subtitle">View and manage all customer communications</p>
+  </div>
+
+  <!-- Filters -->
+  <mat-card class="filters-card">
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filters-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Search</mat-label>
+          <input
+            matInput
+            formControlName="query"
+            placeholder="Search communications..."
+          />
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Channel</mat-label>
+          <mat-select formControlName="channel">
+            <mat-option value="">All Channels</mat-option>
+            @for (channel of channels; track channel) {
+              <mat-option [value]="channel">{{
+                channel | titlecase
+              }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Status</mat-label>
+          <mat-select formControlName="status">
+            <mat-option value="">All Statuses</mat-option>
+            @for (status of statuses; track status) {
+              <mat-option [value]="status">{{
+                status.replace("_", " ") | titlecase
+              }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Priority</mat-label>
+          <mat-select formControlName="priority">
+            <mat-option value="">All Priorities</mat-option>
+            @for (priority of priorities; track priority) {
+              <mat-option [value]="priority">{{
+                priority | titlecase
+              }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Sentiment</mat-label>
+          <mat-select formControlName="sentiment">
+            <mat-option value="">All Sentiments</mat-option>
+            @for (sentiment of sentiments; track sentiment) {
+              <mat-option [value]="sentiment">{{
+                sentiment | titlecase
+              }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-button type="button" (click)="clearFilters()">
+          <mat-icon>clear</mat-icon>
+          Clear Filters
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Results -->
+  <mat-card class="table-card">
+    @if (loading()) {
+      <div class="loading-container">
+        <mat-spinner diameter="48"></mat-spinner>
+      </div>
+    } @else {
+      <mat-card-content>
+        <table mat-table [dataSource]="communications()">
+          <ng-container matColumnDef="customer">
+            <th mat-header-cell *matHeaderCellDef>Customer</th>
+            <td mat-cell *matCellDef="let row">
+              <a
+                [routerLink]="['/customers', row.customerId]"
+                class="customer-link"
+              >
+                {{ row.customerName }}
+              </a>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="subject">
+            <th mat-header-cell *matHeaderCellDef>Subject</th>
+            <td mat-cell *matCellDef="let row">
+              <a
+                [routerLink]="['/communications', row.id]"
+                class="subject-link"
+              >
+                {{ row.subject || "(No subject)" }}
+              </a>
+              @if (row.topics?.length) {
+                <div class="topics">
+                  @for (topic of row.topics.slice(0, 2); track topic) {
+                    <mat-chip>{{ topic }}</mat-chip>
+                  }
+                </div>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="channel">
+            <th mat-header-cell *matHeaderCellDef>Channel</th>
+            <td mat-cell *matCellDef="let row">
+              <div class="channel-cell">
+                <mat-icon [matTooltip]="row.channel">{{
+                  getChannelIcon(row.channel)
+                }}</mat-icon>
+                <mat-icon class="direction-icon" [matTooltip]="row.direction">
+                  {{
+                    row.direction === "inbound" ? "call_received" : "call_made"
+                  }}
+                </mat-icon>
+              </div>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="sentiment">
+            <th mat-header-cell *matHeaderCellDef>Sentiment</th>
+            <td mat-cell *matCellDef="let row">
+              <span
+                [class]="getSentimentClass(row.sentiment)"
+                class="sentiment-label"
+              >
+                {{ row.sentiment?.label || "N/A" }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="priority">
+            <th mat-header-cell *matHeaderCellDef>Priority</th>
+            <td mat-cell *matCellDef="let row">
+              <span
+                class="priority-indicator"
+                [class]="getPriorityClass(row.priority)"
+              >
+                {{ row.priority | titlecase }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let row">
+              <span class="status-badge" [class]="getStatusClass(row.status)">
+                {{ row.status.replace("_", " ") }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="timestamp">
+            <th mat-header-cell *matHeaderCellDef>Time</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.timestamp | date: "short" }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let row">
+              <button mat-icon-button [matMenuTriggerFor]="actionsMenu">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #actionsMenu="matMenu">
+                <a mat-menu-item [routerLink]="['/communications', row.id]">
+                  <mat-icon>visibility</mat-icon>
+                  <span>View Details</span>
+                </a>
+                <button
+                  mat-menu-item
+                  (click)="updateStatus(row, 'in_progress')"
+                  [disabled]="row.status === 'in_progress'"
+                >
+                  <mat-icon>play_arrow</mat-icon>
+                  <span>Mark In Progress</span>
+                </button>
+                <button
+                  mat-menu-item
+                  (click)="updateStatus(row, 'resolved')"
+                  [disabled]="row.status === 'resolved'"
+                >
+                  <mat-icon>check</mat-icon>
+                  <span>Mark Resolved</span>
+                </button>
+                <button
+                  mat-menu-item
+                  (click)="updateStatus(row, 'escalated')"
+                  [disabled]="row.status === 'escalated'"
+                >
+                  <mat-icon>priority_high</mat-icon>
+                  <span>Escalate</span>
+                </button>
+              </mat-menu>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+
+        <mat-paginator
+          [length]="totalCount()"
+          [pageIndex]="currentPage()"
+          [pageSize]="pageSize()"
+          [pageSizeOptions]="[10, 25, 50, 100]"
+          (page)="onPageChange($event)"
+          showFirstLastButtons
+        >
+        </mat-paginator>
+      </mat-card-content>
+    }
+  </mat-card>
+</div>

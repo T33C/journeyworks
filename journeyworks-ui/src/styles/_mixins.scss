@@ -1,0 +1,241 @@
+/**
+ * JourneyWorks UI - Global Mixins
+ * 
+ * Reusable SCSS patterns for consistent styling across components.
+ */
+
+@use "variables" as *;
+
+// =============================================================================
+// STATUS BADGE MIXINS
+// =============================================================================
+
+@mixin status-badge {
+  display: inline-block;
+  padding: $spacing-xs $spacing-sm + 4px;
+  border-radius: $border-radius-lg;
+  font-size: $font-size-sm;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+@mixin status-open {
+  background: $status-open-bg;
+  color: $status-open;
+}
+
+@mixin status-in-progress {
+  background: $status-in-progress-bg;
+  color: $status-in-progress;
+}
+
+@mixin status-resolved {
+  background: $status-resolved-bg;
+  color: $status-resolved;
+}
+
+@mixin status-escalated {
+  background: $status-escalated-bg;
+  color: $status-escalated;
+}
+
+// =============================================================================
+// SENTIMENT MIXINS
+// =============================================================================
+
+@mixin sentiment-positive {
+  color: $sentiment-positive;
+}
+
+@mixin sentiment-neutral {
+  color: $sentiment-neutral;
+}
+
+@mixin sentiment-negative {
+  color: $sentiment-negative;
+}
+
+@mixin sentiment-mixed {
+  color: $sentiment-mixed;
+}
+
+// =============================================================================
+// PRIORITY MIXINS
+// =============================================================================
+
+@mixin priority-indicator($color) {
+  border-left: 4px solid $color;
+}
+
+@mixin priority-low {
+  @include priority-indicator($priority-low);
+}
+
+@mixin priority-medium {
+  @include priority-indicator($priority-medium);
+}
+
+@mixin priority-high {
+  @include priority-indicator($priority-high);
+}
+
+@mixin priority-urgent {
+  @include priority-indicator($priority-urgent);
+}
+
+// =============================================================================
+// URGENCY COLORS (for AI classification)
+// =============================================================================
+
+@mixin urgency-low {
+  color: $urgency-low;
+}
+
+@mixin urgency-medium {
+  color: $urgency-medium;
+}
+
+@mixin urgency-high {
+  color: $urgency-high;
+}
+
+@mixin urgency-critical {
+  color: $urgency-critical;
+  font-weight: 600;
+}
+
+// =============================================================================
+// LAYOUT MIXINS
+// =============================================================================
+
+@mixin flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@mixin flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+@mixin card-layout {
+  background: $bg-card;
+  border-radius: $border-radius-md;
+  box-shadow: $shadow-sm;
+}
+
+// =============================================================================
+// LOADING STATE
+// =============================================================================
+
+@mixin loading-container {
+  @include flex-center;
+  min-height: 200px;
+}
+
+// =============================================================================
+// EMPTY STATE
+// =============================================================================
+
+@mixin empty-state {
+  text-align: center;
+  padding: $spacing-xxl;
+  color: $text-secondary;
+
+  mat-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    margin-bottom: $spacing-md;
+    opacity: 0.5;
+  }
+}
+
+// =============================================================================
+// LINK STYLES
+// =============================================================================
+
+@mixin link-style {
+  color: $brand-secondary;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// =============================================================================
+// MESSAGE THREAD STYLES
+// =============================================================================
+
+@mixin message-base {
+  padding: $spacing-sm + 4px;
+  border-radius: $border-radius-md;
+  border-left: 3px solid $border-default;
+  background: $bg-surface;
+}
+
+@mixin message-customer {
+  border-left-color: $brand-secondary;
+  background: $status-open-bg;
+}
+
+@mixin message-agent {
+  border-left-color: $sentiment-positive;
+  background: $sentiment-positive-bg;
+}
+
+@mixin message-system {
+  border-left-color: $sentiment-neutral;
+  background: $bg-surface;
+  font-style: italic;
+}
+
+// =============================================================================
+// CHIP/TAG STYLES
+// =============================================================================
+
+@mixin chip-base {
+  display: inline-flex;
+  align-items: center;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius-lg;
+  font-size: $font-size-sm;
+  background: $bg-surface;
+}
+
+// =============================================================================
+// RESPONSIVE BREAKPOINTS
+// =============================================================================
+
+@mixin sm-up {
+  @media (min-width: $breakpoint-sm) {
+    @content;
+  }
+}
+
+@mixin md-up {
+  @media (min-width: $breakpoint-md) {
+    @content;
+  }
+}
+
+@mixin lg-up {
+  @media (min-width: $breakpoint-lg) {
+    @content;
+  }
+}
+
+@mixin xl-up {
+  @media (min-width: $breakpoint-xl) {
+    @content;
+  }
+}

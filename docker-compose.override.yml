@@ -1,0 +1,61 @@
+# Local development docker-compose override
+# This file is automatically merged with docker-compose.yml when using docker-compose up
+#
+# For development:
+#   - Mounts source code as volumes for hot-reloading
+#   - Uses development configurations
+#   - Exposes additional debug ports
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # Development overrides for Python services
+  # ===========================================================================
+
+  model-service:
+    build:
+      context: ./python/model-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./python/model-service/app:/app/app:ro  # Mount source for inspection
+    environment:
+      - LOG_LEVEL=debug
+
+  analysis-service:
+    build:
+      context: ./python/analysis-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./python/analysis-service/app:/app/app:ro
+    environment:
+      - LOG_LEVEL=debug
+
+  # ===========================================================================
+  # Development override for API
+  # ===========================================================================
+
+  journeyworks-api:
+    build:
+      context: ./journeyworks-api
+      dockerfile: Dockerfile.dev
+      target: development
+    volumes:
+      - ./journeyworks-api/src:/app/src:ro
+      - ./journeyworks-api/node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    command: npm run start:dev
+
+  # ===========================================================================
+  # Development - run UI locally (not in Docker) for hot-reloading
+  # ===========================================================================
+  # Note: For development, it's recommended to run the Angular app locally:
+  #   cd journeyworks-ui && ng serve --port 4280
+  # 
+  # Comment out journeyworks-ui service when developing locally
+
+  journeyworks-ui:
+    profiles:
+      - production  # Only run in production profile

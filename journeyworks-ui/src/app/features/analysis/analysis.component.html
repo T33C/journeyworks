@@ -1,0 +1,247 @@
+<div class="analysis-page">
+  <div class="page-header">
+    <div class="header-content">
+      <h1>Analysis</h1>
+      <p class="subtitle">Customer intelligence and trend analysis</p>
+    </div>
+    <div class="header-actions">
+      <mat-form-field appearance="outline">
+        <mat-label>Time Range</mat-label>
+        <mat-select
+          [(value)]="selectedTimeRange"
+          (selectionChange)="onTimeRangeChange()"
+        >
+          @for (range of timeRanges; track range.value) {
+            <mat-option [value]="range.value">{{ range.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+    </div>
+  } @else {
+    <mat-tab-group>
+      <!-- Sentiment Tab -->
+      <mat-tab label="Sentiment Trends">
+        <div class="tab-content">
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Sentiment Over Time</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="chart-placeholder">
+                <mat-icon>show_chart</mat-icon>
+                <p>
+                  Sentiment trend chart would render here using D3.js or
+                  Chart.js
+                </p>
+                <div class="sentiment-summary">
+                  <div class="sentiment-stat positive">
+                    <span class="label">Positive</span>
+                    <span class="value"
+                      >{{
+                        sentimentTrends()[0]?.positive | number: "1.0-0"
+                      }}%</span
+                    >
+                  </div>
+                  <div class="sentiment-stat neutral">
+                    <span class="label">Neutral</span>
+                    <span class="value"
+                      >{{
+                        sentimentTrends()[0]?.neutral | number: "1.0-0"
+                      }}%</span
+                    >
+                  </div>
+                  <div class="sentiment-stat negative">
+                    <span class="label">Negative</span>
+                    <span class="value"
+                      >{{
+                        sentimentTrends()[0]?.negative | number: "1.0-0"
+                      }}%</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-tab>
+
+      <!-- Topics Tab -->
+      <mat-tab label="Topic Distribution">
+        <div class="tab-content">
+          @if (topicDistribution(); as topics) {
+            <div class="topics-grid">
+              <mat-card>
+                <mat-card-header>
+                  <mat-card-title>Top Topics</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="topics-list">
+                    @for (topic of topics.topics; track topic.name) {
+                      <div class="topic-item">
+                        <div class="topic-info">
+                          <span class="topic-name">{{ topic.name }}</span>
+                          <span class="topic-count"
+                            >{{ topic.count }} mentions</span
+                          >
+                        </div>
+                        <div class="topic-bar">
+                          <div
+                            class="topic-fill"
+                            [style.width.%]="topic.percentage"
+                          ></div>
+                        </div>
+                        <span class="topic-percentage"
+                          >{{ topic.percentage }}%</span
+                        >
+                      </div>
+                    }
+                  </div>
+                </mat-card-content>
+              </mat-card>
+
+              <div class="side-cards">
+                <mat-card>
+                  <mat-card-header>
+                    <mat-card-title>
+                      <mat-icon>trending_up</mat-icon>
+                      Trending Topics
+                    </mat-card-title>
+                  </mat-card-header>
+                  <mat-card-content>
+                    @for (topic of topics.trending; track topic.name) {
+                      <div class="trending-item">
+                        <span class="topic-name">{{ topic.name }}</span>
+                        <span class="topic-change positive"
+                          >+{{ topic.change }}%</span
+                        >
+                      </div>
+                    }
+                  </mat-card-content>
+                </mat-card>
+
+                <mat-card>
+                  <mat-card-header>
+                    <mat-card-title>
+                      <mat-icon>new_releases</mat-icon>
+                      Emerging Topics
+                    </mat-card-title>
+                  </mat-card-header>
+                  <mat-card-content>
+                    <div class="emerging-chips">
+                      @for (topic of topics.emerging; track topic) {
+                        <mat-chip>{{ topic }}</mat-chip>
+                      }
+                    </div>
+                  </mat-card-content>
+                </mat-card>
+              </div>
+            </div>
+          }
+        </div>
+      </mat-tab>
+
+      <!-- Risk Assessment Tab -->
+      <mat-tab label="Risk Assessment">
+        <div class="tab-content">
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>At-Risk Customers</mat-card-title>
+              <mat-card-subtitle
+                >Customers requiring attention based on communication
+                patterns</mat-card-subtitle
+              >
+            </mat-card-header>
+            <mat-card-content>
+              <table
+                mat-table
+                [dataSource]="riskAssessments()"
+                class="risk-table"
+              >
+                <ng-container matColumnDef="customer">
+                  <th mat-header-cell *matHeaderCellDef>Customer</th>
+                  <td mat-cell *matCellDef="let row">
+                    <a
+                      [routerLink]="['/customers', row.customerId]"
+                      class="customer-link"
+                    >
+                      {{ row.customerName }}
+                    </a>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="riskScore">
+                  <th mat-header-cell *matHeaderCellDef>Risk Score</th>
+                  <td mat-cell *matCellDef="let row">
+                    <div
+                      class="risk-score"
+                      [class]="getRiskLevelClass(row.riskLevel)"
+                    >
+                      {{ row.riskScore }}
+                    </div>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="riskLevel">
+                  <th mat-header-cell *matHeaderCellDef>Level</th>
+                  <td mat-cell *matCellDef="let row">
+                    <span
+                      class="risk-badge"
+                      [class]="getRiskLevelClass(row.riskLevel)"
+                    >
+                      {{ row.riskLevel | titlecase }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="trend">
+                  <th mat-header-cell *matHeaderCellDef>Trend</th>
+                  <td mat-cell *matCellDef="let row">
+                    <span
+                      class="trend-indicator"
+                      [class]="getTrendClass(row.trend)"
+                    >
+                      <mat-icon>{{ getTrendIcon(row.trend) }}</mat-icon>
+                      {{ row.trend | titlecase }}
+                    </span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="factors">
+                  <th mat-header-cell *matHeaderCellDef>Risk Factors</th>
+                  <td mat-cell *matCellDef="let row">
+                    @for (factor of row.factors; track factor.name) {
+                      <mat-chip class="factor-chip">{{ factor.name }}</mat-chip>
+                    }
+                    @if (row.factors.length === 0) {
+                      <span class="no-factors">No significant factors</span>
+                    }
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Recommended Actions</th>
+                  <td mat-cell *matCellDef="let row">
+                    <ul class="recommendations">
+                      @for (rec of row.recommendations; track rec) {
+                        <li>{{ rec }}</li>
+                      }
+                    </ul>
+                  </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="riskColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: riskColumns"></tr>
+              </table>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  }
+</div>

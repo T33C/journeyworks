@@ -1,0 +1,209 @@
+# JourneyWorks Docker Compose Configuration
+# 
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d elasticsearch redis  # Start infrastructure only
+#   docker-compose logs -f            # Follow logs
+#   docker-compose down               # Stop all services
+#   docker-compose down -v            # Stop and remove volumes
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # INFRASTRUCTURE SERVICES
+  # ===========================================================================
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: journeyworks-elasticsearch
+    environment:
+      - node.name=journeyworks-es
+      - cluster.name=journeyworks-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "${ELASTICSEARCH_PORT:-9280}:9200"
+      - "${ELASTICSEARCH_TRANSPORT_PORT:-9380}:9300"
+    networks:
+      - journeyworks-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'status.*green\\|yellow'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: journeyworks-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    networks:
+      - journeyworks-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: journeyworks-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    ports:
+      - "${KIBANA_PORT:-5680}:5601"
+    networks:
+      - journeyworks-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles:
+      - debug  # Only start with: docker-compose --profile debug up
+
+  # ===========================================================================
+  # PYTHON SERVICES
+  # ===========================================================================
+
+  model-service:
+    build:
+      context: ./python/model-service
+      dockerfile: Dockerfile
+    container_name: journeyworks-model-service
+    environment:
+      - DEVICE=cpu  # Change to 'cuda' if GPU available
+    ports:
+      - "${MODEL_SERVICE_PORT:-8080}:8000"
+    networks:
+      - journeyworks-network
+    volumes:
+      - model_cache:/root/.cache  # Cache downloaded models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Models take time to load
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Embedding models need memory
+
+  analysis-service:
+    build:
+      context: ./python/analysis-service
+      dockerfile: Dockerfile
+    container_name: journeyworks-analysis-service
+    ports:
+      - "${ANALYSIS_SERVICE_PORT:-8081}:8002"
+    networks:
+      - journeyworks-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # BACKEND API
+  # ===========================================================================
+
+  journeyworks-api:
+    build:
+      context: ./journeyworks-api
+      dockerfile: Dockerfile
+    container_name: journeyworks-api
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Elasticsearch
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ES_INDEX_COMMUNICATIONS=${ES_INDEX_COMMUNICATIONS:-journeyworks_communications}
+      - ES_INDEX_CHUNKS=${ES_INDEX_CHUNKS:-journeyworks_chunks}
+      - ES_INDEX_CASES=${ES_INDEX_CASES:-journeyworks_cases}
+      - ES_INDEX_EVENTS=${ES_INDEX_EVENTS:-journeyworks_events}
+      - ES_INDEX_SOCIAL=${ES_INDEX_SOCIAL:-journeyworks_social}
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      # Services
+      - MODEL_SERVICE_URL=http://model-service:8000
+      - ANALYSIS_SERVICE_URL=http://analysis-service:8000
+      # LLM
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      # OpenTelemetry
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
+      - OTEL_SERVICE_NAME=journeyworks-api
+    ports:
+      - "${JOURNEYWORKS_API_PORT:-3080}:3000"
+    networks:
+      - journeyworks-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      model-service:
+        condition: service_healthy
+      analysis-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # FRONTEND
+  # ===========================================================================
+
+  journeyworks-ui:
+    build:
+      context: ./journeyworks-ui
+      dockerfile: Dockerfile
+      args:
+        - API_URL=http://localhost:${JOURNEYWORKS_API_PORT:-3080}
+    container_name: journeyworks-ui
+    ports:
+      - "${JOURNEYWORKS_UI_PORT:-4280}:80"
+    networks:
+      - journeyworks-network
+    depends_on:
+      - journeyworks-api
+
+# ===========================================================================
+# NETWORKS
+# ===========================================================================
+
+networks:
+  journeyworks-network:
+    driver: bridge
+    name: journeyworks-network
+
+# ===========================================================================
+# VOLUMES
+# ===========================================================================
+
+volumes:
+  elasticsearch_data:
+    name: journeyworks-elasticsearch-data
+  redis_data:
+    name: journeyworks-redis-data
+  model_cache:
+    name: journeyworks-model-cache

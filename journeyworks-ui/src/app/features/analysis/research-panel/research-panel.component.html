@@ -1,0 +1,302 @@
+<div class="research-panel-container">
+  <!-- Header (Fixed) -->
+  <div class="panel-header">
+    <div class="header-title">
+      <mat-icon>psychology</mat-icon>
+      <h2>AI Research</h2>
+    </div>
+    @if (context()?.signal) {
+      <mat-chip class="context-chip">
+        {{ context()!.signal }}
+      </mat-chip>
+    }
+  </div>
+
+  <!-- Scrollable Content Area -->
+  <div class="scrollable-content">
+    @if (isLoading()) {
+      <div class="loading-state">
+        <mat-spinner diameter="32"></mat-spinner>
+        <span>Analysing selection...</span>
+      </div>
+    }
+
+    <!-- Empty State - shown before user selects anything -->
+    @if (!insight() && !isLoading()) {
+      <div class="empty-state">
+        <div class="empty-icon">
+          <mat-icon>touch_app</mat-icon>
+        </div>
+        <h3>Select to Analyze</h3>
+        <p class="empty-description">
+          Interact with the charts to begin AI-powered research and analysis.
+        </p>
+
+        <div class="hint-cards">
+          <div class="hint-card">
+            <mat-icon>timeline</mat-icon>
+            <span
+              >Click an <strong>event marker</strong> for incident
+              analysis</span
+            >
+          </div>
+          <div class="hint-card">
+            <mat-icon>crop_free</mat-icon>
+            <span
+              >Drag to <strong>brush a time range</strong> for period
+              insights</span
+            >
+          </div>
+          <div class="hint-card">
+            <mat-icon>bubble_chart</mat-icon>
+            <span
+              >Click a <strong>bubble or quadrant</strong> for issue
+              deep-dive</span
+            >
+          </div>
+          <div class="hint-card">
+            <mat-icon>waterfall_chart</mat-icon>
+            <span
+              >Click a <strong>journey stage</strong> for process analysis</span
+            >
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (insight() && !isLoading()) {
+      <!-- Research Summary -->
+      <section class="summary-section">
+        <div class="summary-header">
+          <h3>Summary</h3>
+          <mat-chip
+            [ngClass]="getConfidenceClass(insight()!.confidence)"
+            class="confidence-chip"
+          >
+            {{ insight()!.confidence | titlecase }} Confidence
+          </mat-chip>
+        </div>
+        <p class="summary-text">{{ insight()!.summary }}</p>
+      </section>
+
+      <mat-divider></mat-divider>
+
+      <!-- Key Drivers -->
+      <section class="drivers-section">
+        <h3>Key Drivers</h3>
+        <ul class="drivers-list">
+          @for (driver of insight()!.keyDrivers; track $index) {
+            <li>
+              <mat-icon>arrow_right</mat-icon>
+              <span>{{ driver }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <!-- Follow-Up Question -->
+      @if (insight()!.suggestedFollowUp) {
+        <mat-divider></mat-divider>
+        <mat-expansion-panel class="followup-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              <mat-icon>help_outline</mat-icon>
+              {{ insight()!.suggestedFollowUp!.question }}
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="followup-answer">
+            {{ insight()!.suggestedFollowUp!.answer }}
+          </div>
+        </mat-expansion-panel>
+      }
+
+      <mat-divider></mat-divider>
+
+      <!-- Evidence (Expandable) -->
+      <mat-expansion-panel class="evidence-panel">
+        <mat-expansion-panel-header>
+          <mat-panel-title>
+            <mat-icon>source</mat-icon>
+            @if (
+              insight()!.totalCommunications &&
+              insight()!.totalCommunications! > insight()!.evidence.length
+            ) {
+              Evidence ({{ insight()!.evidence.length }} of
+              {{ insight()!.totalCommunications }})
+            } @else {
+              Evidence ({{ insight()!.evidence.length }})
+            }
+          </mat-panel-title>
+        </mat-expansion-panel-header>
+
+        <div class="evidence-list">
+          @for (item of insight()!.evidence; track item.id) {
+            <div
+              class="evidence-item"
+              (click)="onEvidenceClick(item)"
+              [class.clickable]="item.linkedChartId"
+            >
+              <div class="evidence-header">
+                <mat-icon>{{ getEvidenceIcon(item.type) }}</mat-icon>
+                <span class="evidence-source">{{ item.source }}</span>
+                <span class="evidence-time">{{
+                  formatDate(item.timestamp)
+                }}</span>
+              </div>
+              <p class="evidence-excerpt">"{{ item.excerpt }}"</p>
+              <div class="evidence-meta">
+                <span
+                  class="sentiment-badge"
+                  [ngClass]="
+                    item.sentiment < -0.4
+                      ? 'negative'
+                      : item.sentiment < 0
+                        ? 'warning'
+                        : 'positive'
+                  "
+                >
+                  {{ item.sentiment | number: "1.2-2" }}
+                </span>
+                @if (item.linkedChartId) {
+                  <span class="link-indicator">
+                    <mat-icon>link</mat-icon>
+                  </span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </mat-expansion-panel>
+
+      <!-- Timeline Reasoning (Expandable) -->
+      <mat-expansion-panel class="reasoning-panel">
+        <mat-expansion-panel-header>
+          <mat-panel-title>
+            <mat-icon>history</mat-icon>
+            Timeline Reasoning
+          </mat-panel-title>
+        </mat-expansion-panel-header>
+
+        <p class="reasoning-text">{{ insight()!.timelineReasoning }}</p>
+      </mat-expansion-panel>
+
+      <!-- Suggested Actions -->
+      <section class="actions-section">
+        <h3>Suggested Actions</h3>
+        <div class="action-chips">
+          @for (action of insight()!.suggestedActions; track $index) {
+            <mat-chip class="action-chip">
+              <mat-icon>lightbulb</mat-icon>
+              {{ action }}
+            </mat-chip>
+          }
+        </div>
+      </section>
+    }
+  </div>
+
+  <!-- Chat Section (Fixed at Bottom) -->
+  <div
+    class="chat-section"
+    [class.expanded]="isChatExpanded()"
+    [class.resizing]="isResizing()"
+    [style.height.px]="chatHeight()"
+    #chatSectionEl
+  >
+    <!-- Resize Handle -->
+    <div
+      class="resize-handle"
+      (mousedown)="onResizeStart($event)"
+      matTooltip="Drag to resize"
+    >
+      <div class="handle-bar"></div>
+    </div>
+
+    <!-- Chat Header with Expand Toggle -->
+    <div class="chat-header">
+      <span class="chat-title">
+        <mat-icon>chat</mat-icon>
+        Chat
+        @if (chatHistory().length > 0) {
+          <span class="message-count">({{ chatHistory().length }})</span>
+        }
+      </span>
+      <button
+        mat-icon-button
+        class="expand-btn"
+        (click)="toggleChatExpanded()"
+        [matTooltip]="isChatExpanded() ? 'Collapse chat' : 'Expand chat'"
+      >
+        <mat-icon>{{
+          isChatExpanded() ? "expand_more" : "expand_less"
+        }}</mat-icon>
+      </button>
+    </div>
+
+    <!-- Suggested Questions -->
+    <div class="suggested-questions">
+      <span class="suggestion-label">Suggested:</span>
+      @for (question of suggestedQuestions(); track $index) {
+        <button
+          class="suggestion-chip"
+          (click)="onSuggestedQuestionClick(question)"
+        >
+          {{ question }}
+        </button>
+      }
+    </div>
+
+    @if (chatHistory().length > 0) {
+      <div class="chat-history" #chatHistoryContainer>
+        @for (msg of chatHistory(); track $index) {
+          <div class="chat-message" [ngClass]="msg.role">
+            <div class="message-avatar">
+              <mat-icon>{{
+                msg.role === "user" ? "person" : "psychology"
+              }}</mat-icon>
+            </div>
+            <div class="message-content">
+              <p>{{ msg.message }}</p>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Typing Indicator -->
+    @if (isTyping()) {
+      <div class="chat-message ai typing">
+        <div class="message-avatar">
+          <mat-icon>psychology</mat-icon>
+        </div>
+        <div class="message-content">
+          <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="chat-input-row">
+      <mat-form-field appearance="outline" class="chat-field">
+        <mat-label>Ask a follow-up question...</mat-label>
+        <input
+          matInput
+          [(ngModel)]="chatInput"
+          (keyup.enter)="onChatSubmit()"
+          placeholder="e.g., Why did social sentiment lead complaints?"
+        />
+      </mat-form-field>
+      <button
+        mat-icon-button
+        color="primary"
+        (click)="onChatSubmit()"
+        [disabled]="!chatInput.trim()"
+      >
+        <mat-icon>send</mat-icon>
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,371 @@
+.customer-detail {
+  padding: 24px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+
+  a {
+    color: #1976d2;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: #999;
+  }
+
+  span:last-child {
+    color: #666;
+  }
+}
+
+.header-card {
+  margin-bottom: 24px;
+
+  .customer-header {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  .customer-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #e3f2fd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    mat-icon {
+      font-size: 40px;
+      width: 40px;
+      height: 40px;
+      color: #1976d2;
+    }
+  }
+
+  .customer-info {
+    flex: 1;
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      font-weight: 500;
+    }
+
+    .customer-meta {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .tier-badge,
+    .risk-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .tier-standard {
+      background: #e0e0e0;
+      color: #616161;
+    }
+    .tier-premium {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+    .tier-enterprise {
+      background: #e8eaf6;
+      color: #3f51b5;
+    }
+
+    .risk-low {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    .risk-medium {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+    .risk-high {
+      background: #ffebee;
+      color: #d32f2f;
+    }
+
+    .customer-contact {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: #666;
+
+      span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        mat-icon {
+          font-size: 16px;
+          width: 16px;
+          height: 16px;
+        }
+      }
+    }
+  }
+
+  .customer-stats {
+    display: flex;
+    gap: 24px;
+
+    .stat {
+      text-align: center;
+      padding: 12px 24px;
+      background: #fafafa;
+      border-radius: 8px;
+
+      .stat-value {
+        display: block;
+        font-size: 28px;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .stat-label {
+        display: block;
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+      }
+
+      &.health-stat {
+        &.health-excellent {
+          background: #e8f5e9;
+          .stat-value {
+            color: #388e3c;
+          }
+        }
+        &.health-good {
+          background: #e3f2fd;
+          .stat-value {
+            color: #1976d2;
+          }
+        }
+        &.health-warning {
+          background: #fff3e0;
+          .stat-value {
+            color: #f57c00;
+          }
+        }
+        &.health-critical {
+          background: #ffebee;
+          .stat-value {
+            color: #d32f2f;
+          }
+        }
+      }
+    }
+  }
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 24px;
+}
+
+.health-card {
+  mat-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .health-overview {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+
+    .health-score {
+      text-align: center;
+      padding: 24px;
+      border-radius: 12px;
+      flex: 1;
+
+      .score-value {
+        display: block;
+        font-size: 48px;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .score-label {
+        display: block;
+        font-size: 12px;
+        margin-top: 8px;
+        text-transform: uppercase;
+      }
+
+      &.health-excellent {
+        background: #e8f5e9;
+        .score-value {
+          color: #388e3c;
+        }
+      }
+      &.health-good {
+        background: #e3f2fd;
+        .score-value {
+          color: #1976d2;
+        }
+      }
+      &.health-warning {
+        background: #fff3e0;
+        .score-value {
+          color: #f57c00;
+        }
+      }
+      &.health-critical {
+        background: #ffebee;
+        .score-value {
+          color: #d32f2f;
+        }
+      }
+    }
+
+    .health-trend {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+
+      mat-icon {
+        font-size: 32px;
+        width: 32px;
+        height: 32px;
+      }
+
+      &.trend-improving {
+        color: #388e3c;
+      }
+      &.trend-stable {
+        color: #9e9e9e;
+      }
+      &.trend-declining {
+        color: #d32f2f;
+      }
+    }
+  }
+
+  .risk-factors,
+  .recommendations {
+    margin-bottom: 16px;
+
+    h4 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      font-size: 14px;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+    }
+  }
+
+  .risk-factors li mat-icon {
+    color: #f57c00;
+  }
+
+  .recommendations li mat-icon {
+    color: #1976d2;
+  }
+
+  .last-updated {
+    font-size: 12px;
+    color: #999;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+  }
+}
+
+.communications-card {
+  mat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  mat-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  .subject-link {
+    color: #1976d2;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+  color: #666;
+
+  mat-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: #f44336;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    margin: 0 0 16px;
+  }
+}

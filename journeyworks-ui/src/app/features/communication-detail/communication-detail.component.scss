@@ -1,0 +1,346 @@
+.communication-detail {
+  padding: 24px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+
+  a {
+    color: #1976d2;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: #999;
+  }
+
+  span:last-child {
+    color: #666;
+  }
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.header-card {
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .header-info {
+    display: flex;
+    gap: 16px;
+
+    .channel-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+      color: #1976d2;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    .meta {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #666;
+
+      .divider {
+        margin: 0 8px;
+      }
+
+      .customer-link {
+        color: #1976d2;
+        text-decoration: none;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+}
+
+.content-card {
+  .message-content {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 15px;
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+  }
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+
+  mat-card-content {
+    padding-top: 16px;
+  }
+
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+
+    .label {
+      color: #666;
+      font-size: 13px;
+    }
+
+    .value {
+      font-weight: 500;
+
+      &.priority-low {
+        color: #4caf50;
+      }
+      &.priority-medium {
+        color: #ff9800;
+      }
+      &.priority-high {
+        color: #f44336;
+      }
+      &.priority-urgent {
+        color: #9c27b0;
+      }
+    }
+  }
+
+  mat-divider {
+    margin: 0;
+  }
+}
+
+.sentiment-display {
+  text-align: center;
+  padding: 16px;
+
+  .sentiment-score {
+    font-size: 36px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .sentiment-label {
+    font-size: 16px;
+    font-weight: 500;
+    margin-top: 8px;
+    text-transform: capitalize;
+  }
+
+  .sentiment-confidence {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+  }
+
+  &.sentiment-positive {
+    .sentiment-score,
+    .sentiment-label {
+      color: #4caf50;
+    }
+  }
+
+  &.sentiment-neutral {
+    .sentiment-score,
+    .sentiment-label {
+      color: #9e9e9e;
+    }
+  }
+
+  &.sentiment-negative {
+    .sentiment-score,
+    .sentiment-label {
+      color: #f44336;
+    }
+  }
+
+  &.sentiment-mixed {
+    .sentiment-score,
+    .sentiment-label {
+      color: #ff9800;
+    }
+  }
+}
+
+.topics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.no-data {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+}
+
+// AI Classification Card
+.ai-classification-card {
+  mat-card-header {
+    .ai-icon {
+      color: #9c27b0;
+      margin-right: 8px;
+    }
+  }
+
+  .detail-item.vertical {
+    flex-direction: column;
+    gap: 8px;
+
+    .value {
+      font-weight: 400;
+      line-height: 1.5;
+    }
+
+    .action-text {
+      padding: 8px 12px;
+      background: #e8f5e9;
+      border-radius: 4px;
+      border-left: 3px solid #4caf50;
+    }
+  }
+
+  .urgency-low {
+    color: #4caf50;
+  }
+  .urgency-medium {
+    color: #ff9800;
+  }
+  .urgency-high {
+    color: #f44336;
+  }
+  .urgency-critical {
+    color: #9c27b0;
+    font-weight: 600;
+  }
+
+  .regulatory-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+}
+
+// Message Thread Card
+.thread-card {
+  .thread-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .thread-message {
+    padding: 12px;
+    border-radius: 8px;
+    border-left: 3px solid #ccc;
+    background: #fafafa;
+
+    &.customer {
+      border-left-color: #2196f3;
+      background: #e3f2fd;
+    }
+
+    &.agent {
+      border-left-color: #4caf50;
+      background: #e8f5e9;
+    }
+
+    &.system {
+      border-left-color: #9e9e9e;
+      background: #f5f5f5;
+      font-style: italic;
+    }
+
+    .message-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 12px;
+
+      .sender {
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+
+      .timestamp {
+        color: #999;
+      }
+    }
+
+    .message-body {
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .message-sentiment {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #999;
+
+      &.negative {
+        color: #f44336;
+      }
+
+      &.positive {
+        color: #4caf50;
+      }
+    }
+  }
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+  color: #666;
+
+  mat-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: #f44336;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    margin: 0 0 16px;
+  }
+}

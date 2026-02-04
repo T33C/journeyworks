@@ -1,0 +1,209 @@
+/**
+ * JourneyWorks UI - Global Theme Variables
+ * 
+ * All colors, spacing, and design tokens should be defined here.
+ * Update these values to apply corporate branding across the entire application.
+ */
+
+// =============================================================================
+// BRAND COLORS - Update these for corporate theming
+// =============================================================================
+
+// Primary brand colors
+$brand-primary: #5c6bc0; // Indigo - main brand color
+$brand-primary-light: #8e99a4;
+$brand-primary-dark: #3f51b5;
+$brand-accent: #7c4dff; // Purple accent
+
+// Secondary brand colors
+$brand-secondary: #1976d2; // Blue - links, interactive elements
+$brand-secondary-light: #42a5f5;
+$brand-secondary-dark: #1565c0;
+
+// =============================================================================
+// SEMANTIC COLORS - Status & Sentiment
+// =============================================================================
+
+// Sentiment colors
+$sentiment-positive: #4caf50; // Green
+$sentiment-positive-dark: #388e3c;
+$sentiment-positive-light: #66bb6a;
+$sentiment-positive-bg: #e8f5e9;
+
+$sentiment-neutral: #9e9e9e; // Grey
+$sentiment-neutral-dark: #757575;
+$sentiment-neutral-light: #bdbdbd;
+$sentiment-neutral-bg: #fafafa;
+
+$sentiment-negative: #f44336; // Red
+$sentiment-negative-dark: #d32f2f;
+$sentiment-negative-light: #ef5350;
+$sentiment-negative-bg: #ffebee;
+
+$sentiment-mixed: #ff9800; // Orange
+$sentiment-mixed-dark: #f57c00;
+$sentiment-mixed-light: #ffb74d;
+$sentiment-mixed-bg: #fff3e0;
+
+// Status colors
+$status-open: $brand-secondary;
+$status-open-bg: #e3f2fd;
+
+$status-in-progress: #f57c00; // Orange
+$status-in-progress-bg: #fff3e0;
+
+$status-resolved: $sentiment-positive-dark;
+$status-resolved-bg: $sentiment-positive-bg;
+
+$status-escalated: $sentiment-negative-dark;
+$status-escalated-bg: $sentiment-negative-bg;
+
+// Priority colors
+$priority-low: $sentiment-positive;
+$priority-medium: $sentiment-mixed;
+$priority-high: $sentiment-negative;
+$priority-urgent: #9c27b0; // Purple
+
+// Urgency colors (for AI classification)
+$urgency-low: $priority-low;
+$urgency-medium: $priority-medium;
+$urgency-high: $priority-high;
+$urgency-critical: $priority-urgent;
+
+// =============================================================================
+// QUADRANT CHART COLORS
+// =============================================================================
+
+$quadrant-critical: #e53935;
+$quadrant-critical-bg: #ffebee;
+
+$quadrant-watch: #ff8f00;
+$quadrant-watch-bg: #fff8e1;
+
+$quadrant-strength: #43a047;
+$quadrant-strength-bg: #e8f5e9;
+
+$quadrant-noise: #9e9e9e;
+$quadrant-noise-bg: #fafafa;
+
+// =============================================================================
+// CHART COLORS - D3 Visualizations
+// =============================================================================
+
+$chart-axis: #666;
+$chart-grid: #ccc;
+$chart-grid-light: #f0f0f0;
+$chart-positive: $sentiment-positive-light;
+$chart-negative: $sentiment-negative-light;
+$chart-accent: $brand-primary;
+$chart-highlight: #ffeb3b; // Yellow for selections
+
+// Gradient stops for sentiment
+$chart-gradient-negative: #f44336;
+$chart-gradient-neutral: #ffc107;
+$chart-gradient-positive: #4caf50;
+
+// Social sentiment band
+$chart-social-band: #9c27b0;
+
+// NPS colors
+$nps-positive: #2e7d32;
+$nps-negative: #c62828;
+$nps-accent-positive: #303f9f;
+$nps-accent-negative: #6a1b9a;
+
+// =============================================================================
+// UI COLORS - Backgrounds & Borders
+// =============================================================================
+
+// Backgrounds
+$bg-page: #f5f5f5;
+$bg-card: #ffffff;
+$bg-surface: #fafafa;
+$bg-sidebar: #1e1e2f;
+$bg-header: linear-gradient(
+  135deg,
+  $brand-primary 0%,
+  $brand-primary-dark 100%
+);
+$bg-header-active: linear-gradient(
+  135deg,
+  $brand-primary 0%,
+  $brand-accent 100%
+);
+
+// Borders
+$border-light: #e0e0e0;
+$border-default: #ccc;
+$border-dark: #999;
+
+// Text colors
+$text-primary: #333;
+$text-secondary: #666;
+$text-muted: #999;
+$text-disabled: #bdbdbd;
+$text-inverse: #ffffff;
+
+// =============================================================================
+// SPACING
+// =============================================================================
+
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+$spacing-xxl: 48px;
+
+// =============================================================================
+// TYPOGRAPHY
+// =============================================================================
+
+$font-family: Roboto, "Helvetica Neue", sans-serif;
+
+$font-size-xs: 10px;
+$font-size-sm: 12px;
+$font-size-md: 14px;
+$font-size-lg: 16px;
+$font-size-xl: 20px;
+$font-size-xxl: 24px;
+
+// =============================================================================
+// BORDERS & SHADOWS
+// =============================================================================
+
+$border-radius-sm: 4px;
+$border-radius-md: 8px;
+$border-radius-lg: 16px;
+$border-radius-pill: 9999px;
+
+$shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+$shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.15);
+
+// =============================================================================
+// ANIMATION
+// =============================================================================
+
+$transition-fast: 150ms ease;
+$transition-normal: 300ms ease;
+$transition-slow: 500ms ease;
+
+// =============================================================================
+// BREAKPOINTS
+// =============================================================================
+
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
+
+// =============================================================================
+// Z-INDEX LAYERS
+// =============================================================================
+
+$z-dropdown: 100;
+$z-sticky: 200;
+$z-modal: 300;
+$z-tooltip: 400;
+$z-toast: 500;

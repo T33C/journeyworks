@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  model-service:
+    container_name: sentinel-model-service
+    # Tells docker-compose to build the image from the Dockerfile
+    # in the ./embedding_service directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Map port 8000 on the host to port 8000 in the container
+      - '8000:8000'
+    volumes:
+      # Mount a volume for the Hugging Face cache
+      # This persists downloaded models between container restarts, saving time and bandwidth
+      # Replace 'huggingface_cache_volume' with a specific path on your host if preferred
+      # e.g., - ~/.cache/huggingface:/huggingface_cache
+      - huggingface_cache_volume:/huggingface_cache
+    environment:
+      # You can override model names or other settings here if needed
+      # - DENSE_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      # Ensure CUDA is not visible if running CPU-only build
+      - CUDA_VISIBLE_DEVICES=""
+    # Optional: Resource limits (adjust based on your hardware and model sizes)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2.0' # Limit to 2 CPU cores
+    #       memory: 8G  # Limit to 8 GB RAM (adjust significantly based on models!)
+    restart: unless-stopped # Restart policy
+
+# Define the named volume for the cache
+volumes:
+  huggingface_cache_volume:

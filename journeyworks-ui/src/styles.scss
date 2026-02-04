@@ -1,0 +1,170 @@
+/* JourneyWorks Global Styles */
+
+@use "@angular/material" as mat;
+@use "styles/variables" as *;
+@use "styles/mixins" as *;
+
+// Include the common styles for Angular Material
+@include mat.core();
+
+// Define a light theme using M3 color system
+$journeyworks-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: light,
+      primary: mat.$blue-palette,
+      tertiary: mat.$violet-palette,
+    ),
+    density: (
+      scale: 0,
+    ),
+  )
+);
+
+// Apply the theme
+html {
+  @include mat.all-component-themes($journeyworks-theme);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: $font-family;
+  background: $bg-page;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: $bg-surface;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $border-default;
+  border-radius: $border-radius-sm;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: $border-dark;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 $spacing-md;
+  font-weight: 500;
+}
+
+/* Cards */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: $spacing-lg;
+  margin-bottom: $spacing-lg;
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+.text-right {
+  text-align: right;
+}
+
+.mt-1 {
+  margin-top: $spacing-sm;
+}
+.mt-2 {
+  margin-top: $spacing-md;
+}
+.mt-3 {
+  margin-top: $spacing-lg;
+}
+.mb-1 {
+  margin-bottom: $spacing-sm;
+}
+.mb-2 {
+  margin-bottom: $spacing-md;
+}
+.mb-3 {
+  margin-bottom: $spacing-lg;
+}
+
+/* Sentiment colors */
+.sentiment-positive {
+  color: $sentiment-positive;
+}
+.sentiment-neutral {
+  color: $sentiment-neutral;
+}
+.sentiment-negative {
+  color: $sentiment-negative;
+}
+.sentiment-mixed {
+  color: $sentiment-mixed;
+}
+
+/* Status badges */
+.status-badge {
+  @include status-badge;
+}
+
+.status-open {
+  @include status-open;
+}
+.status-in-progress {
+  @include status-in-progress;
+}
+.status-resolved {
+  @include status-resolved;
+}
+.status-escalated {
+  @include status-escalated;
+}
+
+/* Priority indicators */
+.priority-low {
+  @include priority-low;
+}
+.priority-medium {
+  @include priority-medium;
+}
+.priority-high {
+  @include priority-high;
+}
+.priority-urgent {
+  @include priority-urgent;
+}
+
+/* Urgency classes (for AI classification) */
+.urgency-low {
+  @include urgency-low;
+}
+.urgency-medium {
+  @include urgency-medium;
+}
+.urgency-high {
+  @include urgency-high;
+}
+.urgency-critical {
+  @include urgency-critical;
+}
+
+/* Loading spinner container */
+.loading-container {
+  @include loading-container;
+}
+
+/* Empty state */
+.empty-state {
+  @include empty-state;
+}

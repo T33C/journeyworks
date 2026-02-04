@@ -1,0 +1,235 @@
+<div class="dashboard">
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">Customer Communications Intelligence Overview</p>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-container">
+      <mat-spinner diameter="48"></mat-spinner>
+    </div>
+  } @else {
+    <!-- KPI Cards -->
+    @if (summary(); as sum) {
+      <div class="kpi-grid">
+        <mat-card class="kpi-card">
+          <mat-card-content>
+            <div class="kpi-icon">
+              <mat-icon>mail</mat-icon>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-value">{{
+                sum.kpis.totalCommunications | number
+              }}</span>
+              <span class="kpi-label">Total Communications</span>
+              <span
+                class="kpi-change"
+                [class]="getChangeClass(sum.kpis.totalCommunicationsChange)"
+              >
+                <mat-icon>{{
+                  getChangeIcon(sum.kpis.totalCommunicationsChange)
+                }}</mat-icon>
+                {{ sum.kpis.totalCommunicationsChange | number: "1.1-1" }}%
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="kpi-card">
+          <mat-card-content>
+            <div class="kpi-icon cases">
+              <mat-icon>folder_open</mat-icon>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-value">{{ sum.kpis.openCases | number }}</span>
+              <span class="kpi-label">Open Cases</span>
+              <span
+                class="kpi-change"
+                [class]="getChangeClass(sum.kpis.openCasesChange, true)"
+              >
+                <mat-icon>{{
+                  getChangeIcon(sum.kpis.openCasesChange)
+                }}</mat-icon>
+                {{ sum.kpis.openCasesChange | number: "1.1-1" }}%
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="kpi-card">
+          <mat-card-content>
+            <div class="kpi-icon sentiment">
+              <mat-icon>sentiment_satisfied</mat-icon>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-value"
+                >{{ sum.kpis.avgSentiment * 100 | number: "1.0-0" }}%</span
+              >
+              <span class="kpi-label">Avg Sentiment</span>
+              <span
+                class="kpi-change"
+                [class]="getChangeClass(sum.kpis.avgSentimentChange)"
+              >
+                <mat-icon>{{
+                  getChangeIcon(sum.kpis.avgSentimentChange)
+                }}</mat-icon>
+                {{ sum.kpis.avgSentimentChange | number: "1.1-1" }}%
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="kpi-card">
+          <mat-card-content>
+            <div class="kpi-icon response">
+              <mat-icon>schedule</mat-icon>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-value"
+                >{{ sum.kpis.avgResponseTime | number: "1.1-1" }}h</span
+              >
+              <span class="kpi-label">Avg Response Time</span>
+              <span
+                class="kpi-change"
+                [class]="getChangeClass(sum.kpis.avgResponseTimeChange, true)"
+              >
+                <mat-icon>{{
+                  getChangeIcon(sum.kpis.avgResponseTimeChange)
+                }}</mat-icon>
+                {{ sum.kpis.avgResponseTimeChange | number: "1.1-1" }}%
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card class="kpi-card">
+          <mat-card-content>
+            <div class="kpi-icon risk">
+              <mat-icon>warning</mat-icon>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-value">{{
+                sum.kpis.atRiskCustomers | number
+              }}</span>
+              <span class="kpi-label">At-Risk Customers</span>
+              <span
+                class="kpi-change"
+                [class]="getChangeClass(sum.kpis.atRiskCustomersChange, true)"
+              >
+                <mat-icon>{{
+                  getChangeIcon(sum.kpis.atRiskCustomersChange)
+                }}</mat-icon>
+                {{ sum.kpis.atRiskCustomersChange | number }}
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <!-- Alerts Section -->
+      @if (sum.alerts.length > 0) {
+        <mat-card class="alerts-card">
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>notifications_active</mat-icon>
+              Active Alerts
+            </mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="alerts-list">
+              @for (alert of sum.alerts; track alert.message) {
+                <div class="alert-item" [class]="'alert-' + alert.severity">
+                  <mat-icon>{{
+                    alert.severity === "critical" ? "error" : "warning"
+                  }}</mat-icon>
+                  <span class="alert-message">{{ alert.message }}</span>
+                  <span class="alert-time">{{
+                    alert.timestamp | date: "shortTime"
+                  }}</span>
+                </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+    }
+
+    <!-- Recent Communications -->
+    <mat-card class="table-card">
+      <mat-card-header>
+        <mat-card-title>Recent Communications</mat-card-title>
+        <button mat-button color="primary" routerLink="/communications">
+          View All
+        </button>
+      </mat-card-header>
+      <mat-card-content>
+        <table
+          mat-table
+          [dataSource]="recentCommunications()"
+          class="communications-table"
+        >
+          <ng-container matColumnDef="customer">
+            <th mat-header-cell *matHeaderCellDef>Customer</th>
+            <td mat-cell *matCellDef="let row">
+              <a
+                [routerLink]="['/customers', row.customerId]"
+                class="customer-link"
+              >
+                {{ row.customerName }}
+              </a>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="subject">
+            <th mat-header-cell *matHeaderCellDef>Subject</th>
+            <td mat-cell *matCellDef="let row">
+              <a
+                [routerLink]="['/communications', row.id]"
+                class="subject-link"
+              >
+                {{ row.subject || "(No subject)" }}
+              </a>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="channel">
+            <th mat-header-cell *matHeaderCellDef>Channel</th>
+            <td mat-cell *matCellDef="let row">
+              <mat-icon [matTooltip]="row.channel">{{
+                getChannelIcon(row.channel)
+              }}</mat-icon>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="sentiment">
+            <th mat-header-cell *matHeaderCellDef>Sentiment</th>
+            <td mat-cell *matCellDef="let row">
+              <span [class]="getSentimentClass(row.sentiment)">
+                {{ row.sentiment?.label || "N/A" }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let row">
+              <span class="status-badge" [class]="getStatusClass(row.status)">
+                {{ row.status.replace("_", " ") }}
+              </span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="timestamp">
+            <th mat-header-cell *matHeaderCellDef>Time</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.timestamp | date: "short" }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

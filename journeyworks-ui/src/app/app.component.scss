@@ -1,0 +1,120 @@
+/* JourneyWorks App Shell Styles */
+
+$header-height: 56px;
+$sidebar-width: 200px;
+$sidebar-collapsed-width: 60px;
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// Header
+.app-header {
+  height: $header-height;
+  background: linear-gradient(135deg, #5c6bc0 0%, #3f51b5 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  padding: 0 16px;
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+
+    .brand-icon {
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
+    .brand-name {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+  }
+
+  .tagline {
+    font-size: 13px;
+    opacity: 0.85;
+    margin-right: 16px;
+  }
+}
+
+.spacer {
+  flex: 1;
+}
+
+// Main Layout
+.main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+// Sidebar
+.sidebar {
+  width: $sidebar-width;
+  background: #1e1e2f;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  transition: width 0.2s ease;
+  overflow: hidden;
+
+  &.collapsed {
+    width: $sidebar-collapsed-width;
+
+    .nav-item {
+      justify-content: center;
+      padding: 12px;
+    }
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    margin: 4px 0;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    transition: all 0.15s ease;
+
+    mat-icon {
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .nav-label {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+    }
+
+    &.active {
+      background: linear-gradient(135deg, #5c6bc0 0%, #7c4dff 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(92, 107, 192, 0.4);
+    }
+  }
+}
+
+// Content Area
+.content-area {
+  flex: 1;
+  overflow: hidden;
+  background: #f5f5f5;
+}
