@@ -1,0 +1,18 @@
+# Development Dockerfile with hot-reloading support
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm ci
+
+# Copy source
+COPY . .
+
+EXPOSE 3000
+
+# Use ts-node-dev or nest start:dev for hot-reloading
+CMD ["npm", "run", "start:dev"]

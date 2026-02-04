@@ -1,0 +1,1709 @@
+/**
+ * Analysis Service
+ *
+ * Provides LLM-powered analysis capabilities for customer communications.
+ */
+
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  LlmClientService,
+  PromptTemplateService,
+} from '../../infrastructure/llm';
+import { AnalysisServiceClient } from '../../infrastructure/analysis-service';
+import { RedisCacheService } from '../../infrastructure/redis';
+import { ElasticsearchClientService } from '../../infrastructure/elasticsearch';
+import { CommunicationsService } from '../communications/communications.service';
+import { EventsRepository } from '../events/events.repository';
+import { SurveysService } from '../surveys/surveys.service';
+import {
+  AnalysisRequest,
+  AnalysisResult,
+  AnalysisType,
+  CustomerHealthAnalysis,
+  RiskAssessment,
+  CommunicationPatternAnalysis,
+  DataCard,
+  Insight,
+  Visualization,
+  TimelineEvent,
+  SentimentBubble,
+  JourneyStage,
+  QuadrantItem,
+} from './analysis.types';
+
+// Product name mapping: UI names -> ES names
+const PRODUCT_NAME_MAP: Record<string, string> = {
+  cards: 'credit-card',
+  'credit-card': 'credit-card',
+  savings: 'savings-account',
+  'savings-account': 'savings-account',
+  current: 'current-account',
+  'current-account': 'current-account',
+  loans: 'personal-loan',
+  'personal-loan': 'personal-loan',
+  payments: 'online-banking',
+  'online-banking': 'online-banking',
+  mortgage: 'mortgage',
+  insurance: 'insurance',
+  app: 'mobile-app',
+  'mobile-app': 'mobile-app',
+};
+
+@Injectable()
+export class AnalysisService {
+  private readonly logger = new Logger(AnalysisService.name);
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly llmClient: LlmClientService,
+    private readonly promptTemplate: PromptTemplateService,
+    private readonly analysisClient: AnalysisServiceClient,
+    private readonly cache: RedisCacheService,
+    private readonly communicationsService: CommunicationsService,
+    private readonly eventsRepository: EventsRepository,
+    private readonly esClient: ElasticsearchClientService,
+    private readonly surveysService: SurveysService,
+  ) {}
+
+  /**
+   * Normalize product name from UI to ES format
+   */
+  private normalizeProduct(product: string | undefined): string | undefined {
+    if (!product || product === 'all') return undefined;
+    return PRODUCT_NAME_MAP[product.toLowerCase()] || product;
+  }
+
+  /**
+   * Perform analysis based on request type
+   */
+  async analyze(request: AnalysisRequest): Promise<AnalysisResult> {
+    const startTime = Date.now();
+
+    this.logger.log(`Performing ${request.type} analysis`);
+
+    let result: AnalysisResult;
+
+    switch (request.type) {
+      case 'sentiment':
+        result = await this.analyzeSentiment(request);
+        break;
+      case 'topics':
+        result = await this.analyzeTopics(request);
+        break;
+      case 'trends':
+        result = await this.analyzeTrends(request);
+        break;
+      case 'customer-health':
+        result = await this.analyzeCustomerHealth(request);
+        break;
+      case 'risk-assessment':
+        result = await this.assessRisk(request);
+        break;
+      case 'communication-patterns':
+        result = await this.analyzeCommunicationPatterns(request);
+        break;
+      case 'issue-detection':
+        result = await this.detectIssues(request);
+        break;
+      case 'relationship-summary':
+        result = await this.summarizeRelationship(request);
+        break;
+      case 'data-card':
+        result = await this.generateDataCard(request);
+        break;
+      default:
+        throw new Error(`Unknown analysis type: ${request.type}`);
+    }
+
+    result.processingTime = Date.now() - startTime;
+    return result;
+  }
+
+  /**
+   * Analyze sentiment across communications
+   */
+  private async analyzeSentiment(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'sentiment',
+        'No communications found for sentiment analysis.',
+      );
+    }
+
+    // Aggregate sentiment
+    const sentimentCounts = { positive: 0, neutral: 0, negative: 0, mixed: 0 };
+    let totalScore = 0;
+
+    for (const comm of communications) {
+      const label = comm.sentiment?.label || 'neutral';
+      sentimentCounts[label] = (sentimentCounts[label] || 0) + 1;
+      totalScore += comm.sentiment?.score || 0;
+    }
+
+    const avgScore = totalScore / communications.length;
+    const dominantSentiment = Object.entries(sentimentCounts).sort(
+      ([, a], [, b]) => b - a,
+    )[0][0];
+
+    // Use LLM for deeper analysis
+    const sampleComms = communications.slice(0, 10);
+    const prompt = this.promptTemplate.renderNamed(
+      'analysis:sentiment_analysis',
+      {
+        sentimentBreakdown: JSON.stringify(sentimentCounts),
+        averageScore: avgScore.toFixed(2),
+        sampleCommunications: JSON.stringify(
+          sampleComms.map((c) => ({
+            content: c.content.substring(0, 200),
+            sentiment: c.sentiment,
+            channel: c.channel,
+          })),
+          null,
+          2,
+        ),
+      },
+    );
+
+    const llmAnalysis = await this.llmClient.prompt(
+      prompt,
+      this.promptTemplate.getTemplate('system:analyst'),
+      { rateLimitKey: 'llm:analysis' },
+    );
+
+    const insights = this.extractInsights(llmAnalysis);
+
+    return {
+      type: 'sentiment',
+      summary: `Analyzed ${communications.length} communications. Dominant sentiment: ${dominantSentiment} (${((sentimentCounts[dominantSentiment] / communications.length) * 100).toFixed(1)}%)`,
+      confidence: 0.85,
+      insights,
+      metrics: {
+        totalCommunications: communications.length,
+        sentimentBreakdown: sentimentCounts,
+        averageScore: avgScore,
+        dominantSentiment,
+      },
+      visualizations: [
+        {
+          type: 'pie',
+          title: 'Sentiment Distribution',
+          data: Object.entries(sentimentCounts).map(([label, count]) => ({
+            label,
+            value: count,
+          })),
+        },
+      ],
+      recommendations: request.options?.includeRecommendations
+        ? this.generateSentimentRecommendations(sentimentCounts, avgScore)
+        : undefined,
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Analyze topics in communications
+   */
+  private async analyzeTopics(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'topics',
+        'No communications found for topic analysis.',
+      );
+    }
+
+    // Aggregate topics
+    const topicCounts: Record<string, number> = {};
+    for (const comm of communications) {
+      for (const topic of comm.topics || []) {
+        topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+      }
+    }
+
+    const sortedTopics = Object.entries(topicCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 20);
+
+    // Use LLM for topic clustering and analysis
+    const prompt = this.promptTemplate.renderNamed('analysis:topic_analysis', {
+      topics: JSON.stringify(sortedTopics),
+      sampleContent: communications
+        .slice(0, 5)
+        .map((c) => c.content.substring(0, 300))
+        .join('\n---\n'),
+    });
+
+    const llmAnalysis = await this.llmClient.prompt(
+      prompt,
+      this.promptTemplate.getTemplate('system:analyst'),
+      { rateLimitKey: 'llm:analysis' },
+    );
+
+    const insights = this.extractInsights(llmAnalysis);
+
+    return {
+      type: 'topics',
+      summary: `Identified ${sortedTopics.length} topics across ${communications.length} communications. Top topic: "${sortedTopics[0]?.[0] || 'N/A'}"`,
+      confidence: 0.8,
+      insights,
+      metrics: {
+        totalCommunications: communications.length,
+        topicCounts: Object.fromEntries(sortedTopics),
+        topTopics: sortedTopics
+          .slice(0, 10)
+          .map(([topic, count]) => ({ topic, count })),
+      },
+      visualizations: [
+        {
+          type: 'bar',
+          title: 'Top Topics',
+          data: sortedTopics.slice(0, 10).map(([topic, count]) => ({
+            label: topic,
+            value: count,
+          })),
+        },
+      ],
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Analyze trends over time
+   */
+  private async analyzeTrends(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'trends',
+        'No communications found for trend analysis.',
+      );
+    }
+
+    // Group by date
+    const byDate: Record<
+      string,
+      { count: number; sentiments: Record<string, number> }
+    > = {};
+
+    for (const comm of communications) {
+      const date = new Date(comm.timestamp).toISOString().split('T')[0];
+      if (!byDate[date]) {
+        byDate[date] = {
+          count: 0,
+          sentiments: { positive: 0, neutral: 0, negative: 0 },
+        };
+      }
+      byDate[date].count++;
+      const label = comm.sentiment?.label || 'neutral';
+      byDate[date].sentiments[label] =
+        (byDate[date].sentiments[label] || 0) + 1;
+    }
+
+    const dates = Object.keys(byDate).sort();
+    const volumeTrend = dates.map((date) => ({
+      date,
+      volume: byDate[date].count,
+    }));
+
+    // Detect trend direction
+    const recentVolume = volumeTrend
+      .slice(-7)
+      .reduce((s, d) => s + d.volume, 0);
+    const previousVolume = volumeTrend
+      .slice(-14, -7)
+      .reduce((s, d) => s + d.volume, 0);
+    const trendDirection =
+      recentVolume > previousVolume * 1.1
+        ? 'increasing'
+        : recentVolume < previousVolume * 0.9
+          ? 'decreasing'
+          : 'stable';
+
+    return {
+      type: 'trends',
+      summary: `Communication volume is ${trendDirection}. Analyzed ${communications.length} communications over ${dates.length} days.`,
+      confidence: 0.75,
+      insights: [
+        {
+          category: 'Volume Trend',
+          text: `Communication volume is ${trendDirection} compared to the previous period.`,
+          severity: trendDirection === 'increasing' ? 'medium' : 'low',
+        },
+      ],
+      metrics: {
+        totalCommunications: communications.length,
+        dateRange: { from: dates[0], to: dates[dates.length - 1] },
+        trendDirection,
+        dailyAverageVolume: communications.length / dates.length,
+      },
+      visualizations: [
+        {
+          type: 'line',
+          title: 'Communication Volume Over Time',
+          data: volumeTrend,
+        },
+        {
+          type: 'line',
+          title: 'Sentiment Trend',
+          data: dates.map((date) => ({
+            date,
+            ...byDate[date].sentiments,
+          })),
+        },
+      ],
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Analyze customer health
+   */
+  private async analyzeCustomerHealth(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    if (!request.targetId) {
+      throw new Error('Customer ID required for customer health analysis');
+    }
+
+    const communications = await this.communicationsService.getByCustomer(
+      request.targetId,
+      0,
+      100,
+    );
+
+    if (communications.items.length === 0) {
+      return this.emptyResult(
+        'customer-health',
+        'No communications found for this customer.',
+      );
+    }
+
+    const comms = communications.items;
+    const customerName = comms[0].customerName || 'Unknown';
+
+    // Calculate health metrics
+    const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
+    let totalScore = 0;
+
+    for (const comm of comms) {
+      const label = comm.sentiment?.label || 'neutral';
+      if (label in sentimentCounts) {
+        sentimentCounts[label]++;
+      }
+      totalScore += comm.sentiment?.score || 0;
+    }
+
+    const avgScore = totalScore / comms.length;
+    const positiveRatio = sentimentCounts.positive / comms.length;
+    const negativeRatio = sentimentCounts.negative / comms.length;
+
+    // Calculate health score (0-100)
+    let healthScore = 50 + avgScore * 25; // Base on sentiment
+    healthScore = Math.max(0, Math.min(100, healthScore));
+
+    // Determine trend
+    const recentComms = comms.slice(0, 10);
+    const olderComms = comms.slice(10, 20);
+    const recentAvg =
+      recentComms.reduce((s, c) => s + (c.sentiment?.score || 0), 0) /
+      recentComms.length;
+    const olderAvg =
+      olderComms.length > 0
+        ? olderComms.reduce((s, c) => s + (c.sentiment?.score || 0), 0) /
+          olderComms.length
+        : recentAvg;
+
+    const trend =
+      recentAvg > olderAvg + 0.1
+        ? 'improving'
+        : recentAvg < olderAvg - 0.1
+          ? 'declining'
+          : 'stable';
+
+    // Generate risk factors and positive signals
+    const riskFactors: string[] = [];
+    const positiveSignals: string[] = [];
+
+    if (negativeRatio > 0.3) {
+      riskFactors.push('High proportion of negative communications');
+    }
+    if (positiveRatio > 0.5) {
+      positiveSignals.push('Majority of communications are positive');
+    }
+    if (trend === 'declining') {
+      riskFactors.push('Sentiment trend is declining');
+    }
+    if (trend === 'improving') {
+      positiveSignals.push('Sentiment trend is improving');
+    }
+
+    const healthAnalysis: CustomerHealthAnalysis = {
+      customerId: request.targetId,
+      customerName,
+      healthScore,
+      trend,
+      sentimentBreakdown: sentimentCounts,
+      riskFactors,
+      positiveSignals,
+      recentActivity: {
+        communicationCount: comms.length,
+        caseCount: 0, // Would come from cases module
+        lastContact: comms[0]?.timestamp,
+      },
+      recommendations: this.generateHealthRecommendations(
+        healthScore,
+        trend,
+        riskFactors,
+      ),
+    };
+
+    return {
+      type: 'customer-health',
+      summary: `Customer "${customerName}" has a health score of ${healthScore.toFixed(0)}/100 with ${trend} trend.`,
+      confidence: 0.8,
+      insights: [
+        {
+          category: 'Health Score',
+          text: `Health score is ${healthScore >= 70 ? 'good' : healthScore >= 40 ? 'moderate' : 'concerning'} at ${healthScore.toFixed(0)}/100`,
+          severity:
+            healthScore >= 70 ? 'low' : healthScore >= 40 ? 'medium' : 'high',
+        },
+        ...riskFactors.map((rf) => ({
+          category: 'Risk Factor',
+          text: rf,
+          severity: 'high' as const,
+        })),
+      ],
+      metrics: healthAnalysis,
+      recommendations: healthAnalysis.recommendations,
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Assess risk across communications
+   */
+  private async assessRisk(request: AnalysisRequest): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'risk-assessment',
+        'No communications found for risk assessment.',
+      );
+    }
+
+    // Use LLM for risk assessment
+    const sampleComms = communications
+      .filter(
+        (c) =>
+          c.sentiment?.label === 'negative' ||
+          c.priority === 'high' ||
+          c.priority === 'urgent',
+      )
+      .slice(0, 15);
+
+    const prompt = this.promptTemplate.renderNamed('analysis:risk_assessment', {
+      totalCommunications: communications.length,
+      negativeCommunications: communications.filter(
+        (c) => c.sentiment?.label === 'negative',
+      ).length,
+      highPriorityCommunications: communications.filter(
+        (c) => c.priority === 'high' || c.priority === 'urgent',
+      ).length,
+      sampleHighRiskCommunications: JSON.stringify(
+        sampleComms.map((c) => ({
+          content: c.content.substring(0, 300),
+          sentiment: c.sentiment,
+          priority: c.priority,
+          customer: c.customerName,
+        })),
+        null,
+        2,
+      ),
+    });
+
+    const llmAnalysis = await this.llmClient.prompt(
+      prompt,
+      this.promptTemplate.getTemplate('system:analyst'),
+      { rateLimitKey: 'llm:analysis' },
+    );
+
+    // Parse LLM response for structured risk assessment
+    let riskAssessment: RiskAssessment;
+    try {
+      const parsed = JSON.parse(llmAnalysis);
+      riskAssessment = {
+        riskLevel: parsed.riskLevel || 'medium',
+        riskScore: parsed.riskScore || 50,
+        factors: parsed.factors || [],
+        mitigations: parsed.mitigations || [],
+        affectedCustomers: parsed.affectedCustomers,
+      };
+    } catch {
+      // Fallback to basic assessment
+      const negativeRatio =
+        communications.filter((c) => c.sentiment?.label === 'negative').length /
+        communications.length;
+      riskAssessment = {
+        riskLevel:
+          negativeRatio > 0.3
+            ? 'high'
+            : negativeRatio > 0.15
+              ? 'medium'
+              : 'low',
+        riskScore: Math.min(100, negativeRatio * 200),
+        factors: [
+          {
+            factor: 'Negative Sentiment',
+            description: `${(negativeRatio * 100).toFixed(1)}% of communications have negative sentiment`,
+            impact: negativeRatio > 0.3 ? 'high' : 'medium',
+            likelihood: negativeRatio > 0.2 ? 'high' : 'medium',
+          },
+        ],
+        mitigations: [
+          'Review negative communications',
+          'Implement proactive outreach',
+        ],
+      };
+    }
+
+    return {
+      type: 'risk-assessment',
+      summary: `Risk level: ${riskAssessment.riskLevel.toUpperCase()} (score: ${riskAssessment.riskScore.toFixed(0)}/100). ${riskAssessment.factors.length} risk factors identified.`,
+      confidence: 0.75,
+      insights: riskAssessment.factors.map((f) => ({
+        category: 'Risk Factor',
+        text: `${f.factor}: ${f.description}`,
+        severity: f.impact as any,
+      })),
+      metrics: riskAssessment,
+      recommendations: riskAssessment.mitigations,
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Analyze communication patterns
+   */
+  private async analyzeCommunicationPatterns(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'communication-patterns',
+        'No communications found for pattern analysis.',
+      );
+    }
+
+    // Channel distribution
+    const channelCounts: Record<string, number> = {};
+    for (const comm of communications) {
+      channelCounts[comm.channel] = (channelCounts[comm.channel] || 0) + 1;
+    }
+
+    // Time distribution (hour of day, day of week)
+    const hourCounts: Record<number, number> = {};
+    const dayCounts: Record<number, number> = {};
+
+    for (const comm of communications) {
+      const date = new Date(comm.timestamp);
+      const hour = date.getHours();
+      const day = date.getDay();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+      dayCounts[day] = (dayCounts[day] || 0) + 1;
+    }
+
+    // Find peak times
+    const peakHour = Object.entries(hourCounts).sort(
+      ([, a], [, b]) => b - a,
+    )[0];
+    const peakDay = Object.entries(dayCounts).sort(([, a], [, b]) => b - a)[0];
+
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
+    const patterns: CommunicationPatternAnalysis = {
+      timeRange: {
+        from: communications[communications.length - 1]?.timestamp || '',
+        to: communications[0]?.timestamp || '',
+      },
+      totalCommunications: communications.length,
+      channelDistribution: channelCounts,
+      peakTimes: [
+        {
+          dayOfWeek: dayNames[parseInt(peakDay[0])],
+          hourOfDay: parseInt(peakHour[0]),
+          volume: parseInt(peakHour[1] as any),
+        },
+      ],
+      responseTime: {
+        average: 0, // Would need response tracking
+        median: 0,
+        percentile95: 0,
+      },
+      sentimentTrend: [],
+      topicTrends: [],
+    };
+
+    return {
+      type: 'communication-patterns',
+      summary: `Analyzed ${communications.length} communications. Peak activity: ${dayNames[parseInt(peakDay[0])]}s at ${peakHour[0]}:00. Primary channel: ${Object.entries(channelCounts).sort(([, a], [, b]) => b - a)[0][0]}.`,
+      confidence: 0.85,
+      insights: [
+        {
+          category: 'Peak Activity',
+          text: `Highest activity on ${dayNames[parseInt(peakDay[0])]}s around ${peakHour[0]}:00`,
+          severity: 'low',
+        },
+      ],
+      metrics: patterns,
+      visualizations: [
+        {
+          type: 'bar',
+          title: 'Channel Distribution',
+          data: Object.entries(channelCounts).map(([channel, count]) => ({
+            label: channel,
+            value: count,
+          })),
+        },
+        {
+          type: 'heatmap',
+          title: 'Activity by Hour',
+          data: Object.entries(hourCounts).map(([hour, count]) => ({
+            hour: parseInt(hour),
+            count,
+          })),
+        },
+      ],
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Detect issues in communications
+   */
+  private async detectIssues(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'issue-detection',
+        'No communications found for issue detection.',
+      );
+    }
+
+    // Focus on negative and urgent communications
+    const problematicComms = communications.filter(
+      (c) =>
+        c.sentiment?.label === 'negative' ||
+        c.priority === 'urgent' ||
+        c.priority === 'high',
+    );
+
+    const prompt = this.promptTemplate.renderNamed('analysis:issue_detection', {
+      totalCommunications: communications.length,
+      problematicCount: problematicComms.length,
+      samples: JSON.stringify(
+        problematicComms.slice(0, 10).map((c) => ({
+          content: c.content.substring(0, 400),
+          customer: c.customerName,
+          sentiment: c.sentiment,
+          priority: c.priority,
+          timestamp: c.timestamp,
+        })),
+        null,
+        2,
+      ),
+    });
+
+    const llmAnalysis = await this.llmClient.prompt(
+      prompt,
+      this.promptTemplate.getTemplate('system:analyst'),
+      { rateLimitKey: 'llm:analysis' },
+    );
+
+    const insights = this.extractInsights(llmAnalysis);
+
+    return {
+      type: 'issue-detection',
+      summary: `Detected ${insights.filter((i) => i.severity === 'high' || i.severity === 'critical').length} significant issues from ${problematicComms.length} concerning communications.`,
+      confidence: 0.7,
+      insights,
+      metrics: {
+        totalCommunications: communications.length,
+        problematicCount: problematicComms.length,
+        issueCount: insights.length,
+      },
+      recommendations: request.options?.includeRecommendations
+        ? insights.slice(0, 3).map((i) => `Address: ${i.text}`)
+        : undefined,
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Summarize customer relationship
+   */
+  private async summarizeRelationship(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    if (!request.targetId) {
+      throw new Error('Customer ID required for relationship summary');
+    }
+
+    const communications = await this.communicationsService.getByCustomer(
+      request.targetId,
+      0,
+      50,
+    );
+
+    if (communications.items.length === 0) {
+      return this.emptyResult(
+        'relationship-summary',
+        'No communications found for this customer.',
+      );
+    }
+
+    const comms = communications.items;
+    const customerName = comms[0].customerName || 'Unknown';
+
+    const prompt = this.promptTemplate.renderNamed(
+      'analysis:relationship_summary',
+      {
+        customerName,
+        communicationCount: comms.length,
+        communications: JSON.stringify(
+          comms.map((c) => ({
+            date: c.timestamp,
+            channel: c.channel,
+            summary: c.summary || c.content.substring(0, 200),
+            sentiment: c.sentiment?.label,
+          })),
+          null,
+          2,
+        ),
+      },
+    );
+
+    const summary = await this.llmClient.prompt(
+      prompt,
+      this.promptTemplate.getTemplate('system:analyst'),
+      { rateLimitKey: 'llm:analysis' },
+    );
+
+    return {
+      type: 'relationship-summary',
+      summary,
+      confidence: 0.8,
+      insights: [],
+      metrics: {
+        customerId: request.targetId,
+        customerName,
+        communicationCount: comms.length,
+        firstContact: comms[comms.length - 1]?.timestamp,
+        lastContact: comms[0]?.timestamp,
+      },
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Generate data card using analysis service
+   */
+  private async generateDataCard(
+    request: AnalysisRequest,
+  ): Promise<AnalysisResult> {
+    const communications = await this.getCommunicationsForAnalysis(request);
+
+    if (communications.length === 0) {
+      return this.emptyResult(
+        'data-card',
+        'No data available for data card generation.',
+      );
+    }
+
+    // Call analysis service for data card
+    const serviceDataCard = await this.analysisClient.generateDataCard({
+      data: communications as Record<string, unknown>[],
+      title: (request.options as any)?.title || 'Communication Analysis',
+      generateInsights: true,
+    });
+
+    // Convert to local DataCard format
+    const dataCard: DataCard = {
+      title: serviceDataCard.title,
+      description: serviceDataCard.description,
+      statistics: {
+        totalRecords: serviceDataCard.rowCount,
+        fieldCount: serviceDataCard.columnCount,
+        completeness: serviceDataCard.dataQuality?.completeness || 0,
+      },
+      fields: serviceDataCard.columns.map((col) => ({
+        name: col.name,
+        type: col.inferredType,
+        completeness: (1 - col.statistics.missing / col.statistics.count) * 100,
+        uniqueCount: col.statistics.unique,
+        topValues:
+          col.topValues?.map((tv) => ({
+            value: tv.value,
+            count: tv.count,
+          })) || [],
+      })),
+      quality: {
+        score: (serviceDataCard.dataQuality?.completeness || 0) * 100,
+        issues:
+          serviceDataCard.dataQuality?.issues.map((i) => ({
+            field: i.column,
+            issue: i.issue,
+            severity: i.severity,
+          })) || [],
+        recommendations: [],
+      },
+    };
+
+    return {
+      type: 'data-card',
+      summary:
+        serviceDataCard.description ||
+        `Generated data card for ${communications.length} records.`,
+      confidence: 0.9,
+      insights: serviceDataCard.insights.map((text) => ({
+        category: 'data-quality',
+        text,
+        severity: 'low' as const,
+      })),
+      metrics: {
+        recordCount: communications.length,
+        fieldCount: serviceDataCard.columnCount,
+      },
+      dataCard,
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Get communications for analysis based on request filters
+   */
+  private async getCommunicationsForAnalysis(
+    request: AnalysisRequest,
+  ): Promise<any[]> {
+    const limit = request.options?.limit || 100;
+
+    const results = await this.communicationsService.search({
+      query: request.query,
+      customerId: request.targetId,
+      startDate: request.timeRange?.from,
+      endDate: request.timeRange?.to,
+      from: 0,
+      size: limit,
+    });
+
+    return results.items;
+  }
+
+  /**
+   * Create an empty result for when no data is found
+   */
+  private emptyResult(type: AnalysisType, message: string): AnalysisResult {
+    return {
+      type,
+      summary: message,
+      confidence: 0,
+      insights: [],
+      metrics: {},
+      processingTime: 0,
+    };
+  }
+
+  /**
+   * Extract insights from LLM response
+   */
+  private extractInsights(llmResponse: string): Insight[] {
+    try {
+      const parsed = JSON.parse(llmResponse);
+      if (Array.isArray(parsed.insights)) {
+        return parsed.insights.map((i: any) => ({
+          category: i.category || 'General',
+          text: i.text || i.insight || i.description,
+          severity: this.normalizeSeverity(i.severity || i.importance),
+          evidence: i.evidence,
+          relatedEntities: i.relatedEntities,
+        }));
+      }
+    } catch {
+      // Try to extract insights from plain text
+      const lines = llmResponse.split('\n').filter((l) => l.trim());
+      return lines.slice(0, 5).map((line) => ({
+        category: 'General',
+        text: line.replace(/^[-•*]\s*/, ''),
+        severity: 'medium' as const,
+      }));
+    }
+
+    return [];
+  }
+
+  /**
+   * Normalize severity value
+   */
+  private normalizeSeverity(
+    value: string,
+  ): 'low' | 'medium' | 'high' | 'critical' {
+    const normalized = (value || 'medium').toLowerCase();
+    if (['low', 'medium', 'high', 'critical'].includes(normalized)) {
+      return normalized as any;
+    }
+    return 'medium';
+  }
+
+  /**
+   * Generate sentiment recommendations
+   */
+  private generateSentimentRecommendations(
+    sentimentCounts: Record<string, number>,
+    avgScore: number,
+  ): string[] {
+    const recommendations: string[] = [];
+
+    if (sentimentCounts.negative > sentimentCounts.positive) {
+      recommendations.push(
+        'Review negative communications to identify common issues',
+      );
+      recommendations.push(
+        'Consider proactive outreach to dissatisfied customers',
+      );
+    }
+
+    if (avgScore < -0.2) {
+      recommendations.push(
+        'Implement sentiment monitoring alerts for early issue detection',
+      );
+    }
+
+    if (
+      sentimentCounts.mixed >
+      (sentimentCounts.positive + sentimentCounts.negative) * 0.3
+    ) {
+      recommendations.push(
+        'Investigate mixed sentiment communications for underlying concerns',
+      );
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Generate health recommendations
+   */
+  private generateHealthRecommendations(
+    healthScore: number,
+    trend: string,
+    riskFactors: string[],
+  ): string[] {
+    const recommendations: string[] = [];
+
+    if (healthScore < 40) {
+      recommendations.push(
+        'Immediate attention required - schedule account review',
+      );
+      recommendations.push('Escalate to account manager for intervention');
+    } else if (healthScore < 70) {
+      recommendations.push(
+        'Schedule regular check-ins to improve relationship',
+      );
+    }
+
+    if (trend === 'declining') {
+      recommendations.push('Investigate recent interactions for issues');
+      recommendations.push('Consider proactive outreach to address concerns');
+    }
+
+    for (const factor of riskFactors.slice(0, 2)) {
+      recommendations.push(`Address: ${factor}`);
+    }
+
+    return recommendations.slice(0, 5);
+  }
+
+  // ============================================================
+  // Dashboard API Methods
+  // ============================================================
+
+  /**
+   * Get timeline events for dashboard from Elasticsearch
+   */
+  async getTimelineEvents(filter: {
+    startDate?: Date;
+    endDate?: Date;
+    product?: string;
+  }): Promise<TimelineEvent[]> {
+    try {
+      const normalizedProduct = this.normalizeProduct(filter.product);
+
+      // Query real events from Elasticsearch
+      const result = await this.eventsRepository.searchEvents(
+        undefined, // no text query
+        {
+          startDateFrom: filter.startDate?.toISOString(),
+          startDateTo: filter.endDate?.toISOString(),
+          product: normalizedProduct,
+        },
+        { size: 100, sort: [{ startDate: 'asc' }] },
+      );
+
+      this.logger.debug(
+        `Found ${result.hits.length} events from ES (product: ${normalizedProduct || 'all'})`,
+      );
+
+      // Map ES event types to TimelineEvent types
+      const typeMap: Record<string, TimelineEvent['type']> = {
+        outage: 'outage',
+        launch: 'launch',
+        policy_change: 'announcement',
+        incident: 'issue',
+        promotion: 'announcement',
+      };
+
+      // Map ES documents to TimelineEvent format
+      return result.hits.map((hit) => {
+        const doc = hit.source;
+        return {
+          id: doc.id,
+          date: doc.startDate,
+          type: typeMap[doc.type] || 'issue',
+          label: doc.label,
+          product: doc.product || 'all',
+          severity: doc.severity,
+          description: doc.description,
+        };
+      });
+    } catch (error) {
+      this.logger.error(`Failed to fetch events from ES: ${error.message}`);
+      // Return empty array on error - UI will show no events
+      return [];
+    }
+  }
+
+  /**
+   * Get sentiment bubbles for timeline chart from Elasticsearch
+   */
+  async getSentimentBubbles(filter: {
+    startDate?: Date;
+    endDate?: Date;
+    product?: string;
+    channel?: string;
+  }): Promise<SentimentBubble[]> {
+    try {
+      const client = this.esClient.getClient();
+      if (!client) {
+        this.logger.warn('ES client not available for bubbles');
+        return [];
+      }
+
+      const normalizedProduct = this.normalizeProduct(filter.product);
+      const startDate = filter.startDate || new Date('2024-01-01');
+      const endDate = filter.endDate || new Date();
+
+      // Build filters
+      const filters: any[] = [
+        {
+          range: {
+            timestamp: {
+              gte: startDate.toISOString(),
+              lte: endDate.toISOString(),
+            },
+          },
+        },
+      ];
+
+      if (normalizedProduct) {
+        filters.push({
+          term: { 'aiClassification.product.keyword': normalizedProduct },
+        });
+      }
+
+      if (filter.channel) {
+        filters.push({ term: { 'channel.keyword': filter.channel } });
+      }
+
+      // Aggregate communications by day
+      const response = await client.search({
+        index: 'journeyworks_communications',
+        body: {
+          size: 0,
+          query: { bool: { filter: filters } },
+          aggs: {
+            by_day: {
+              date_histogram: {
+                field: 'timestamp',
+                calendar_interval: 'day',
+              },
+              aggs: {
+                avg_sentiment: { avg: { field: 'sentiment.score' } },
+                top_categories: {
+                  terms: {
+                    field: 'aiClassification.category.keyword',
+                    size: 5,
+                  },
+                },
+                top_product: {
+                  terms: { field: 'aiClassification.product.keyword', size: 1 },
+                },
+                channels: { terms: { field: 'channel.keyword', size: 3 } },
+              },
+            },
+          },
+        },
+      });
+
+      const buckets = (response.aggregations as any)?.by_day?.buckets || [];
+      this.logger.debug(`Found ${buckets.length} daily buckets from ES`);
+
+      // Also get social sentiment for the same period
+      const socialResponse = await client.search({
+        index: 'journeyworks_social',
+        body: {
+          size: 0,
+          query: {
+            bool: {
+              filter: [
+                {
+                  range: {
+                    timestamp: {
+                      gte: startDate.toISOString(),
+                      lte: endDate.toISOString(),
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          aggs: {
+            by_day: {
+              date_histogram: {
+                field: 'timestamp',
+                calendar_interval: 'day',
+              },
+              aggs: {
+                avg_sentiment: { avg: { field: 'sentiment.score' } },
+              },
+            },
+          },
+        },
+      });
+
+      // Create a map of social sentiment by date
+      const socialBuckets =
+        (socialResponse.aggregations as any)?.by_day?.buckets || [];
+      const socialByDate: Record<string, number> = {};
+      for (const bucket of socialBuckets) {
+        const dateKey = bucket.key_as_string.split('T')[0];
+        socialByDate[dateKey] = bucket.avg_sentiment?.value ?? 0;
+      }
+
+      // Get survey counts by day AND product
+      // This ensures each bubble's surveyCount matches its product
+      const surveyFilters: any[] = [
+        {
+          range: {
+            surveyDate: {
+              gte: startDate.toISOString(),
+              lte: endDate.toISOString(),
+            },
+          },
+        },
+        { term: { responded: true } },
+      ];
+
+      if (normalizedProduct) {
+        surveyFilters.push({ term: { product: normalizedProduct } });
+      }
+
+      const surveyResponse = await client.search({
+        index: 'journeyworks_nps_surveys',
+        body: {
+          size: 0,
+          query: { bool: { filter: surveyFilters } },
+          aggs: {
+            by_day: {
+              date_histogram: {
+                field: 'surveyDate',
+                calendar_interval: 'day',
+              },
+              aggs: {
+                by_product: {
+                  terms: {
+                    field: 'product',
+                    size: 20,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Build a map of date+product -> surveyCount
+      const surveyBuckets =
+        (surveyResponse.aggregations as any)?.by_day?.buckets || [];
+      const surveysByDateProduct: Record<string, number> = {};
+      for (const dayBucket of surveyBuckets) {
+        const dateKey = dayBucket.key_as_string.split('T')[0];
+        const productBuckets = dayBucket.by_product?.buckets || [];
+        for (const prodBucket of productBuckets) {
+          const key = `${dateKey}:${prodBucket.key}`;
+          surveysByDateProduct[key] = prodBucket.doc_count;
+        }
+        // Also store total for the day (for when product='all')
+        surveysByDateProduct[`${dateKey}:all`] = dayBucket.doc_count;
+      }
+
+      // Map to SentimentBubble format
+      return buckets.map((bucket: any, index: number) => {
+        const dateStr = bucket.key_as_string;
+        const dateKey = dateStr.split('T')[0];
+        const sentiment = bucket.avg_sentiment?.value ?? 0;
+        const volume = bucket.doc_count;
+        const themes =
+          bucket.top_categories?.buckets?.map((b: any) => b.key) || [];
+        const product =
+          bucket.top_product?.buckets?.[0]?.key || normalizedProduct || 'all';
+        const channel =
+          bucket.channels?.buckets?.[0]?.key || filter.channel || 'mixed';
+        const socialSentiment = socialByDate[dateKey] ?? sentiment;
+
+        // Get survey count for this specific date+product combination
+        const surveyCount =
+          surveysByDateProduct[`${dateKey}:${product}`] ??
+          (product === 'all' ? surveysByDateProduct[`${dateKey}:all`] : 0) ??
+          0;
+
+        const npsData = this.sentimentToNPS(sentiment);
+
+        return {
+          id: `bubble-${index}`,
+          date: dateStr,
+          volume,
+          surveyCount,
+          sentiment,
+          socialSentiment,
+          themes,
+          product,
+          channel,
+          ...npsData,
+        };
+      });
+    } catch (error) {
+      this.logger.error(`Failed to fetch bubbles from ES: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get journey stages for waterfall chart from Elasticsearch
+   * Maps case status to journey stages with aggregated sentiment
+   */
+  async getJourneyStages(filter: {
+    startDate?: Date;
+    endDate?: Date;
+    product?: string;
+  }): Promise<JourneyStage[]> {
+    try {
+      // Use the surveys service to get real aggregated data
+      const normalizedProduct = this.normalizeProduct(filter.product);
+
+      const surveyFilters = {
+        startDate: filter.startDate,
+        endDate: filter.endDate,
+        product: normalizedProduct,
+      };
+
+      // Get journey stage aggregations from actual survey data
+      // No fallbacks - show exactly what exists for the requested filters
+      const stageAggregations =
+        await this.surveysService.getJourneyStages(surveyFilters);
+
+      // Convert survey aggregations to JourneyStage format
+      // This will show zeros if no data exists for the date range
+      const stages: JourneyStage[] = stageAggregations.map((agg, index) => {
+        const previousNps =
+          index > 0 ? stageAggregations[index - 1].npsScore : 0;
+        // Map NPS score (-100 to 100) to sentiment (-1 to 1)
+        const sentiment = agg.npsScore / 100;
+        const previousSentiment = previousNps / 100;
+
+        return {
+          stage: agg.stage,
+          label: agg.label,
+          sentiment,
+          previousSentiment,
+          change: sentiment - previousSentiment,
+          communications: agg.totalResponses,
+          npsScore: agg.npsScore,
+          promoterPct: agg.promoterPct,
+          passivePct: agg.passivePct,
+          detractorPct: agg.detractorPct,
+        };
+      });
+
+      this.logger.debug(
+        `Built ${stages.length} journey stages from survey data`,
+      );
+      return stages;
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch journey stages from surveys: ${error.message}`,
+      );
+      // Only use empty stages on actual error (ES unavailable)
+      return this.getEmptyJourneyStages();
+    }
+  }
+
+  /**
+   * Empty journey stages when ES is unavailable
+   */
+  private getEmptyJourneyStages(): JourneyStage[] {
+    const stages: Array<JourneyStage['stage']> = [
+      'initial-contact',
+      'triage',
+      'investigation',
+      'resolution',
+      'post-resolution',
+    ];
+    const labels: Record<string, string> = {
+      'initial-contact': 'Initial Contact',
+      triage: 'Triage',
+      investigation: 'Investigation',
+      resolution: 'Resolution',
+      'post-resolution': 'Post-Resolution',
+    };
+
+    return stages.map((stage) => ({
+      stage,
+      label: labels[stage],
+      sentiment: 0,
+      previousSentiment: 0,
+      change: 0,
+      communications: 0,
+      npsScore: 0,
+      promoterPct: 0,
+      passivePct: 0,
+      detractorPct: 0,
+    }));
+  }
+
+  /**
+   * Get quadrant items for scatter plot from Elasticsearch
+   * Aggregates by category with sentiment and volume
+   */
+  async getQuadrantItems(filter: {
+    startDate?: Date;
+    endDate?: Date;
+    product?: string;
+  }): Promise<QuadrantItem[]> {
+    try {
+      const client = this.esClient.getClient();
+      if (!client) {
+        this.logger.warn('ES client not available for quadrant items');
+        return [];
+      }
+
+      const normalizedProduct = this.normalizeProduct(filter.product);
+
+      // Build filters
+      const filters: any[] = [];
+      if (filter.startDate || filter.endDate) {
+        const range: any = {};
+        if (filter.startDate) range.gte = filter.startDate.toISOString();
+        if (filter.endDate) range.lte = filter.endDate.toISOString();
+        filters.push({ range: { timestamp: range } });
+      }
+      if (normalizedProduct) {
+        filters.push({
+          term: { 'aiClassification.product.keyword': normalizedProduct },
+        });
+      }
+
+      // Aggregate by category
+      const response = await client.search({
+        index: 'journeyworks_communications',
+        body: {
+          size: 0,
+          query: filters.length
+            ? { bool: { filter: filters } }
+            : { match_all: {} },
+          aggs: {
+            by_category: {
+              terms: { field: 'aiClassification.category.keyword', size: 20 },
+              aggs: {
+                avg_sentiment: { avg: { field: 'sentiment.score' } },
+                top_product: {
+                  terms: { field: 'aiClassification.product.keyword', size: 1 },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const buckets =
+        (response.aggregations as any)?.by_category?.buckets || [];
+      this.logger.debug(`Found ${buckets.length} categories for quadrant`);
+
+      // Calculate volume thresholds for quadrant assignment
+      const volumes = buckets.map((b: any) => b.doc_count);
+      const avgVolume =
+        volumes.length > 0
+          ? volumes.reduce((a: number, b: number) => a + b, 0) / volumes.length
+          : 50;
+
+      // Category to readable label mapping
+      const categoryLabels: Record<string, string> = {
+        'payment-issue': 'Payment Issues',
+        'technical-issue': 'Technical Problems',
+        'fees-charges': 'Fee Disputes',
+        'account-access': 'Account Access',
+        'service-quality': 'Service Quality',
+        'product-feature': 'Product Features',
+        communication: 'Communication',
+        fraud: 'Fraud & Security',
+      };
+
+      return buckets.map((bucket: any, index: number) => {
+        const category = bucket.key;
+        const sentiment = bucket.avg_sentiment?.value ?? 0;
+        const volume = bucket.doc_count;
+        const product =
+          bucket.top_product?.buckets?.[0]?.key || normalizedProduct || 'all';
+
+        // Determine quadrant based on sentiment and volume
+        let quadrant: 'critical' | 'watch' | 'strength' | 'noise';
+        if (sentiment < -0.2) {
+          quadrant = volume > avgVolume ? 'critical' : 'watch';
+        } else {
+          quadrant = volume > avgVolume * 0.5 ? 'strength' : 'noise';
+        }
+
+        const npsData = this.sentimentToNPS(sentiment);
+
+        return {
+          id: `q-${index + 1}`,
+          label: categoryLabels[category] || this.formatCategoryLabel(category),
+          sentiment,
+          volume,
+          category,
+          product,
+          quadrant,
+          ...npsData,
+        };
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch quadrant items from ES: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Format category key to readable label
+   */
+  private formatCategoryLabel(category: string): string {
+    return category
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  /**
+   * Convert sentiment to NPS breakdown
+   */
+  private sentimentToNPS(sentiment: number): {
+    npsScore: number;
+    promoterPct: number;
+    passivePct: number;
+    detractorPct: number;
+  } {
+    if (sentiment < -0.5) {
+      const detractorPct = 70 + Math.floor(Math.random() * 15);
+      const passivePct = 15 + Math.floor(Math.random() * 10);
+      const promoterPct = 100 - detractorPct - passivePct;
+      return {
+        npsScore: promoterPct - detractorPct,
+        promoterPct,
+        passivePct,
+        detractorPct,
+      };
+    } else if (sentiment < -0.2) {
+      const detractorPct = 50 + Math.floor(Math.random() * 15);
+      const passivePct = 25 + Math.floor(Math.random() * 10);
+      const promoterPct = 100 - detractorPct - passivePct;
+      return {
+        npsScore: promoterPct - detractorPct,
+        promoterPct,
+        passivePct,
+        detractorPct,
+      };
+    } else if (sentiment < 0.2) {
+      const detractorPct = 30 + Math.floor(Math.random() * 10);
+      const passivePct = 35 + Math.floor(Math.random() * 10);
+      const promoterPct = 100 - detractorPct - passivePct;
+      return {
+        npsScore: promoterPct - detractorPct,
+        promoterPct,
+        passivePct,
+        detractorPct,
+      };
+    } else if (sentiment < 0.5) {
+      const promoterPct = 40 + Math.floor(Math.random() * 15);
+      const passivePct = 30 + Math.floor(Math.random() * 10);
+      const detractorPct = 100 - promoterPct - passivePct;
+      return {
+        npsScore: promoterPct - detractorPct,
+        promoterPct,
+        passivePct,
+        detractorPct,
+      };
+    } else {
+      const promoterPct = 55 + Math.floor(Math.random() * 20);
+      const passivePct = 25 + Math.floor(Math.random() * 10);
+      const detractorPct = 100 - promoterPct - passivePct;
+      return {
+        npsScore: promoterPct - detractorPct,
+        promoterPct,
+        passivePct,
+        detractorPct,
+      };
+    }
+  }
+
+  /**
+   * Generate realistic sentiment progression for journey stages.
+   * Creates varied outcomes based on product, time period, and data context.
+   * Some journeys show improvement, others show decline or stagnation.
+   */
+  private getSentimentProgression(
+    product: string | undefined,
+    avgSentiment: number,
+    filter: { startDate?: Date; endDate?: Date; product?: string },
+  ): number[] {
+    // Define different journey outcome patterns
+    const patterns = {
+      // Good outcomes: sentiment improves through journey
+      improving: [-0.45, -0.35, -0.15, 0.05, 0.25],
+      gradualImprove: [-0.4, -0.32, -0.18, -0.05, 0.12],
+
+      // Poor outcomes: sentiment worsens or stays negative
+      declining: [-0.25, -0.35, -0.48, -0.55, -0.42],
+      frustration: [-0.3, -0.45, -0.55, -0.38, -0.25],
+      stagnant: [-0.42, -0.45, -0.4, -0.38, -0.35],
+      lateRecovery: [-0.5, -0.58, -0.52, -0.35, -0.15],
+
+      // Mixed outcomes: some improvement but still negative
+      partialRecovery: [-0.55, -0.48, -0.35, -0.22, -0.08],
+      volatileNegative: [-0.35, -0.52, -0.28, -0.45, -0.18],
+    };
+
+    // Product-specific patterns (some products have systemic issues)
+    const productPatterns: Record<string, keyof typeof patterns> = {
+      // Problem products - these show poor outcomes to highlight issues
+      mortgage: 'declining', // Complex process, frustrates customers
+      loans: 'frustration', // Long investigation, poor resolution
+      insurance: 'stagnant', // Slow, bureaucratic
+
+      // Better performing products
+      cards: 'improving', // Quick resolution typical
+      savings: 'gradualImprove', // Generally positive
+      'current-account': 'partialRecovery', // Mixed results
+    };
+
+    // Use date-based variation for demo variety
+    // This ensures different time periods show different outcomes
+    let dateHash = 0;
+    if (filter.startDate) {
+      dateHash = filter.startDate.getDate() + filter.startDate.getMonth() * 31;
+    }
+
+    // If specific product, use its pattern (with some variation)
+    if (product && productPatterns[product]) {
+      const basePattern = productPatterns[product];
+      // Add some date-based variation - 30% chance of different pattern
+      if (dateHash % 10 < 3) {
+        // Randomly pick a different pattern for variety
+        const altPatterns: (keyof typeof patterns)[] = [
+          'lateRecovery',
+          'volatileNegative',
+          'partialRecovery',
+        ];
+        const altPattern = altPatterns[dateHash % altPatterns.length];
+        return this.addVariation(patterns[altPattern], avgSentiment);
+      }
+      return this.addVariation(patterns[basePattern], avgSentiment);
+    }
+
+    // No product filter - use overall sentiment and date to pick pattern
+    // Bias toward negative outcomes for realism (40% good, 60% problematic)
+    let selectedPattern: keyof typeof patterns;
+    if (avgSentiment > 0.1) {
+      // Positive average sentiment - more likely good outcome
+      selectedPattern = dateHash % 3 === 0 ? 'improving' : 'gradualImprove';
+    } else if (avgSentiment < -0.3) {
+      // Very negative sentiment - likely poor outcome
+      const negativePatterns: (keyof typeof patterns)[] = [
+        'declining',
+        'frustration',
+        'stagnant',
+      ];
+      selectedPattern = negativePatterns[dateHash % negativePatterns.length];
+    } else {
+      // Mixed sentiment - varied outcomes
+      const mixedPatterns: (keyof typeof patterns)[] = [
+        'partialRecovery',
+        'lateRecovery',
+        'volatileNegative',
+        'stagnant',
+        'gradualImprove',
+      ];
+      selectedPattern = mixedPatterns[dateHash % mixedPatterns.length];
+    }
+
+    return this.addVariation(patterns[selectedPattern], avgSentiment);
+  }
+
+  /**
+   * Add small random variation to sentiment values for realism
+   */
+  private addVariation(basePattern: number[], avgSentiment: number): number[] {
+    return basePattern.map((value) => {
+      // Add small random variation (+/- 0.05)
+      const variation = (Math.random() - 0.5) * 0.1;
+      // Slightly bias toward actual average sentiment
+      const bias = (avgSentiment - value) * 0.15;
+      // Clamp to valid sentiment range
+      return Math.max(-1, Math.min(1, value + variation + bias));
+    });
+  }
+}
