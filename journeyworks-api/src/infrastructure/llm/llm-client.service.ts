@@ -23,7 +23,39 @@ export interface LlmClientOptions {
   enableFallback?: boolean;
   rateLimitKey?: string;
   skipRateLimit?: boolean;
+  /** Maximum retry attempts for rate limit errors */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff */
+  baseDelayMs?: number;
 }
+
+/** Error type for rate limit exceeded */
+export class RateLimitError extends Error {
+  constructor(
+    message: string,
+    public readonly retryAfterMs?: number,
+  ) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
+/** Error type for LLM provider errors */
+export class LlmProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly provider: string,
+    public readonly isRetryable: boolean = false,
+  ) {
+    super(message);
+    this.name = 'LlmProviderError';
+  }
+}
+
+/** Default retry configuration */
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_BASE_DELAY_MS = 1000;
+const MAX_DELAY_MS = 30000;
 
 @Injectable()
 export class LlmClientService {
@@ -32,6 +64,8 @@ export class LlmClientService {
   private readonly fallbackEnabled: boolean;
   private readonly rateLimitRequests: number;
   private readonly rateLimitWindowMs: number;
+  private readonly maxRetries: number;
+  private readonly baseDelayMs: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -48,6 +82,11 @@ export class LlmClientService {
       this.configService.get<number>('llm.rateLimitRequests') || 100;
     this.rateLimitWindowMs =
       this.configService.get<number>('llm.rateLimitWindowMs') || 60000;
+    this.maxRetries =
+      this.configService.get<number>('llm.maxRetries') || DEFAULT_MAX_RETRIES;
+    this.baseDelayMs =
+      this.configService.get<number>('llm.baseDelayMs') ||
+      DEFAULT_BASE_DELAY_MS;
 
     this.logger.log(
       `LLM Client initialized with primary provider: ${this.primaryProvider}`,
@@ -77,6 +116,8 @@ export class LlmClientService {
       enableFallback = this.fallbackEnabled,
       rateLimitKey = 'llm:global',
       skipRateLimit = false,
+      maxRetries = this.maxRetries,
+      baseDelayMs = this.baseDelayMs,
     } = options;
 
     // Check rate limit
@@ -87,7 +128,10 @@ export class LlmClientService {
       });
 
       if (!result.allowed) {
-        throw new Error('Rate limit exceeded for LLM requests');
+        throw new RateLimitError(
+          'Rate limit exceeded for LLM requests',
+          result.retryAfterMs,
+        );
       }
     }
 
@@ -96,10 +140,15 @@ export class LlmClientService {
     const fallbackService =
       preferredProvider === 'anthropic' ? this.openai : this.anthropic;
 
-    // Try primary provider
+    // Try primary provider with retry
     if (primaryService.isAvailable()) {
       try {
-        return await primaryService.complete(request);
+        return await this.executeWithRetry(
+          () => primaryService.complete(request),
+          preferredProvider,
+          maxRetries,
+          baseDelayMs,
+        );
       } catch (error) {
         this.logger.warn(
           `Primary provider (${preferredProvider}) failed: ${error.message}`,
@@ -111,23 +160,32 @@ export class LlmClientService {
       }
     }
 
-    // Try fallback provider
+    // Try fallback provider with retry
     if (enableFallback && fallbackService.isAvailable()) {
       const fallbackProviderName =
         preferredProvider === 'anthropic' ? 'openai' : 'anthropic';
       this.logger.log(`Attempting fallback to ${fallbackProviderName}`);
 
       try {
-        return await fallbackService.complete(request);
+        return await this.executeWithRetry(
+          () => fallbackService.complete(request),
+          fallbackProviderName,
+          maxRetries,
+          baseDelayMs,
+        );
       } catch (error) {
         this.logger.error(
           `Fallback provider (${fallbackProviderName}) also failed: ${error.message}`,
         );
-        throw error;
+        throw new LlmProviderError(
+          `All providers failed: ${error.message}`,
+          fallbackProviderName,
+          false,
+        );
       }
     }
 
-    throw new Error('No LLM providers available');
+    throw new LlmProviderError('No LLM providers available', 'none', false);
   }
 
   /**
@@ -142,6 +200,8 @@ export class LlmClientService {
       enableFallback = this.fallbackEnabled,
       rateLimitKey = 'llm:global',
       skipRateLimit = false,
+      maxRetries = this.maxRetries,
+      baseDelayMs = this.baseDelayMs,
     } = options;
 
     // Check rate limit
@@ -152,7 +212,10 @@ export class LlmClientService {
       });
 
       if (!result.allowed) {
-        throw new Error('Rate limit exceeded for LLM requests');
+        throw new RateLimitError(
+          'Rate limit exceeded for LLM requests',
+          result.retryAfterMs,
+        );
       }
     }
 
@@ -161,10 +224,15 @@ export class LlmClientService {
     const fallbackService =
       preferredProvider === 'anthropic' ? this.openai : this.anthropic;
 
-    // Try primary provider
+    // Try primary provider with retry
     if (primaryService.isAvailable()) {
       try {
-        return await primaryService.completeWithTools(request);
+        return await this.executeWithRetry(
+          () => primaryService.completeWithTools(request),
+          preferredProvider,
+          maxRetries,
+          baseDelayMs,
+        );
       } catch (error) {
         this.logger.warn(
           `Primary provider (${preferredProvider}) failed: ${error.message}`,
@@ -176,23 +244,32 @@ export class LlmClientService {
       }
     }
 
-    // Try fallback provider
+    // Try fallback provider with retry
     if (enableFallback && fallbackService.isAvailable()) {
       const fallbackProviderName =
         preferredProvider === 'anthropic' ? 'openai' : 'anthropic';
       this.logger.log(`Attempting fallback to ${fallbackProviderName}`);
 
       try {
-        return await fallbackService.completeWithTools(request);
+        return await this.executeWithRetry(
+          () => fallbackService.completeWithTools(request),
+          fallbackProviderName,
+          maxRetries,
+          baseDelayMs,
+        );
       } catch (error) {
         this.logger.error(
           `Fallback provider (${fallbackProviderName}) also failed: ${error.message}`,
         );
-        throw error;
+        throw new LlmProviderError(
+          `All providers failed: ${error.message}`,
+          fallbackProviderName,
+          false,
+        );
       }
     }
 
-    throw new Error('No LLM providers available');
+    throw new LlmProviderError('No LLM providers available', 'none', false);
   }
 
   /**
@@ -275,5 +352,118 @@ export class LlmClientService {
   estimateTokens(text: string): number {
     // Rough estimate: ~4 characters per token for English text
     return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Execute a function with exponential backoff retry for rate limits
+   */
+  private async executeWithRetry<T>(
+    fn: () => Promise<T>,
+    provider: string,
+    maxRetries: number,
+    baseDelayMs: number,
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+
+        // Check if error is retryable (rate limit or temporary)
+        const isRetryable = this.isRetryableError(error);
+        const isLastAttempt = attempt === maxRetries;
+
+        if (!isRetryable || isLastAttempt) {
+          throw error;
+        }
+
+        // Calculate delay with exponential backoff and jitter
+        const exponentialDelay = baseDelayMs * Math.pow(2, attempt);
+        const jitter = Math.random() * baseDelayMs;
+        const delay = Math.min(exponentialDelay + jitter, MAX_DELAY_MS);
+
+        // Check for Retry-After header
+        const retryAfter = this.extractRetryAfter(error);
+        const effectiveDelay = retryAfter ? Math.max(delay, retryAfter) : delay;
+
+        this.logger.warn(
+          `Retryable error from ${provider}, attempt ${attempt + 1}/${maxRetries + 1}. ` +
+            `Waiting ${Math.round(effectiveDelay)}ms before retry. Error: ${error.message}`,
+        );
+
+        await this.sleep(effectiveDelay);
+      }
+    }
+
+    throw lastError || new Error('Unknown error during retry');
+  }
+
+  /**
+   * Check if an error is retryable (rate limit, timeout, temporary failure)
+   */
+  private isRetryableError(error: any): boolean {
+    // Rate limit errors (HTTP 429)
+    if (error.status === 429 || error.statusCode === 429) {
+      return true;
+    }
+
+    // Server errors (5xx) are often temporary
+    if (error.status >= 500 || error.statusCode >= 500) {
+      return true;
+    }
+
+    // Check error message for common retryable patterns
+    const message = error.message?.toLowerCase() || '';
+    const retryablePatterns = [
+      'rate limit',
+      'too many requests',
+      'overloaded',
+      'timeout',
+      'temporarily unavailable',
+      'service unavailable',
+      'connection',
+      'econnreset',
+      'etimedout',
+    ];
+
+    return retryablePatterns.some((pattern) => message.includes(pattern));
+  }
+
+  /**
+   * Extract Retry-After value from error (in milliseconds)
+   */
+  private extractRetryAfter(error: any): number | undefined {
+    // Check for Retry-After header in various formats
+    const retryAfter =
+      error.headers?.['retry-after'] ||
+      error.response?.headers?.['retry-after'] ||
+      error.retryAfter;
+
+    if (!retryAfter) {
+      return undefined;
+    }
+
+    // Parse as seconds if numeric, otherwise as date
+    const parsed = parseInt(retryAfter, 10);
+    if (!isNaN(parsed)) {
+      return parsed * 1000; // Convert seconds to milliseconds
+    }
+
+    // Try parsing as HTTP date
+    const date = new Date(retryAfter);
+    if (!isNaN(date.getTime())) {
+      return Math.max(0, date.getTime() - Date.now());
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Sleep for a specified duration
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

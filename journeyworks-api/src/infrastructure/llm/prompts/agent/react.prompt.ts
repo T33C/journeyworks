@@ -66,10 +66,21 @@ export const REACT_AGENT_PROMPT = `You are an intelligent agent that can use too
 Available Tools:
 {{tools}}
 
+{{#if context}}
+Context:
+{{context}}
+{{/if}}
+
+{{#if conversationHistory}}
 Conversation History:
 {{conversationHistory}}
+{{/if}}
 
-User Request: {{query}}
+{{#if customerId}}
+Customer ID: {{customerId}}
+{{/if}}
+
+User Request: {{question}}
 
 Use the ReAct pattern to solve this task:
 
@@ -84,9 +95,17 @@ Rules:
 - Think step by step
 - If a tool fails, try a different approach
 - Be concise in your thoughts
-- Maximum {{maxIterations}} iterations allowed
+- Always provide a Final Answer when you have enough information
+- If you cannot find the information, explain what you tried and what couldn't be found
 
 Format your response as:
 Thought: [your reasoning]
 Action: {"tool": "tool_name", "input": {"param": "value"}}
+
+{{#if scratchpad}}
+Previous Steps:
+{{scratchpad}}
+
+Continue from where you left off:
+{{/if}}
 `;

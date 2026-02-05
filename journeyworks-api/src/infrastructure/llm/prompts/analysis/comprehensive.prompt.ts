@@ -101,4 +101,14 @@ Provide a complete analysis including:
 - Long-term relationship improvements
 - Cross-sell/up-sell opportunities
 
+6. CLASSIFICATION
+- Map to one of these Areas of Issue if applicable:
+  * Account Opening Process
+  * Call Handling / Customer Interaction
+  * CDD Remediation
+  * Fees, Charges and Interest
+  * Payment processing
+- Suggest the most likely Reason for Complaint from the customer's perspective
+- Confidence level for the classification (low, medium, high)
+
 Provide your analysis in JSON format with the above structure.`;

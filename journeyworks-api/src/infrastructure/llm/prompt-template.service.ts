@@ -89,6 +89,10 @@ export class PromptTemplateService {
   render(template: string, variables: PromptVariables = {}): string {
     let result = template;
 
+    // Process conditional blocks {{#if variable}}...{{/if}}
+    result = this.processConditionals(result, variables);
+
+    // Replace variables
     for (const [key, value] of Object.entries(variables)) {
       const placeholder = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
       const stringValue =
@@ -102,6 +106,29 @@ export class PromptTemplateService {
     result = result.replace(/\{\{\s*\w+\s*\}\}/g, '');
 
     return result.trim();
+  }
+
+  /**
+   * Process conditional blocks in template
+   * Supports {{#if variable}}content{{/if}}
+   */
+  private processConditionals(
+    template: string,
+    variables: PromptVariables,
+  ): string {
+    // Match {{#if variable}}content{{/if}} blocks
+    const conditionalRegex = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
+
+    return template.replace(conditionalRegex, (_, varName, content) => {
+      const value = variables[varName];
+      // Include content if value is truthy (not null, undefined, empty string, false, 0)
+      const isTruthy =
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        value !== false;
+      return isTruthy ? content : '';
+    });
   }
 
   /**
