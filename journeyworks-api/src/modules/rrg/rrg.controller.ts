@@ -4,14 +4,20 @@
  * REST API endpoints for natural language to DSL conversion.
  */
 
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  IsIn,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { RrgService } from './rrg.service';
 import {
   NlQueryRequest,
@@ -19,19 +25,75 @@ import {
   QueryExecutionResult,
 } from './rrg.types';
 
-// DTOs
+/** Maximum query length to prevent abuse */
+const MAX_QUERY_LENGTH = 2000;
+const MAX_CONTEXT_LENGTH = 5000;
+const MAX_FEEDBACK_LENGTH = 1000;
+
+/** Valid index names for RRG queries */
+const VALID_INDICES = ['communications', 'cases', 'social-mentions'] as const;
+
+// DTOs with proper validation
+class PreviousQueryDto {
+  @IsString()
+  @MaxLength(MAX_QUERY_LENGTH)
+  nl: string;
+
+  @IsObject()
+  dsl: any;
+}
+
 class NlQueryDto implements NlQueryRequest {
+  @IsString()
+  @MinLength(3, { message: 'Query must be at least 3 characters' })
+  @MaxLength(MAX_QUERY_LENGTH, {
+    message: `Query must not exceed ${MAX_QUERY_LENGTH} characters`,
+  })
   query: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_CONTEXT_LENGTH)
   context?: string;
-  previousQueries?: Array<{ nl: string; dsl: any }>;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PreviousQueryDto)
+  previousQueries?: PreviousQueryDto[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(VALID_INDICES, {
+    message:
+      'Invalid index. Must be one of: communications, cases, social-mentions',
+  })
   index?: string;
+
+  @IsOptional()
+  @IsBoolean()
   validate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   execute?: boolean;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }
 
 class RefineQueryDto {
-  originalQuery: NlQueryRequest;
+  @ValidateNested()
+  @Type(() => NlQueryDto)
+  originalQuery: NlQueryDto;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(MAX_FEEDBACK_LENGTH)
   feedback: string;
+
+  @IsObject()
   previousDsl: GeneratedDsl;
 }
 

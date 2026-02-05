@@ -23,6 +23,8 @@ export interface NlQueryRequest {
   validate?: boolean;
   /** Whether to execute the query */
   execute?: boolean;
+  /** User timezone for relative time parsing (e.g., 'America/New_York', 'UTC') */
+  timezone?: string;
 }
 
 /**
@@ -41,8 +43,12 @@ export interface ParsedIntent {
   aggregations: RequestedAggregation[];
   /** Sort preferences */
   sort?: SortPreference;
-  /** Confidence score */
+  /** Confidence score (0-1) */
   confidence: number;
+  /** Whether parsing failed and this is a fallback intent */
+  parseFailed?: boolean;
+  /** Parse failure reason if applicable */
+  parseFailureReason?: string;
 }
 
 /**

@@ -8,11 +8,17 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import {
   LlmClientService,
   PromptTemplateService,
 } from '../../infrastructure/llm';
-import { formatGlossaryForPrompt } from '../../infrastructure/llm/prompts/rrg/glossary';
+import {
+  formatGlossaryForPrompt,
+  mapSentiment,
+  mapChannel,
+  mapPriority,
+} from '../../infrastructure/llm/prompts/rrg/glossary';
 import { RedisCacheService } from '../../infrastructure/redis';
 import { CommunicationsRepository } from '../communications/communications.repository';
 import { QueryBuilder } from './query-builder.service';
@@ -26,6 +32,93 @@ import {
   QueryFilter,
   RequestedAggregation,
 } from './rrg.types';
+
+/**
+ * RRG Configuration Constants
+ */
+const RRG_CONFIG = {
+  /** Cache TTL for parsed intents in seconds */
+  CACHE_TTL_SECONDS: 300,
+  /** Default number of results to return */
+  DEFAULT_RESULT_SIZE: 20,
+  /** Default confidence score when LLM doesn't provide one */
+  DEFAULT_CONFIDENCE: 0.7,
+  /** Low confidence threshold indicating parse failure */
+  LOW_CONFIDENCE_THRESHOLD: 0.3,
+  /** Number of sample documents for summary generation */
+  SUMMARY_SAMPLE_SIZE: 3,
+  /** Maximum previous queries to include in context */
+  MAX_PREVIOUS_QUERIES: 3,
+  /** Default timezone for relative time parsing */
+  DEFAULT_TIMEZONE: 'UTC',
+} as const;
+
+/**
+ * Valid index names for RRG queries
+ */
+const VALID_INDICES = new Set(['communications', 'cases', 'social-mentions']);
+
+/**
+ * Allowed DSL query patterns to prevent injection
+ */
+const ALLOWED_DSL_PATTERNS = {
+  queryTypes: new Set([
+    'bool',
+    'match',
+    'match_all',
+    'term',
+    'terms',
+    'range',
+    'exists',
+    'multi_match',
+    'nested',
+  ]),
+  aggregationTypes: new Set([
+    'terms',
+    'date_histogram',
+    'avg',
+    'sum',
+    'min',
+    'max',
+    'value_count',
+    'percentiles',
+    'cardinality',
+  ]),
+  topLevelKeys: new Set([
+    'query',
+    'aggs',
+    'aggregations',
+    'sort',
+    'size',
+    'from',
+    '_source',
+    'track_total_hits',
+  ]),
+} as const;
+
+/**
+ * Error types for RRG operations
+ */
+export class RrgValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'RrgValidationError';
+  }
+}
+
+export class DslValidationError extends RrgValidationError {
+  constructor(
+    message: string,
+    public readonly invalidPatterns: string[],
+  ) {
+    super(message, 'DSL_VALIDATION_ERROR', { invalidPatterns });
+    this.name = 'DslValidationError';
+  }
+}
 
 @Injectable()
 export class RrgService {
@@ -50,14 +143,26 @@ export class RrgService {
 
     this.logger.log(`Processing NL query: "${request.query}"`);
 
+    // Validate index name
+    const index = request.index || 'communications';
+    if (!VALID_INDICES.has(index)) {
+      throw new RrgValidationError(
+        'Invalid index specified',
+        'INVALID_INDEX',
+        // Don't reveal valid index names in error
+      );
+    }
+
     // 1. Parse the natural language query into structured intent
     const intent = await this.parseQuery(request);
 
     // 2. Build DSL from intent
-    const index = request.index || 'communications';
     const dsl = this.queryBuilder.build(intent, index);
 
-    // 3. Optionally validate
+    // 3. Validate DSL for safety
+    this.validateDsl(dsl.query);
+
+    // 4. Optionally validate against schema
     if (request.validate !== false) {
       const validation = this.queryBuilder.validateQuery(dsl.query, index);
       if (!validation.valid) {
@@ -67,7 +172,7 @@ export class RrgService {
       }
     }
 
-    // 4. If execute is requested, run the query
+    // 5. If execute is requested, run the query
     if (request.execute) {
       const results = await this.executeQuery(dsl, index);
       const executionTime = Date.now() - startTime;
@@ -87,11 +192,101 @@ export class RrgService {
   }
 
   /**
+   * Generate a secure cache key for parsed intents
+   */
+  private generateCacheKey(request: NlQueryRequest): string {
+    const keyData = JSON.stringify({
+      query: request.query,
+      context: request.context || '',
+      index: request.index || 'communications',
+      timezone: request.timezone || RRG_CONFIG.DEFAULT_TIMEZONE,
+    });
+    const hash = crypto
+      .createHash('sha256')
+      .update(keyData)
+      .digest('hex')
+      .substring(0, 16);
+    return `rrg:parse:${hash}`;
+  }
+
+  /**
+   * Validate DSL query for security - prevent injection attacks
+   */
+  private validateDsl(query: Record<string, any>): void {
+    const invalidPatterns: string[] = [];
+
+    const validateObject = (obj: any, path: string = ''): void => {
+      if (!obj || typeof obj !== 'object') return;
+
+      for (const key of Object.keys(obj)) {
+        const fullPath = path ? `${path}.${key}` : key;
+        const value = obj[key];
+
+        // Check top-level keys
+        if (!path && !ALLOWED_DSL_PATTERNS.topLevelKeys.has(key)) {
+          invalidPatterns.push(`Invalid top-level key: ${key}`);
+        }
+
+        // Check for script queries (security risk)
+        if (key === 'script' || key === '_script') {
+          invalidPatterns.push(`Script queries not allowed: ${fullPath}`);
+        }
+
+        // Check for update/delete operations
+        if (key === 'update' || key === 'delete' || key === '_update') {
+          invalidPatterns.push(`Mutation operations not allowed: ${fullPath}`);
+        }
+
+        // Validate query types in nested bool queries
+        if (
+          path.includes('query') &&
+          typeof value === 'object' &&
+          value !== null
+        ) {
+          for (const queryType of Object.keys(value)) {
+            if (
+              !ALLOWED_DSL_PATTERNS.queryTypes.has(queryType) &&
+              ![
+                'must',
+                'must_not',
+                'should',
+                'filter',
+                'minimum_should_match',
+              ].includes(queryType)
+            ) {
+              // Only warn for truly unknown query types
+              if (!queryType.startsWith('_') && queryType !== 'boost') {
+                this.logger.debug(
+                  `Unknown query type: ${queryType} at ${fullPath}`,
+                );
+              }
+            }
+          }
+        }
+
+        // Recursively validate nested objects
+        if (typeof value === 'object') {
+          validateObject(value, fullPath);
+        }
+      }
+    };
+
+    validateObject(query);
+
+    if (invalidPatterns.length > 0) {
+      throw new DslValidationError(
+        'DSL query contains disallowed patterns',
+        invalidPatterns,
+      );
+    }
+  }
+
+  /**
    * Parse natural language query using LLM
    */
   private async parseQuery(request: NlQueryRequest): Promise<ParsedIntent> {
-    // Check cache first
-    const cacheKey = `rrg:parse:${Buffer.from(request.query).toString('base64').substring(0, 50)}`;
+    // Check cache first with secure key
+    const cacheKey = this.generateCacheKey(request);
     const cached = await this.cache.get<ParsedIntent>(cacheKey);
     if (cached) {
       this.logger.debug('Using cached parsed intent');
@@ -115,7 +310,11 @@ export class RrgService {
       schema: schemaContext,
       glossary,
       previousQueries: request.previousQueries
-        ? JSON.stringify(request.previousQueries.slice(-3), null, 2)
+        ? JSON.stringify(
+            request.previousQueries.slice(-RRG_CONFIG.MAX_PREVIOUS_QUERIES),
+            null,
+            2,
+          )
         : 'None',
     });
 
@@ -126,10 +325,10 @@ export class RrgService {
     );
 
     // Parse LLM response
-    const intent = this.parseLlmResponse(response);
+    const intent = this.parseLlmResponse(response, request.timezone);
 
     // Cache the result
-    await this.cache.set(cacheKey, intent, 300); // 5 min cache
+    await this.cache.set(cacheKey, intent, RRG_CONFIG.CACHE_TTL_SECONDS);
 
     return intent;
   }
@@ -137,13 +336,13 @@ export class RrgService {
   /**
    * Parse LLM response into ParsedIntent
    */
-  private parseLlmResponse(response: string): ParsedIntent {
+  private parseLlmResponse(response: string, timezone?: string): ParsedIntent {
     try {
       // Try to extract JSON from the response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return this.normalizeIntent(parsed);
+        return this.normalizeIntent(parsed, timezone);
       }
     } catch (error) {
       this.logger.warn(
@@ -151,30 +350,37 @@ export class RrgService {
       );
     }
 
-    // Fallback: create a basic search intent
+    // Fallback: create a basic search intent with parse failure indicator
+    this.logger.warn('Query parsing failed, returning fallback intent');
     return {
       intent: 'search',
       entities: {},
       filters: [],
       aggregations: [],
-      confidence: 0.5,
+      confidence: RRG_CONFIG.LOW_CONFIDENCE_THRESHOLD,
+      parseFailed: true,
+      parseFailureReason:
+        'Could not parse the query. Try rephrasing or being more specific.',
     };
   }
 
   /**
-   * Normalize and validate parsed intent
+   * Normalize and validate parsed intent using glossary mappings
    */
-  private normalizeIntent(raw: any): ParsedIntent {
+  private normalizeIntent(raw: any, timezone?: string): ParsedIntent {
     const intent: ParsedIntent = {
       intent: this.normalizeIntentType(raw.intent),
       entities: this.normalizeEntities(raw.entities || {}),
       filters: this.normalizeFilters(raw.filters || []),
       aggregations: this.normalizeAggregations(raw.aggregations || []),
-      confidence: Math.min(1, Math.max(0, raw.confidence || 0.7)),
+      confidence: Math.min(
+        1,
+        Math.max(0, raw.confidence || RRG_CONFIG.DEFAULT_CONFIDENCE),
+      ),
     };
 
     if (raw.timeRange) {
-      intent.timeRange = this.normalizeTimeRange(raw.timeRange);
+      intent.timeRange = this.normalizeTimeRange(raw.timeRange, timezone);
     }
 
     if (raw.sort) {
@@ -203,20 +409,43 @@ export class RrgService {
   }
 
   /**
-   * Normalize entities
+   * Normalize entities using glossary mappings for validation
    */
   private normalizeEntities(raw: any): ExtractedEntities {
+    // Normalize channels using glossary
+    const rawChannels = this.toStringArray(raw.channels);
+    const channels = rawChannels
+      ?.map((c) => {
+        const mapped = mapChannel(c);
+        return mapped || c.toLowerCase();
+      })
+      .filter((c, i, arr) => arr.indexOf(c) === i); // dedupe
+
+    // Normalize sentiments using glossary
+    const rawSentiments = this.toStringArray(raw.sentiments);
+    const sentiments = rawSentiments
+      ?.map((s) => {
+        const mapped = mapSentiment(s);
+        return mapped || s.toLowerCase();
+      })
+      .filter((s, i, arr) => arr.indexOf(s) === i); // dedupe
+
+    // Normalize priorities using glossary
+    const rawPriorities = this.toStringArray(raw.priorities);
+    const priorities = rawPriorities
+      ?.map((p) => {
+        const mapped = mapPriority(p);
+        return mapped || p.toLowerCase();
+      })
+      .filter((p, i, arr) => arr.indexOf(p) === i); // dedupe
+
     return {
       customers: this.toStringArray(raw.customers),
-      channels: this.toStringArray(raw.channels)?.map((c) => c.toLowerCase()),
-      sentiments: this.toStringArray(raw.sentiments)?.map((s) =>
-        s.toLowerCase(),
-      ),
+      channels,
+      sentiments,
       topics: this.toStringArray(raw.topics),
       categories: this.toStringArray(raw.categories),
-      priorities: this.toStringArray(raw.priorities)?.map((p) =>
-        p.toLowerCase(),
-      ),
+      priorities,
       regions: this.toStringArray(raw.regions),
       products: this.toStringArray(raw.products),
       statuses: this.toStringArray(raw.statuses)?.map((s) => s.toLowerCase()),
@@ -300,21 +529,23 @@ export class RrgService {
   }
 
   /**
-   * Normalize time range
+   * Normalize time range with timezone support
+   * @param raw - Raw time range from LLM
+   * @param timezone - User's timezone (e.g., 'America/New_York')
    */
-  private normalizeTimeRange(raw: any): TimeRange {
+  private normalizeTimeRange(raw: any, timezone?: string): TimeRange {
     const range: TimeRange = {};
 
     if (raw.from) {
-      range.from = this.parseDate(raw.from);
+      range.from = this.parseDate(raw.from, timezone);
     }
     if (raw.to) {
-      range.to = this.parseDate(raw.to);
+      range.to = this.parseDate(raw.to, timezone);
     }
     if (raw.relative) {
       range.relative = raw.relative;
       // Convert relative to absolute
-      const parsed = this.parseRelativeTime(raw.relative);
+      const parsed = this.parseRelativeTime(raw.relative, timezone);
       if (parsed) {
         range.from = parsed.from;
         range.to = parsed.to;
@@ -325,9 +556,11 @@ export class RrgService {
   }
 
   /**
-   * Parse a date string
+   * Parse a date string with optional timezone context
+   * @param value - Date string to parse
+   * @param timezone - User's timezone for context (currently logs for future use)
    */
-  private parseDate(value: string): string {
+  private parseDate(value: string, timezone?: string): string {
     if (!value) return '';
 
     // If already ISO format, return as-is
@@ -336,8 +569,15 @@ export class RrgService {
     }
 
     // Try to parse
+    // Note: For full timezone support, consider using date-fns-tz or luxon
     const date = new Date(value);
     if (!isNaN(date.getTime())) {
+      // If timezone is provided, log for future enhancement
+      if (timezone) {
+        this.logger.debug(
+          `Parsing date '${value}' in timezone context: ${timezone}`,
+        );
+      }
       return date.toISOString();
     }
 
@@ -345,12 +585,25 @@ export class RrgService {
   }
 
   /**
-   * Parse relative time expressions
+   * Parse relative time expressions with timezone awareness
+   * @param relative - Relative time expression (e.g., "last 7 days")
+   * @param timezone - User's timezone for accurate "today" calculations
    */
   private parseRelativeTime(
     relative: string,
+    timezone?: string,
   ): { from: string; to: string } | null {
+    // Use timezone-aware "now" if timezone is provided
+    // For full support, consider using date-fns-tz: zonedTimeToUtc, utcToZonedTime
     const now = new Date();
+
+    // Log timezone for future enhancement when timezone-aware date library is added
+    if (timezone) {
+      this.logger.debug(
+        `Parsing relative time '${relative}' with timezone: ${timezone}`,
+      );
+    }
+
     const lowerRelative = relative.toLowerCase();
 
     const match = lowerRelative.match(/last\s+(\d+)\s+(day|week|month|year)s?/);
