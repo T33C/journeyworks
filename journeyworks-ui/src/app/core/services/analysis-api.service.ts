@@ -211,14 +211,19 @@ export class AnalysisApiService {
   }
 
   /**
-   * Ask a follow-up question with context - uses LLM to generate answer from real data
+   * Ask a follow-up question with context - routes through ReAct agent for comprehensive analysis
    */
   askFollowUpQuestion(
     context: AnalysisContext,
     question: string,
+    sessionId?: string,
   ): Observable<ResearchInsight> {
-    // Transform context for API
+    // Use or create a conversation ID for multi-turn context
+    const conversationId = sessionId || `followup_${crypto.randomUUID()}`;
+
+    // Transform context for the conversation endpoint
     const requestBody = {
+      query: question,
       context: {
         event: context.event
           ? {
@@ -249,13 +254,33 @@ export class AnalysisApiService {
             }
           : undefined,
       },
-      question,
-      useCache: false, // Don't cache follow-up questions - they're unique
     };
 
+    // Route through the ReAct agent's conversation endpoint
     return this.http
-      .post<ResearchInsight>(`${this.researchUrl}/insight`, requestBody)
+      .post<any>(
+        `${this.researchUrl}/conversation/${conversationId}`,
+        requestBody,
+      )
       .pipe(
+        map((response: any) => {
+          // Transform ResearchResponse to ResearchInsight format
+          return {
+            title: 'Follow-up Analysis',
+            summary: response.answer,
+            themeBreakdown: [],
+            sentimentTrend: [],
+            keyInsights:
+              response.reasoning?.map((r: any) => r.thought || r.content) || [],
+            keyDrivers: [],
+            recommendations: [],
+            suggestedActions: [],
+            evidence: [],
+            timelineReasoning: response.answer,
+            confidence: response.confidence || 0.8,
+            sources: response.sources || [],
+          } as ResearchInsight;
+        }),
         catchError((err) => {
           console.error('Follow-up question failed:', err);
           throw err;
