@@ -318,17 +318,17 @@ const TAGS = [
 ];
 
 // AI Classification data for synthetic generation
+// These categories align with the case categories from case-categories.ts
 const AI_CATEGORIES = {
-  positive: ['service-quality', 'product-feature', 'communication'],
+  positive: ['call-handling', 'account-opening'],
   negative: [
     'fees-charges',
-    'technical-issue',
-    'payment-issue',
-    'account-access',
-    'fraud',
+    'payment-processing',
+    'cdd-remediation',
+    'account-opening',
   ],
-  neutral: ['communication', 'product-feature', 'account-access'],
-  mixed: ['service-quality', 'fees-charges', 'technical-issue'],
+  neutral: ['call-handling', 'account-opening', 'payment-processing'],
+  mixed: ['call-handling', 'fees-charges', 'cdd-remediation'],
 };
 
 const AI_PRODUCTS = [
@@ -343,104 +343,84 @@ const AI_PRODUCTS = [
 ];
 
 const ISSUE_TYPES = {
-  fraud: [
-    'Unauthorised transaction',
-    'Card skimming',
-    'Phishing attempt',
-    'Identity theft',
+  'account-opening': [
+    'Application not processed',
+    'Card not received',
+    'ID verification issue',
+    'Credit limit query',
+    'Application declined',
+    'Incorrect account details',
   ],
-  'service-quality': [
-    'Long wait times',
-    'Staff behaviour',
-    'Branch experience',
-    'Communication delay',
+  'call-handling': [
+    'Call disconnected',
+    'Incorrect information provided',
+    'No follow-up on callback',
+    'Poor communication',
+    'Long wait time',
+    'Transferred to wrong department',
+    'Unable to resolve issue',
+  ],
+  'cdd-remediation': [
+    'Account closed unexpectedly',
+    'Cannot provide documents',
+    'Communication tone concern',
+    'Account restrictions',
+    'CDD review delays',
+    'Disagree with decision',
   ],
   'fees-charges': [
-    'Unexpected overdraft fee',
-    'Monthly charge dispute',
-    'Interest rate concern',
-    'Foreign transaction fee',
+    'Unexpected fee charged',
+    'Fee not refunded',
+    'Cannot afford charges',
+    'Fee from wrong account',
+    'Exchange rate issue',
+    'Fee too high',
   ],
-  'technical-issue': [
-    'App crash',
-    'Login failure',
-    'Payment processing error',
-    'Statement display issue',
-  ],
-  'account-access': [
-    'Blocked account',
-    'Password reset issue',
-    'Security verification',
-    'Lost card access',
-  ],
-  'payment-issue': [
-    'Failed direct debit',
-    'Standing order error',
-    'Transfer delay',
-    'Card decline',
-  ],
-  communication: [
-    'Information request',
-    'Statement request',
-    'Product enquiry',
-    'Address update',
-  ],
-  'product-feature': [
-    'Feature request',
-    'Upgrade enquiry',
-    'New product interest',
-    'Account switch',
+  'payment-processing': [
+    'Payment not processed',
+    'Payment declined',
+    'Fraud block on legitimate payment',
+    'Payment not received by payee',
+    'Payment delayed',
+    'Incorrect payment information',
   ],
 };
 
 const ROOT_CAUSES = {
-  fraud: [
-    'Third-party compromise',
-    'Customer credential exposure',
-    'System vulnerability',
-    'Social engineering',
+  'account-opening': [
+    'Processing backlog',
+    'Documentation issue',
+    'System error',
+    'Criteria not met',
+    'Manual review required',
   ],
-  'service-quality': [
+  'call-handling': [
     'Staff training gap',
+    'High call volume',
+    'System issues',
+    'Process complexity',
     'Resource constraints',
-    'Process inefficiency',
-    'High demand period',
+  ],
+  'cdd-remediation': [
+    'Regulatory requirement',
+    'Risk assessment trigger',
+    'Documentation gap',
+    'Policy compliance',
+    'Third-party verification',
   ],
   'fees-charges': [
     'Terms misunderstanding',
-    'System calculation error',
+    'System calculation',
     'Policy change',
     'Account status change',
+    'Product change',
   ],
-  'technical-issue': [
-    'Software bug',
-    'Infrastructure issue',
-    'Integration failure',
-    'Data sync error',
-  ],
-  'account-access': [
-    'Security protocol',
-    'Failed verification',
-    'System maintenance',
-    'Policy trigger',
-  ],
-  'payment-issue': [
-    'Insufficient funds',
+  'payment-processing': [
     'Technical error',
-    'Payee issue',
-    'Timing conflict',
-  ],
-  communication: [
-    'Standard enquiry',
-    'Information gap',
-    'Preference update',
-    'Regulatory requirement',
-  ],
-  'product-feature': [
-    'Customer need',
-    'Competitive gap',
-    'Product evolution',
-    'Market demand',
+    'Insufficient funds',
+    'Fraud prevention trigger',
+    'Payee bank issue',
+    'Processing delay',
   ],
 };
 
@@ -530,9 +510,42 @@ export class CommunicationGenerator {
         )
       : undefined;
 
+    // Determine chatMode for chat channel
+    let chatMode: 'chatbot' | 'human-agent' | undefined;
+    let escalatedFrom: 'chatbot' | 'email' | 'chat' | undefined;
+    
+    if (channel === 'chat') {
+      // For chat, determine if it's chatbot or human agent
+      // Negative sentiment and escalated status more likely to be human agent
+      if (status === 'escalated' || sentiment === 'negative') {
+        chatMode = this.weightedChoice([
+          ['human-agent', 0.7],
+          ['chatbot', 0.3],
+        ]) as 'chatbot' | 'human-agent';
+        // If human agent, it might be escalated from chatbot
+        if (chatMode === 'human-agent' && Math.random() > 0.5) {
+          escalatedFrom = 'chatbot';
+        }
+      } else {
+        chatMode = this.weightedChoice([
+          ['chatbot', 0.6],
+          ['human-agent', 0.4],
+        ]) as 'chatbot' | 'human-agent';
+      }
+    } else if (channel === 'phone' && status === 'escalated') {
+      // Phone escalations might come from chat or email
+      escalatedFrom = this.weightedChoice([
+        ['chatbot', 0.4],
+        ['chat', 0.3],
+        ['email', 0.3],
+      ]) as 'chatbot' | 'email' | 'chat';
+    }
+
     return {
       id: uuidv4(),
       channel,
+      chatMode,
+      escalatedFrom,
       direction: this.weightedChoice([
         ['inbound', 0.7],
         ['outbound', 0.3],
@@ -671,11 +684,12 @@ export class CommunicationGenerator {
       ]) as 'low' | 'medium' | 'high' | 'critical';
     }
 
-    // Generate regulatory flags (more likely for negative sentiment or fraud category)
+    // Generate regulatory flags (more likely for negative sentiment or CDD category)
     const regulatoryFlags: string[] = [];
-    if (category === 'fraud') {
+    if (category === 'cdd-remediation') {
       regulatoryFlags.push('Anti-Money-Laundering');
       if (Math.random() > 0.5) regulatoryFlags.push('FCA-Consumer-Duty');
+      if (Math.random() > 0.6) regulatoryFlags.push('KYC-Update-Required');
     }
     if (sentiment === 'negative') {
       if (Math.random() > 0.7)

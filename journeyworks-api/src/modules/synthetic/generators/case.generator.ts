@@ -11,148 +11,17 @@ import {
   SyntheticCustomer,
   SyntheticCommunication,
 } from '../synthetic-data.types';
+import {
+  CASE_CATEGORIES_FROM_CSV,
+  CASE_TITLES_BY_AREA,
+  CASE_DESCRIPTIONS_BY_AREA,
+  TOTAL_WEIGHT,
+  AreaOfIssue,
+} from '../data/case-categories';
 
-const CASE_CATEGORIES = {
-  'Service Issue': [
-    'Response Time',
-    'Staff Behavior',
-    'Communication Quality',
-    'Appointment Scheduling',
-    'Follow-up Failure',
-  ],
-  'Transaction Problem': [
-    'Failed Transaction',
-    'Delayed Processing',
-    'Incorrect Amount',
-    'Missing Funds',
-    'Duplicate Transaction',
-  ],
-  'Fee Dispute': [
-    'Unauthorized Charges',
-    'Rate Discrepancy',
-    'Hidden Fees',
-    'Billing Error',
-    'Refund Request',
-  ],
-  'Account Issue': [
-    'Access Problem',
-    'Statement Error',
-    'Account Update',
-    'Documentation Request',
-    'KYC/AML Query',
-  ],
-  'Investment Concern': [
-    'Performance Query',
-    'Risk Disclosure',
-    'Suitability',
-    'Portfolio Rebalancing',
-    'Dividend Issue',
-  ],
-  'Technical Problem': [
-    'Platform Outage',
-    'Mobile App Issue',
-    'Login Problem',
-    'Security Concern',
-    'Data Discrepancy',
-  ],
-  'Regulatory Inquiry': [
-    'Tax Documentation',
-    'Compliance Query',
-    'Audit Request',
-    'Legal Hold',
-    'Data Request',
-  ],
-};
+// Categories are now imported from case-categories.ts
 
-const CASE_TITLES = {
-  'Service Issue': [
-    'Poor response time on portfolio queries',
-    'Unsatisfactory service during branch visit',
-    'Repeated communication failures',
-    'No follow-up on promised callback',
-    'Rude interaction with support staff',
-  ],
-  'Transaction Problem': [
-    'Wire transfer pending for {days} days',
-    'Incorrect transaction amount posted',
-    'Funds missing from account',
-    'Duplicate charge on {product}',
-    'FX conversion error on international transfer',
-  ],
-  'Fee Dispute': [
-    'Unexpected management fee of ${amount}',
-    'Discrepancy in quoted vs. charged rate',
-    'Hidden custody fees discovered',
-    'Advisory fee billing error',
-    'Incorrect penalty charge applied',
-  ],
-  'Account Issue': [
-    'Cannot access online banking platform',
-    'Incorrect beneficiary information on record',
-    'Missing quarterly statement',
-    'Outdated contact information',
-    'Address verification required',
-  ],
-  'Investment Concern': [
-    'Concerned about {product} performance',
-    'Risk level not matching profile',
-    'Missed dividend payment',
-    'Unauthorized trade executed',
-    'Portfolio allocation questions',
-  ],
-  'Technical Problem': [
-    'App crashes during trading hours',
-    'Cannot complete transactions on mobile',
-    'Two-factor authentication not working',
-    'Portfolio values not updating',
-    'Security alert for unknown login',
-  ],
-  'Regulatory Inquiry': [
-    'Tax documentation request for {year}',
-    'Compliance audit documentation',
-    'FATCA reporting query',
-    'Legal hold notification',
-    'GDPR data access request',
-  ],
-};
-
-const CASE_DESCRIPTIONS = {
-  'Service Issue': [
-    'Customer has experienced repeated delays in receiving responses to their inquiries. Despite multiple follow-ups, the issue remains unaddressed.',
-    'Client visited the {region} branch and reported unsatisfactory interaction with staff. Request for formal review.',
-    'Communication promises made by the team have not been kept. Customer has not received the promised callback within SLA.',
-  ],
-  'Transaction Problem': [
-    'Wire transfer initiated on {date} is still pending. Customer requires urgent resolution as funds are needed for time-sensitive investment.',
-    'Customer noticed an incorrect amount of ${amount} posted instead of the expected ${expected}. Discrepancy requires investigation.',
-    'After recent {action}, funds totaling ${amount} appear to be missing from the account. Urgent investigation required.',
-  ],
-  'Fee Dispute': [
-    'Customer disputes management fee of ${amount} which was not previously disclosed. Requesting full breakdown and potential waiver.',
-    'Rate charged differs from originally quoted rate. Customer was quoted {quoted}% but charged {charged}%. Requesting adjustment.',
-    'Customer discovered custody fees that were not communicated at account opening. Requesting fee review and potential refund.',
-  ],
-  'Account Issue': [
-    'Customer has been locked out of online banking for {days} days. Multiple reset attempts have failed. Impacting ability to manage portfolio.',
-    'Beneficiary information on record is incorrect. Customer needs immediate update before upcoming transaction.',
-    'Quarterly statements for Q{quarter} have not been received despite registered mail preference.',
-  ],
-  'Investment Concern': [
-    'Customer is concerned about underperformance of {product} relative to benchmark. Requesting detailed attribution analysis.',
-    'Client believes current portfolio risk level exceeds their stated preference. Requesting suitability review.',
-    'Expected dividend payment of ${amount} not received. Customer requesting investigation and confirmation of payment date.',
-  ],
-  'Technical Problem': [
-    'Mobile application has been crashing consistently for the past {days} days. Customer unable to monitor portfolio or execute trades.',
-    'Customer reports inability to complete any transactions through the mobile app. Desktop works fine but mobile is critical for their needs.',
-    'Two-factor authentication system is not sending codes. Customer cannot access account for time-sensitive trades.',
-  ],
-  'Regulatory Inquiry': [
-    'Customer requires complete tax documentation package for {year} tax filing. Deadline approaching in {days} days.',
-    'External audit requires comprehensive transaction history and account documentation. Time-sensitive compliance request.',
-    'Customer exercising right to access their personal data under data protection regulations. 30-day response required.',
-  ],
-};
+// Titles and descriptions are now imported from case-categories.ts
 
 const RESOLUTIONS = [
   'Issue resolved to customer satisfaction. Service credit applied.',
@@ -190,12 +59,8 @@ export class CaseGenerator {
     communications: SyntheticCommunication[],
     dateRange: { start: Date; end: Date },
   ): SyntheticCase {
-    // Determine category and subcategory
-    const categories = Object.keys(CASE_CATEGORIES);
-    const category = this.randomChoice(categories);
-    const subcategories =
-      CASE_CATEGORIES[category as keyof typeof CASE_CATEGORIES];
-    const subcategory = this.randomChoice(subcategories);
+    // Determine category and subcategory using weighted selection from CSV data
+    const { category, subcategory } = this.selectCategoryWeighted();
 
     // Generate timestamps based on communications for data consistency
     // Use earliest communication as case creation time
@@ -397,12 +262,35 @@ export class CaseGenerator {
   }
 
   /**
+   * Select category and subcategory using weighted random selection
+   * Based on 'Logged Vol' from the CSV data
+   */
+  private selectCategoryWeighted(): { category: string; subcategory: string } {
+    const random = Math.random() * TOTAL_WEIGHT;
+    let cumulative = 0;
+    for (const entry of CASE_CATEGORIES_FROM_CSV) {
+      cumulative += entry.weight;
+      if (random < cumulative) {
+        return {
+          category: entry.areaOfIssue,
+          subcategory: entry.reasonForComplaint,
+        };
+      }
+    }
+    // Fallback to last entry
+    const last = CASE_CATEGORIES_FROM_CSV[CASE_CATEGORIES_FROM_CSV.length - 1];
+    return {
+      category: last.areaOfIssue,
+      subcategory: last.reasonForComplaint,
+    };
+  }
+
+  /**
    * Generate case title
    */
   private generateTitle(category: string, customer: SyntheticCustomer): string {
-    const titles =
-      CASE_TITLES[category as keyof typeof CASE_TITLES] ||
-      CASE_TITLES['Service Issue'];
+    const titles = CASE_TITLES_BY_AREA[category as AreaOfIssue] ||
+      CASE_TITLES_BY_AREA['Account Opening Process'];
     let title = this.randomChoice(titles);
 
     // Fill placeholders
@@ -411,14 +299,15 @@ export class CaseGenerator {
       .replace(
         '{product}',
         this.randomChoice([
-          'wealth management',
-          'trading',
-          'custody',
-          'advisory',
+          'current account',
+          'savings account',
+          'credit card',
+          'mortgage',
+          'personal loan',
         ]),
       )
-      .replace('{amount}', String(Math.floor(100 + Math.random() * 5000)))
-      .replace('{year}', String(new Date().getFullYear() - 1));
+      .replace('{amount}', String(Math.floor(50 + Math.random() * 500)))
+      .replace('{date}', this.formatDate(new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000)));
 
     return title;
   }
@@ -431,8 +320,8 @@ export class CaseGenerator {
     customer: SyntheticCustomer,
   ): string {
     const descriptions =
-      CASE_DESCRIPTIONS[category as keyof typeof CASE_DESCRIPTIONS] ||
-      CASE_DESCRIPTIONS['Service Issue'];
+      CASE_DESCRIPTIONS_BY_AREA[category as AreaOfIssue] ||
+      CASE_DESCRIPTIONS_BY_AREA['Account Opening Process'];
     let description = this.randomChoice(descriptions);
 
     // Fill placeholders
@@ -445,26 +334,14 @@ export class CaseGenerator {
         ),
       )
       .replace('{days}', String(Math.floor(2 + Math.random() * 10)))
-      .replace('{amount}', String(Math.floor(1000 + Math.random() * 50000)))
-      .replace('{expected}', String(Math.floor(1000 + Math.random() * 50000)))
-      .replace('{quoted}', String((0.5 + Math.random() * 1).toFixed(2)))
-      .replace('{charged}', String((0.8 + Math.random() * 1.2).toFixed(2)))
-      .replace('{quarter}', String(Math.floor(1 + Math.random() * 4)))
+      .replace('{amount}', String(Math.floor(50 + Math.random() * 500)))
       .replace(
         '{product}',
         this.randomChoice([
-          'equity fund',
-          'bond portfolio',
-          'structured product',
-        ]),
-      )
-      .replace('{year}', String(new Date().getFullYear() - 1))
-      .replace(
-        '{action}',
-        this.randomChoice([
-          'wire transfer',
-          'portfolio rebalancing',
-          'fund redemption',
+          'current account',
+          'savings account',
+          'credit card',
+          'mortgage',
         ]),
       );
 
@@ -489,11 +366,11 @@ export class CaseGenerator {
       tags.push('vip-client');
     }
 
-    if (category === 'Fee Dispute') {
+    if (category === 'Fees, Charges and Interest') {
       tags.push('fee-related');
     }
 
-    if (category === 'Regulatory Inquiry') {
+    if (category === 'CDD Remediation') {
       tags.push('compliance');
     }
 
