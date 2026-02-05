@@ -58,6 +58,8 @@ $status-resolved-bg: $sentiment-positive-bg;
 $status-escalated: $sentiment-negative-dark;
 $status-escalated-bg: $sentiment-negative-bg;
 
+$status-closed: $sentiment-negative-dark; // Red for closed/error states
+
 // Priority colors
 $priority-low: $sentiment-positive;
 $priority-medium: $sentiment-mixed;
@@ -141,8 +143,72 @@ $border-dark: #999;
 $text-primary: #333;
 $text-secondary: #666;
 $text-muted: #999;
+$text-hint: #999; // Alias for hint text
 $text-disabled: #bdbdbd;
 $text-inverse: #ffffff;
+
+// =============================================================================
+// AI / CHAT COLORS
+// =============================================================================
+
+// AI brand colors
+$ai-primary: $brand-accent; // Purple for AI elements
+$ai-primary-dark: #651fff;
+$ai-primary-light: #b388ff;
+
+// AI message backgrounds
+$ai-message-bg-start: #f3e5f5; // Base color for gradient start
+$ai-message-bg-end: #ede7f6; // Base color for gradient end
+$ai-message-bg: linear-gradient(
+  135deg,
+  $ai-message-bg-start 0%,
+  $ai-message-bg-end 100%
+);
+$ai-message-border: $ai-primary;
+$ai-avatar-bg: #e1bee7;
+$ai-avatar-color: $ai-primary;
+
+// User message colors
+$user-message-bg: #e3f2fd;
+$user-message-border: $brand-secondary;
+$user-avatar-bg: #bbdefb;
+$user-avatar-color: $brand-secondary-dark;
+
+// Chat UI colors
+$chat-suggestion-bg: #e8eaf6;
+$chat-suggestion-hover: #c5cae9;
+$chat-suggestion-text: #3949ab;
+$chat-input-border: #c5cae9;
+$chat-input-focus: $ai-primary;
+$chat-send-btn-bg: linear-gradient(
+  135deg,
+  $ai-primary 0%,
+  $ai-primary-dark 100%
+);
+$chat-send-btn-shadow: rgba(124, 77, 255, 0.3);
+
+// Typing indicator
+$typing-dot-color: #9575cd;
+
+// Panel header colors (for research/AI panels)
+$panel-header-icon: $ai-primary;
+$panel-header-title: #1a237e;
+
+// Confidence indicator colors
+$confidence-high: #2e7d32;
+$confidence-high-bg: #c8e6c9;
+$confidence-high-text: #2e7d32;
+$confidence-medium: #e65100;
+$confidence-medium-bg: #fff3e0;
+$confidence-medium-text: #e65100;
+$confidence-low: #c62828;
+$confidence-low-bg: #ffcdd2;
+$confidence-low-text: #c62828;
+
+// Evidence/source styling
+$evidence-border: $brand-primary;
+$evidence-bg: $bg-surface;
+$evidence-hover-bg: #f0f4ff;
 
 // =============================================================================
 // SPACING
@@ -164,9 +230,14 @@ $font-family: Roboto, "Helvetica Neue", sans-serif;
 $font-size-xs: 10px;
 $font-size-sm: 12px;
 $font-size-md: 14px;
+$font-size-base: 14px; // Alias for common usage
 $font-size-lg: 16px;
 $font-size-xl: 20px;
 $font-size-xxl: 24px;
+
+$line-height-tight: 1.4;
+$line-height-base: 1.6;
+$line-height-relaxed: 1.8;
 
 // =============================================================================
 // BORDERS & SHADOWS
@@ -175,6 +246,7 @@ $font-size-xxl: 24px;
 $border-radius-sm: 4px;
 $border-radius-md: 8px;
 $border-radius-lg: 16px;
+$border-radius-xl: 24px;
 $border-radius-pill: 9999px;
 
 $shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);

@@ -213,6 +213,225 @@
 }
 
 // =============================================================================
+// AI / CHAT COMPONENT MIXINS
+// =============================================================================
+
+@mixin ai-panel-header {
+  background: linear-gradient(135deg, $ai-primary-dark 0%, $ai-primary 100%);
+  color: $text-inverse;
+  padding: $spacing-md $spacing-lg;
+
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+
+    mat-icon {
+      color: $panel-header-icon;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: $font-size-lg;
+      font-weight: 500;
+      color: $panel-header-title;
+    }
+  }
+}
+
+@mixin ai-message-bubble {
+  display: flex;
+  gap: $spacing-sm;
+  animation: fadeSlideIn 0.3s ease-out;
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    @include flex-center;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  .content {
+    padding: $spacing-sm $spacing-md;
+    border-radius: $border-radius-md;
+    max-width: 80%;
+  }
+
+  &.ai-message {
+    .avatar {
+      background: $ai-avatar-bg;
+      mat-icon {
+        color: $ai-avatar-color;
+      }
+    }
+    .content {
+      background: $ai-message-bg;
+    }
+  }
+
+  &.user-message {
+    flex-direction: row-reverse;
+    .avatar {
+      background: $user-avatar-bg;
+      mat-icon {
+        color: $user-avatar-color;
+      }
+    }
+    .content {
+      background: $user-message-bg;
+      color: $text-inverse;
+    }
+  }
+}
+
+@mixin chat-suggestion-chip {
+  padding: $spacing-sm $spacing-md;
+  background: $chat-suggestion-bg;
+  color: $chat-suggestion-text;
+  border: none;
+  border-radius: $border-radius-lg;
+  cursor: pointer;
+  font-size: $font-size-sm;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: $chat-suggestion-hover;
+    transform: translateY(-2px);
+  }
+}
+
+@mixin chat-input-container {
+  display: flex;
+  gap: $spacing-sm;
+  padding: $spacing-md;
+  background: $bg-card;
+  border-top: 1px solid $border-default;
+
+  input,
+  textarea {
+    flex: 1;
+    padding: $spacing-sm $spacing-md;
+    border: 1px solid $chat-input-border;
+    border-radius: $border-radius-lg;
+    outline: none;
+    font-size: $font-size-base;
+    transition: border-color 0.2s ease;
+
+    &:focus {
+      border-color: $chat-input-focus;
+    }
+  }
+
+  .send-btn {
+    @include flex-center;
+    width: 40px;
+    height: 40px;
+    background: $chat-send-btn-bg;
+    color: $text-inverse;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background: $ai-primary-dark;
+      transform: scale(1.05);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+@mixin typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: $spacing-xs;
+
+  span {
+    width: 8px;
+    height: 8px;
+    background: $typing-dot-color;
+    border-radius: 50%;
+    animation: typingBounce 1.4s ease-in-out infinite;
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+}
+
+@mixin evidence-card {
+  padding: $spacing-sm;
+  background: $evidence-bg;
+  border-left: 3px solid $evidence-border;
+  border-radius: $border-radius-sm;
+  margin-top: $spacing-xs;
+  font-size: $font-size-sm;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: $evidence-hover-bg;
+  }
+}
+
+@mixin confidence-badge($level: "medium") {
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-xs;
+  font-weight: 500;
+
+  @if $level == "high" {
+    background: rgba($confidence-high, 0.15);
+    color: $confidence-high;
+  } @else if $level == "low" {
+    background: rgba($confidence-low, 0.15);
+    color: $confidence-low;
+  } @else {
+    background: rgba($confidence-medium, 0.15);
+    color: $confidence-medium;
+  }
+}
+
+// =============================================================================
+// AI / CHAT ANIMATIONS
+// =============================================================================
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-8px);
+  }
+}
+
+// =============================================================================
 // RESPONSIVE BREAKPOINTS
 // =============================================================================
 
