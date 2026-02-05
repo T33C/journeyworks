@@ -16,15 +16,16 @@ import {
   LlmContentBlock,
 } from '../../infrastructure/llm';
 import { RagChunk, ChunkingConfig } from './rag.types';
-import { v4 as uuidv4 } from 'uuid';
+
+/** Default model for contextualization - Haiku is 25x cheaper than Sonnet */
+const DEFAULT_CONTEXTUALIZATION_MODEL = 'claude-3-5-haiku-latest';
 
 @Injectable()
 export class ContextualChunker {
   private readonly logger = new Logger(ContextualChunker.name);
   private readonly config: ChunkingConfig;
-  // Use Haiku for contextual chunking - it's 25x cheaper than Sonnet
-  // and more than capable of generating short context prefixes
-  private readonly contextualizationModel = 'claude-3-haiku-20240307';
+  /** Model used for contextual prefix generation - configurable via rag.contextualizationModel */
+  private readonly contextualizationModel: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -37,6 +38,10 @@ export class ContextualChunker {
       minChunkSize: this.configService.get<number>('rag.minChunkSize') || 100,
       separators: ['\n\n', '\n', '. ', ', ', ' '],
     };
+    // Allow model override via config
+    this.contextualizationModel =
+      this.configService.get<string>('rag.contextualizationModel') ||
+      DEFAULT_CONTEXTUALIZATION_MODEL;
   }
 
   /**

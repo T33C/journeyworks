@@ -9,6 +9,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   LlmClientService,
   PromptTemplateService,
@@ -202,20 +203,21 @@ export class QueryEnhancerService {
   }
 
   /**
-   * Build cache key for query enhancement
+   * Build cache key for query enhancement using SHA256 hash
+   * Includes query and relevant options for cache isolation
    */
   private buildCacheKey(
     query: string,
     options: QueryEnhancementOptions,
   ): string {
-    const optionsHash = JSON.stringify({
+    const hashInput = JSON.stringify({
+      query: query.toLowerCase().trim(),
       timeRange: options.timeRange,
       customerContext: options.customerContext,
       selectedFilters: options.selectedFilters,
     });
-    return `${this.cachePrefix}${Buffer.from(query + optionsHash)
-      .toString('base64')
-      .slice(0, 32)}`;
+    const hash = createHash('sha256').update(hashInput).digest('hex');
+    return `${this.cachePrefix}${hash.substring(0, 32)}`;
   }
 
   /**
