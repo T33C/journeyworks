@@ -39,14 +39,11 @@ type SyntheticProductType =
   | 'online-banking'
   | 'insurance';
 type SyntheticCategoryType =
-  | 'fraud'
-  | 'service-quality'
+  | 'account-opening'
+  | 'call-handling'
+  | 'cdd-remediation'
   | 'fees-charges'
-  | 'technical-issue'
-  | 'account-access'
-  | 'payment-issue'
-  | 'communication'
-  | 'product-feature';
+  | 'payment-processing';
 
 export interface SyntheticAIClassification {
   category: SyntheticCategoryType;
@@ -71,6 +68,8 @@ export interface SyntheticCommunicationMessage {
 export interface SyntheticCommunication {
   id: string;
   channel: 'email' | 'phone' | 'chat' | 'letter' | 'social';
+  chatMode?: 'chatbot' | 'human-agent'; // For chat channel: distinguishes bot vs human
+  escalatedFrom?: 'chatbot' | 'email' | 'chat'; // Tracks if this is an escalation
   direction: 'inbound' | 'outbound';
   customerId: string;
   customerName: string;
