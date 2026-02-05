@@ -9,20 +9,42 @@ import { RagService } from '../rag/rag.service';
 import { RrgService } from '../rrg/rrg.service';
 import { AnalysisService } from '../analysis/analysis.service';
 import { CommunicationsService } from '../communications/communications.service';
-import { AgentTool, ResearchSource } from './research.types';
+import { ElasticsearchClientService } from '../../infrastructure/elasticsearch';
+import { AgentTool, ResearchSource, ToolParameters } from './research.types';
 
 @Injectable()
 export class AgentTools {
   private readonly logger = new Logger(AgentTools.name);
   private readonly tools: Map<string, AgentTool> = new Map();
 
+  // Elasticsearch index constants
+  private static readonly ES_INDICES = {
+    communications: 'journeyworks_communications',
+    cases: 'journeyworks_cases',
+  } as const;
+
+  // Default time range for queries
+  private static readonly DEFAULT_TIME_RANGE = 'last 30 days';
+
   constructor(
     private readonly ragService: RagService,
     private readonly rrgService: RrgService,
     private readonly analysisService: AnalysisService,
     private readonly communicationsService: CommunicationsService,
+    private readonly esClient: ElasticsearchClientService,
   ) {
     this.registerTools();
+  }
+
+  /**
+   * Get Elasticsearch client or throw if unavailable
+   */
+  private getElasticClient() {
+    const client = this.esClient.getClient();
+    if (!client) {
+      throw new Error('Elasticsearch client not available');
+    }
+    return client;
   }
 
   /**
@@ -56,7 +78,75 @@ export class AgentTools {
   }
 
   /**
-   * Execute a tool by name
+   * Validate tool input against parameter schema
+   */
+  private validateToolInput(
+    toolName: string,
+    input: any,
+    parameters: ToolParameters,
+  ): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Input must be an object
+    if (!input || typeof input !== 'object') {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+
+    // Check required fields
+    for (const requiredField of parameters.required || []) {
+      if (!(requiredField in input) || input[requiredField] === undefined) {
+        errors.push(`Missing required field: ${requiredField}`);
+      }
+    }
+
+    // Validate field types
+    for (const [key, schema] of Object.entries(parameters.properties)) {
+      if (key in input && input[key] !== undefined) {
+        const value = input[key];
+        const expectedType = schema.type;
+
+        if (!this.isValidType(value, expectedType)) {
+          errors.push(
+            `Invalid type for '${key}': expected ${expectedType}, got ${typeof value}`,
+          );
+        }
+
+        // Validate enum values if specified
+        if (schema.enum && !schema.enum.includes(value)) {
+          errors.push(
+            `Invalid value for '${key}': must be one of [${schema.enum.join(', ')}]`,
+          );
+        }
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * Check if a value matches the expected type
+   */
+  private isValidType(value: any, expectedType: string): boolean {
+    switch (expectedType) {
+      case 'string':
+        return typeof value === 'string';
+      case 'number':
+        return typeof value === 'number' && !isNaN(value);
+      case 'boolean':
+        return typeof value === 'boolean';
+      case 'array':
+        return Array.isArray(value);
+      case 'object':
+        return (
+          typeof value === 'object' && value !== null && !Array.isArray(value)
+        );
+      default:
+        return true; // Unknown types pass through
+    }
+  }
+
+  /**
+   * Execute a tool by name with input validation
    */
   async executeTool(
     name: string,
@@ -65,6 +155,17 @@ export class AgentTools {
     const tool = this.tools.get(name);
     if (!tool) {
       throw new Error(`Unknown tool: ${name}`);
+    }
+
+    // Validate input against schema
+    const validation = this.validateToolInput(name, input, tool.parameters);
+    if (!validation.valid) {
+      this.logger.warn(
+        `Tool validation failed for ${name}: ${validation.errors.join(', ')}`,
+      );
+      throw new Error(
+        `Tool input validation failed: ${validation.errors.join('; ')}`,
+      );
     }
 
     this.logger.log(`Executing tool: ${name}`);
@@ -457,6 +558,532 @@ export class AgentTools {
           dailyAverage: result.metrics.dailyAverageVolume,
           dateRange: result.metrics.dateRange,
         };
+      },
+    });
+
+    // ============================================
+    // NEW SPECIALIZED SKILL TOOLS
+    // ============================================
+
+    // Channel Escalation Analysis Tool
+    this.tools.set('analyze_channel_escalation', {
+      name: 'analyze_channel_escalation',
+      description:
+        'Analyze escalation patterns between channels. Use this to find how many communications escalate from one channel (e.g., chatbot) to another (e.g., human agent, phone). Returns daily counts and totals.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fromChannel: {
+            type: 'string',
+            description: 'Source channel or mode (chatbot, chat, email)',
+          },
+          toChannel: {
+            type: 'string',
+            description: 'Target channel after escalation (human-agent, phone)',
+          },
+          category: {
+            type: 'string',
+            description: 'Optional category filter (e.g., cdd-remediation)',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range (e.g., "last 30 days")',
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const filter: any[] = [
+            {
+              range: { timestamp: { gte: timeRange.from, lte: timeRange.to } },
+            },
+          ];
+
+          // Filter by escalatedFrom field
+          if (input.fromChannel) {
+            filter.push({ term: { escalatedFrom: input.fromChannel } });
+          }
+
+          // Filter by target channel/chatMode
+          if (input.toChannel === 'human-agent') {
+            filter.push({ term: { chatMode: 'human-agent' } });
+          } else if (input.toChannel) {
+            filter.push({ term: { channel: input.toChannel } });
+          }
+
+          if (input.category) {
+            filter.push({
+              term: { 'aiClassification.category.keyword': input.category },
+            });
+          }
+
+          const response = await client.search({
+            index: AgentTools.ES_INDICES.communications,
+            body: {
+              query: { bool: { filter } },
+              size: 0,
+              aggs: {
+                daily: {
+                  date_histogram: {
+                    field: 'timestamp',
+                    calendar_interval: 'day',
+                  },
+                  aggs: { count: { value_count: { field: 'id' } } },
+                },
+                total: { value_count: { field: 'id' } },
+              },
+            },
+          });
+
+          const aggs = response.aggregations as any;
+          return {
+            totalEscalations: aggs?.total?.value || 0,
+            dailyBreakdown: (aggs?.daily?.buckets || []).map((b: any) => ({
+              date: b.key_as_string,
+              count: b.count?.value || b.doc_count,
+            })),
+            timeRange,
+          };
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
+      },
+    });
+
+    // CDD Cases Analysis Tool
+    this.tools.set('analyze_cdd_cases', {
+      name: 'analyze_cdd_cases',
+      description:
+        'Analyze CDD (Customer Due Diligence) remediation cases. Returns volumes, reasons breakdown, and trends.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description:
+              'Filter by specific reason (e.g., "Account Closed", "Restrictions")',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range (e.g., "last 30 days")',
+          },
+          includeChannelBreakdown: {
+            type: 'boolean',
+            description: 'Include breakdown by communication channel',
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const filter: any[] = [
+            {
+              range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
+            },
+            { term: { 'category.keyword': 'CDD Remediation' } },
+          ];
+
+          if (input.reason) {
+            filter.push({ match: { subcategory: input.reason } });
+          }
+
+          const aggs: any = {
+            by_reason: { terms: { field: 'subcategory.keyword', size: 15 } },
+            daily: {
+              date_histogram: { field: 'createdAt', calendar_interval: 'day' },
+            },
+            by_status: { terms: { field: 'status.keyword' } },
+          };
+
+          // Add channel breakdown if requested
+          if (input.includeChannelBreakdown) {
+            aggs.by_channel = { terms: { field: 'channel.keyword', size: 10 } };
+          }
+
+          const response = await client.search({
+            index: AgentTools.ES_INDICES.cases,
+            body: { query: { bool: { filter } }, size: 0, aggs },
+          });
+
+          const aggsResult = response.aggregations as any;
+          const result: any = {
+            totalCases: (response.hits as any)?.total?.value || 0,
+            byReason: (aggsResult?.by_reason?.buckets || []).map((b: any) => ({
+              reason: b.key,
+              count: b.doc_count,
+            })),
+            dailyVolume: (aggsResult?.daily?.buckets || []).map((b: any) => ({
+              date: b.key_as_string,
+              count: b.doc_count,
+            })),
+            byStatus: (aggsResult?.by_status?.buckets || []).map((b: any) => ({
+              status: b.key,
+              count: b.doc_count,
+            })),
+            timeRange,
+          };
+
+          if (input.includeChannelBreakdown && aggsResult?.by_channel) {
+            result.byChannel = (aggsResult.by_channel.buckets || []).map(
+              (b: any) => ({
+                channel: b.key,
+                count: b.doc_count,
+              }),
+            );
+          }
+
+          return result;
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
+      },
+    });
+
+    // Daily Volumes Tool
+    this.tools.set('get_daily_volumes', {
+      name: 'get_daily_volumes',
+      description:
+        'Get daily volume counts for communications or cases. Use for "per day" type questions.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dataType: {
+            type: 'string',
+            description: 'Type of data: "communications" or "cases"',
+          },
+          channel: {
+            type: 'string',
+            description: 'Filter by channel (email, phone, chat, etc.)',
+          },
+          category: {
+            type: 'string',
+            description: 'Filter by category (e.g., cdd-remediation)',
+          },
+          status: {
+            type: 'string',
+            description: 'Filter by status (e.g., escalated, open)',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range (e.g., "last 30 days")',
+          },
+        },
+        required: ['dataType'],
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const index =
+            input.dataType === 'cases'
+              ? AgentTools.ES_INDICES.cases
+              : AgentTools.ES_INDICES.communications;
+          const dateField =
+            input.dataType === 'cases' ? 'createdAt' : 'timestamp';
+
+          const filter: any[] = [
+            {
+              range: {
+                [dateField]: { gte: timeRange.from, lte: timeRange.to },
+              },
+            },
+          ];
+
+          if (input.channel) filter.push({ term: { channel: input.channel } });
+          if (input.category) {
+            const catField =
+              input.dataType === 'cases'
+                ? 'category.keyword'
+                : 'aiClassification.category.keyword';
+            filter.push({ term: { [catField]: input.category } });
+          }
+          if (input.status) filter.push({ term: { status: input.status } });
+
+          const response = await client.search({
+            index,
+            body: {
+              query: { bool: { filter } },
+              size: 0,
+              aggs: {
+                daily: {
+                  date_histogram: {
+                    field: dateField,
+                    calendar_interval: 'day',
+                  },
+                },
+              },
+            },
+          });
+
+          const aggs = response.aggregations as any;
+          const daily = (aggs?.daily?.buckets || []).map((b: any) => ({
+            date: b.key_as_string,
+            count: b.doc_count,
+          }));
+
+          const total = daily.reduce((sum: number, d: any) => sum + d.count, 0);
+          const avgPerDay =
+            daily.length > 0 ? Math.round(total / daily.length) : 0;
+
+          return { total, avgPerDay, daily, timeRange };
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
+      },
+    });
+
+    // Resolution Time Analysis Tool
+    this.tools.set('analyze_resolution_times', {
+      name: 'analyze_resolution_times',
+      description:
+        'Analyze case resolution times. Returns average, min, max resolution times by category.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Filter by category (e.g., CDD Remediation)',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range for cases created',
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const filter: any[] = [
+            {
+              range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
+            },
+            { exists: { field: 'resolvedAt' } },
+          ];
+          if (input.category) {
+            filter.push({ term: { 'category.keyword': input.category } });
+          }
+
+          const response = await client.search({
+            index: AgentTools.ES_INDICES.cases,
+            body: {
+              query: { bool: { filter } },
+              size: 100,
+              _source: ['createdAt', 'resolvedAt', 'category'],
+            },
+          });
+
+          const hits = response.hits?.hits || [];
+          const resolutionTimes = hits.map((h: any) => {
+            const created = new Date(h._source.createdAt).getTime();
+            const resolved = new Date(h._source.resolvedAt).getTime();
+            return (resolved - created) / (1000 * 60 * 60 * 24); // days
+          });
+
+          if (resolutionTimes.length === 0) {
+            return { error: 'No resolved cases found in time range' };
+          }
+
+          const avg =
+            resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length;
+          return {
+            casesAnalyzed: resolutionTimes.length,
+            avgResolutionDays: Math.round(avg * 10) / 10,
+            minResolutionDays:
+              Math.round(Math.min(...resolutionTimes) * 10) / 10,
+            maxResolutionDays:
+              Math.round(Math.max(...resolutionTimes) * 10) / 10,
+            timeRange,
+          };
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
+      },
+    });
+
+    // SLA Compliance Tool
+    this.tools.set('analyze_sla_compliance', {
+      name: 'analyze_sla_compliance',
+      description:
+        'Analyze SLA breach rates for cases. Returns counts of breached vs compliant cases.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            description: 'Filter by category',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range',
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const filter: any[] = [
+            {
+              range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
+            },
+          ];
+          if (input.category) {
+            filter.push({ term: { 'category.keyword': input.category } });
+          }
+
+          const response = await client.search({
+            index: AgentTools.ES_INDICES.cases,
+            body: {
+              query: { bool: { filter } },
+              size: 0,
+              aggs: {
+                sla_status: { terms: { field: 'slaBreached' } },
+                by_category: {
+                  terms: { field: 'category.keyword' },
+                  aggs: { breach_rate: { terms: { field: 'slaBreached' } } },
+                },
+              },
+            },
+          });
+
+          const aggs = response.aggregations as any;
+          const slaStatus = aggs?.sla_status?.buckets || [];
+          const breached =
+            slaStatus.find((b: any) => b.key === 1)?.doc_count || 0;
+          const compliant =
+            slaStatus.find((b: any) => b.key === 0)?.doc_count || 0;
+          const total = breached + compliant;
+
+          return {
+            totalCases: total,
+            breachedCount: breached,
+            compliantCount: compliant,
+            breachRate:
+              total > 0 ? `${Math.round((breached / total) * 100)}%` : 'N/A',
+            byCategory: (aggs?.by_category?.buckets || []).map((b: any) => {
+              const brch =
+                b.breach_rate?.buckets?.find((x: any) => x.key === 1)
+                  ?.doc_count || 0;
+              return { category: b.key, total: b.doc_count, breached: brch };
+            }),
+            timeRange,
+          };
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
+      },
+    });
+
+    // Category Breakdown Tool
+    this.tools.set('get_category_breakdown', {
+      name: 'get_category_breakdown',
+      description:
+        'Get breakdown of cases or communications by category and subcategory. Shows top complaint reasons.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dataType: {
+            type: 'string',
+            description: 'Type of data: "communications" or "cases"',
+          },
+          timeRange: {
+            type: 'string',
+            description: 'Time range',
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const client = this.getElasticClient();
+
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+
+          const index =
+            input.dataType === 'cases'
+              ? AgentTools.ES_INDICES.cases
+              : AgentTools.ES_INDICES.communications;
+          const dateField =
+            input.dataType === 'cases' ? 'createdAt' : 'timestamp';
+          const catField =
+            input.dataType === 'cases'
+              ? 'category.keyword'
+              : 'aiClassification.category.keyword';
+
+          const response = await client.search({
+            index,
+            body: {
+              query: {
+                bool: {
+                  filter: [
+                    {
+                      range: {
+                        [dateField]: { gte: timeRange.from, lte: timeRange.to },
+                      },
+                    },
+                  ],
+                },
+              },
+              size: 0,
+              aggs: {
+                by_category: {
+                  terms: { field: catField, size: 10 },
+                  aggs:
+                    input.dataType === 'cases'
+                      ? {
+                          by_subcategory: {
+                            terms: { field: 'subcategory.keyword', size: 10 },
+                          },
+                        }
+                      : {},
+                },
+              },
+            },
+          });
+
+          const aggs = response.aggregations as any;
+          return {
+            total: (response.hits as any)?.total?.value || 0,
+            byCategory: (aggs?.by_category?.buckets || []).map((b: any) => ({
+              category: b.key,
+              count: b.doc_count,
+              subcategories: (b.by_subcategory?.buckets || []).map(
+                (s: any) => ({
+                  name: s.key,
+                  count: s.doc_count,
+                }),
+              ),
+            })),
+            timeRange,
+          };
+        } catch (error) {
+          return { error: `Query failed: ${error.message}` };
+        }
       },
     });
   }

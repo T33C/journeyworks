@@ -60,6 +60,140 @@ class ResearchRequestDto implements ResearchRequest {
   };
 }
 
+// AnalysisContext DTO with proper validation
+class TimeWindowDto {
+  @IsOptional()
+  @IsString()
+  start?: string;
+
+  @IsOptional()
+  @IsString()
+  end?: string;
+}
+
+class TimelineEventContextDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  date: string;
+
+  @IsString()
+  type: string;
+
+  @IsString()
+  label: string;
+
+  @IsOptional()
+  @IsString()
+  product?: string;
+
+  @IsOptional()
+  @IsString()
+  severity?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+class SentimentBubbleContextDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  date: string;
+
+  @IsOptional()
+  @IsNumber()
+  volume?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sentiment?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  themes?: string[];
+
+  @IsOptional()
+  @IsString()
+  product?: string;
+
+  @IsOptional()
+  @IsNumber()
+  npsScore?: number;
+}
+
+class JourneyStageContextDto {
+  @IsString()
+  stage: string;
+
+  @IsString()
+  label: string;
+
+  @IsOptional()
+  @IsNumber()
+  sentiment?: number;
+
+  @IsOptional()
+  @IsNumber()
+  previousSentiment?: number;
+
+  @IsOptional()
+  @IsNumber()
+  change?: number;
+
+  @IsOptional()
+  @IsNumber()
+  npsScore?: number;
+}
+
+// AnalysisContextDto - validation DTO (more permissive than the strict AnalysisContext interface)
+class AnalysisContextDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TimeWindowDto)
+  timeWindow?: TimeWindowDto;
+
+  @IsOptional()
+  @IsString()
+  product?: string;
+
+  @IsOptional()
+  @IsString()
+  channel?: string;
+
+  @IsOptional()
+  @IsString()
+  signal?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TimelineEventContextDto)
+  event?: TimelineEventContextDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => JourneyStageContextDto)
+  journeyStage?: JourneyStageContextDto;
+
+  @IsOptional()
+  @IsString()
+  quadrant?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedItems?: string[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SentimentBubbleContextDto)
+  selectedBubble?: SentimentBubbleContextDto;
+}
+
 class ConversationQueryDto {
   @IsString()
   query: string;
@@ -71,6 +205,11 @@ class ConversationQueryDto {
   @IsOptional()
   @IsNumber()
   maxIterations?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnalysisContextDto)
+  context?: AnalysisContextDto;
 }
 
 class QuickQuestionDto {
@@ -88,9 +227,11 @@ class CustomerResearchDto {
   questions: string[];
 }
 
-class InsightRequestDto implements InsightRequest {
-  @IsObject()
-  context: AnalysisContext;
+// InsightRequestDto - validation DTO (more permissive than the strict InsightRequest interface)
+class InsightRequestDto {
+  @ValidateNested()
+  @Type(() => AnalysisContextDto)
+  context: AnalysisContextDto;
 
   @IsOptional()
   @IsString()
@@ -125,8 +266,8 @@ export class ResearchController {
   @Post('conversation')
   @ApiOperation({ summary: 'Start a new research conversation' })
   @ApiResponse({ status: 201, description: 'Conversation started' })
-  startConversation(): { conversationId: string } {
-    const conversationId = this.researchService.startConversation();
+  async startConversation(): Promise<{ conversationId: string }> {
+    const conversationId = await this.researchService.startConversation();
     return { conversationId };
   }
 
@@ -141,6 +282,7 @@ export class ResearchController {
     return this.researchService.researchWithContext(conversationId, dto.query, {
       customerId: dto.customerId,
       maxIterations: dto.maxIterations,
+      context: dto.context as unknown as AnalysisContext,
     });
   }
 
@@ -148,10 +290,14 @@ export class ResearchController {
   @ApiOperation({ summary: 'Get conversation history' })
   @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
   @ApiResponse({ status: 200, description: 'Conversation history' })
-  getConversation(@Param('conversationId') conversationId: string): {
+  async getConversation(
+    @Param('conversationId') conversationId: string,
+  ): Promise<{
     history: ConversationTurn[];
-  } {
-    return { history: this.researchService.getConversation(conversationId) };
+  }> {
+    return {
+      history: await this.researchService.getConversation(conversationId),
+    };
   }
 
   @Delete('conversation/:conversationId')
@@ -204,6 +350,6 @@ export class ResearchController {
   })
   @ApiResponse({ status: 200, description: 'Research insight for context' })
   async getInsight(@Body() dto: InsightRequestDto): Promise<ResearchInsight> {
-    return this.researchService.getInsight(dto);
+    return this.researchService.getInsight(dto as unknown as InsightRequest);
   }
 }

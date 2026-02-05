@@ -6,6 +6,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   LlmClientService,
   PromptTemplateService,
@@ -18,25 +19,97 @@ import {
   ReasoningStep,
   AgentAction,
   AgentState,
+  ToolParameters,
 } from './research.types';
+
+/** Agent configuration constants */
+const AGENT_CONFIG = {
+  /** Default maximum iterations for the agent loop */
+  DEFAULT_MAX_ITERATIONS: 10,
+  /** Maximum characters for observation truncation */
+  MAX_OBSERVATION_LENGTH: 2000,
+  /** Minimum characters for follow-up question */
+  MIN_FOLLOWUP_LENGTH: 10,
+  /** Maximum number of follow-up questions */
+  MAX_FOLLOWUP_COUNT: 3,
+  /** Maximum characters for final answer summary in follow-up generation */
+  MAX_SUMMARY_LENGTH: 500,
+} as const;
+
+/** Confidence calculation weights */
+const CONFIDENCE_WEIGHTS = {
+  /** Base confidence score */
+  BASE: 0.5,
+  /** Bonus per unique source found */
+  SOURCE_BONUS: 0.05,
+  /** Maximum source bonus cap */
+  MAX_SOURCE_BONUS: 0.2,
+  /** Penalty for each failed tool call */
+  FAILURE_PENALTY: 0.1,
+  /** Penalty for hitting max iterations without answer */
+  MAX_ITERATION_PENALTY: 0.2,
+  /** Bonus for completing within few iterations */
+  EFFICIENCY_BONUS: 0.1,
+  /** Bonus for having a final answer */
+  FINAL_ANSWER_BONUS: 0.1,
+} as const;
+
+/** Error types for agent execution */
+export class AgentExecutionError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'AgentExecutionError';
+  }
+}
+
+export class ToolValidationError extends AgentExecutionError {
+  constructor(
+    toolName: string,
+    message: string,
+    public readonly validationErrors: string[],
+  ) {
+    super(
+      `Tool validation failed for ${toolName}: ${message}`,
+      'TOOL_VALIDATION_ERROR',
+      {
+        toolName,
+        validationErrors,
+      },
+    );
+    this.name = 'ToolValidationError';
+  }
+}
 
 @Injectable()
 export class AgentExecutor {
   private readonly logger = new Logger(AgentExecutor.name);
-  private readonly maxIterations = 10;
+  private readonly defaultMaxIterations: number;
+  private readonly modelName: string;
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly llmClient: LlmClientService,
     private readonly promptTemplate: PromptTemplateService,
     private readonly tools: AgentTools,
-  ) {}
+  ) {
+    this.defaultMaxIterations =
+      this.configService.get<number>('agent.maxIterations') ||
+      AGENT_CONFIG.DEFAULT_MAX_ITERATIONS;
+    this.modelName =
+      this.configService.get<string>('llm.anthropic.model') ||
+      'claude-sonnet-4-20250514';
+  }
 
   /**
    * Execute the research agent
    */
   async execute(request: ResearchRequest): Promise<ResearchResponse> {
     const startTime = Date.now();
-    const maxIterations = request.maxIterations || this.maxIterations;
+    const maxIterations = request.maxIterations || this.defaultMaxIterations;
 
     // Initialize agent state
     const state: AgentState = {
@@ -90,7 +163,7 @@ export class AgentExecutor {
         totalTime,
         iterations: state.iteration,
         toolCalls: state.actions.length,
-        model: 'claude-sonnet-4-20250514',
+        model: this.modelName,
       },
     };
   }
@@ -215,6 +288,9 @@ export class AgentExecutor {
 
   /**
    * Parse the agent's response into structured components
+   * Supports both formats:
+   *   - JSON: Action: {"tool": "tool_name", "input": {...}}
+   *   - Plain: Action: tool_name\nAction Input: {...}
    */
   private parseAgentResponse(response: string): {
     thought: string;
@@ -238,7 +314,26 @@ export class AgentExecutor {
       };
     }
 
-    // Extract action and action input
+    // Try JSON format first: Action: {"tool": "name", "input": {...}}
+    const jsonActionMatch = response.match(
+      /Action:\s*(\{[\s\S]*?\})(?=\s*(?:Thought:|Observation:|$))/i,
+    );
+    if (jsonActionMatch) {
+      try {
+        const actionJson = JSON.parse(jsonActionMatch[1].trim());
+        if (actionJson.tool) {
+          return {
+            thought,
+            action: actionJson.tool,
+            actionInput: actionJson.input || {},
+          };
+        }
+      } catch {
+        // Fall through to plain format
+      }
+    }
+
+    // Try plain format: Action: tool_name\nAction Input: {...}
     const actionMatch = response.match(/Action:\s*(\w+)/i);
     const actionInputMatch = response.match(
       /Action Input:\s*([\s\S]*?)(?=Thought:|Observation:|$)/i,
@@ -266,13 +361,15 @@ export class AgentExecutor {
    * Format observation from tool output
    */
   private formatObservation(output: any): string {
+    const maxLength = AGENT_CONFIG.MAX_OBSERVATION_LENGTH;
+
     if (typeof output === 'string') {
-      return output.substring(0, 2000);
+      return output.substring(0, maxLength);
     }
 
     const formatted = JSON.stringify(output, null, 2);
-    if (formatted.length > 2000) {
-      return formatted.substring(0, 1997) + '...';
+    if (formatted.length > maxLength) {
+      return formatted.substring(0, maxLength - 3) + '...';
     }
     return formatted;
   }
@@ -306,26 +403,50 @@ Provide a clear, concise answer that synthesizes the findings. If the informatio
 
   /**
    * Calculate confidence score based on agent performance
+   * Uses a more robust algorithm that considers:
+   * - Source diversity (unique sources found)
+   * - Iteration efficiency (completed quickly)
+   * - Tool success rate
+   * - Whether a final answer was reached
    */
   private calculateConfidence(state: AgentState): number {
-    let confidence = 0.5; // Base confidence
+    const w = CONFIDENCE_WEIGHTS;
+    let confidence = w.BASE;
 
-    // Increase for successful tool calls
-    const successfulCalls = state.actions.filter((a) => a.success).length;
-    confidence += successfulCalls * 0.1;
+    // Bonus for unique sources (capped to prevent gaming)
+    const uniqueSources = new Set(state.sources.map((s) => s.id)).size;
+    const sourceBonus = Math.min(
+      uniqueSources * w.SOURCE_BONUS,
+      w.MAX_SOURCE_BONUS,
+    );
+    confidence += sourceBonus;
 
-    // Decrease for failed calls
+    // Calculate tool success rate (not raw count)
+    const totalCalls = state.actions.length;
     const failedCalls = state.actions.filter((a) => !a.success).length;
-    confidence -= failedCalls * 0.1;
+    const successRate =
+      totalCalls > 0 ? (totalCalls - failedCalls) / totalCalls : 1;
 
-    // Increase for having sources
-    if (state.sources.length > 0) {
-      confidence += 0.1;
+    // Penalty based on failure rate, not just count
+    if (successRate < 1) {
+      const failurePenalty = (1 - successRate) * w.FAILURE_PENALTY * 2;
+      confidence -= Math.min(failurePenalty, w.FAILURE_PENALTY * 2);
     }
 
-    // Decrease if hit max iterations without answer
-    if (state.iteration >= state.maxIterations && !state.finalAnswer) {
-      confidence -= 0.2;
+    // Bonus for having a final answer
+    if (state.finalAnswer) {
+      confidence += w.FINAL_ANSWER_BONUS;
+    }
+
+    // Efficiency bonus: completed well before max iterations
+    const iterationRatio = state.iteration / state.maxIterations;
+    if (iterationRatio < 0.5 && state.isDone) {
+      confidence += w.EFFICIENCY_BONUS;
+    }
+
+    // Penalty if hit max iterations without clear answer
+    if (state.iteration >= state.maxIterations && !state.isDone) {
+      confidence -= w.MAX_ITERATION_PENALTY;
     }
 
     // Clamp to 0-1
@@ -357,11 +478,11 @@ Provide a clear, concise answer that synthesizes the findings. If the informatio
       return [];
     }
 
-    const prompt = `Based on this research question and findings, suggest 3 follow-up questions the user might want to explore.
+    const prompt = `Based on this research question and findings, suggest ${AGENT_CONFIG.MAX_FOLLOWUP_COUNT} follow-up questions the user might want to explore.
 
 Original Question: ${request.query}
 
-Answer Summary: ${state.finalAnswer?.substring(0, 500) || 'In progress'}
+Answer Summary: ${state.finalAnswer?.substring(0, AGENT_CONFIG.MAX_SUMMARY_LENGTH) || 'In progress'}
 
 Return only the questions, one per line.`;
 
@@ -372,8 +493,8 @@ Return only the questions, one per line.`;
       return response
         .split('\n')
         .map((q) => q.replace(/^\d+\.\s*/, '').trim())
-        .filter((q) => q.length > 10)
-        .slice(0, 3);
+        .filter((q) => q.length > AGENT_CONFIG.MIN_FOLLOWUP_LENGTH)
+        .slice(0, AGENT_CONFIG.MAX_FOLLOWUP_COUNT);
     } catch {
       return [];
     }

@@ -57,7 +57,14 @@ interface StatisticalAnalysisResult {
 @Injectable()
 export class ResearchService {
   private readonly logger = new Logger(ResearchService.name);
-  private readonly INSIGHT_CACHE_TTL = 600; // 10 minutes
+
+  // Configuration constants
+  private static readonly INSIGHT_CACHE_TTL = 600; // 10 minutes
+  private static readonly CONVERSATION_CACHE_TTL = 3600; // 1 hour
+  private static readonly CONVERSATION_CACHE_PREFIX = 'research:conversation:';
+  private static readonly MAX_CONVERSATION_HISTORY = 20; // Max turns to keep
+  private static readonly QUICK_QUESTION_MAX_ITERATIONS = 3;
+  private static readonly CUSTOMER_RESEARCH_MAX_ITERATIONS = 5;
 
   // Patterns that indicate a statistical question (route to Python service)
   private readonly STATISTICAL_PATTERNS = [
@@ -83,9 +90,6 @@ export class ResearchService {
     /\b(who (said|complained|mentioned|reported))\b/i,
     /\bcase (#?\d+|number)\b/i,
   ];
-
-  // Store conversation history (in production, use a proper store)
-  private conversations: Map<string, ConversationTurn[]> = new Map();
 
   constructor(
     private readonly agentExecutor: AgentExecutor,
@@ -115,16 +119,26 @@ export class ResearchService {
   async researchWithContext(
     conversationId: string,
     query: string,
-    options?: Partial<ResearchRequest>,
+    options?: Omit<Partial<ResearchRequest>, 'context'> & {
+      context?: AnalysisContext;
+    },
   ): Promise<ResearchResponse> {
-    // Get conversation history
-    const history = this.conversations.get(conversationId) || [];
+    // Get conversation history from Redis
+    const history = await this.getConversationHistory(conversationId);
+
+    // Build context string from AnalysisContext if provided
+    let contextStr = options?.context
+      ? this.buildContextDescription(options.context)
+      : undefined;
 
     // Build request with context
     const request: ResearchRequest = {
       query,
+      context: contextStr,
       conversationHistory: history,
-      ...options,
+      customerId: options?.customerId,
+      maxIterations: options?.maxIterations,
+      timeRange: options?.timeRange,
     };
 
     // Execute research
@@ -142,37 +156,84 @@ export class ResearchService {
       timestamp: new Date().toISOString(),
     });
 
-    // Keep only last 10 turns
-    if (history.length > 20) {
-      history.splice(0, history.length - 20);
+    // Keep only last N turns
+    if (history.length > ResearchService.MAX_CONVERSATION_HISTORY) {
+      history.splice(
+        0,
+        history.length - ResearchService.MAX_CONVERSATION_HISTORY,
+      );
     }
 
-    this.conversations.set(conversationId, history);
+    await this.saveConversationHistory(conversationId, history);
 
     return response;
   }
 
   /**
+   * Get conversation history from Redis
+   */
+  private async getConversationHistory(
+    conversationId: string,
+  ): Promise<ConversationTurn[]> {
+    const key = `${ResearchService.CONVERSATION_CACHE_PREFIX}${conversationId}`;
+    try {
+      const cached = await this.cache.get<ConversationTurn[]>(key);
+      return cached || [];
+    } catch (error) {
+      this.logger.warn(
+        `Failed to get conversation from cache: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Save conversation history to Redis
+   */
+  private async saveConversationHistory(
+    conversationId: string,
+    history: ConversationTurn[],
+  ): Promise<void> {
+    const key = `${ResearchService.CONVERSATION_CACHE_PREFIX}${conversationId}`;
+    try {
+      await this.cache.set(
+        key,
+        history,
+        ResearchService.CONVERSATION_CACHE_TTL,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to save conversation to cache: ${error.message}`,
+      );
+    }
+  }
+
+  /**
    * Start a new conversation
    */
-  startConversation(): string {
-    const conversationId = `conv_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    this.conversations.set(conversationId, []);
+  async startConversation(): Promise<string> {
+    const conversationId = crypto.randomUUID();
+    await this.saveConversationHistory(conversationId, []);
     return conversationId;
   }
 
   /**
-   * Get conversation history
+   * Get conversation history (public API)
    */
-  getConversation(conversationId: string): ConversationTurn[] {
-    return this.conversations.get(conversationId) || [];
+  async getConversation(conversationId: string): Promise<ConversationTurn[]> {
+    return this.getConversationHistory(conversationId);
   }
 
   /**
    * Clear conversation history
    */
-  clearConversation(conversationId: string): void {
-    this.conversations.delete(conversationId);
+  async clearConversation(conversationId: string): Promise<void> {
+    const key = `${ResearchService.CONVERSATION_CACHE_PREFIX}${conversationId}`;
+    try {
+      await this.cache.delete(key);
+    } catch (error) {
+      this.logger.warn(`Failed to clear conversation: ${error.message}`);
+    }
   }
 
   /**
@@ -672,7 +733,11 @@ export class ResearchService {
       const ragInsight = await this.performRagQuery(context, question);
       if (ragInsight) {
         // Cache the result
-        await this.cache.set(cacheKey, ragInsight, this.INSIGHT_CACHE_TTL);
+        await this.cache.set(
+          cacheKey,
+          ragInsight,
+          ResearchService.INSIGHT_CACHE_TTL,
+        );
         return ragInsight;
       }
       // Fall through to standard processing if RAG fails
@@ -714,7 +779,11 @@ export class ResearchService {
           context.selectedBubble?.volume ??
           insightData.summary.totalCommunications;
         // Cache the result for 10 minutes
-        await this.cache.set(cacheKey, llmInsight, this.INSIGHT_CACHE_TTL);
+        await this.cache.set(
+          cacheKey,
+          llmInsight,
+          ResearchService.INSIGHT_CACHE_TTL,
+        );
         return llmInsight;
       }
     } catch (error) {
@@ -738,7 +807,7 @@ export class ResearchService {
     };
 
     // Cache the result
-    await this.cache.set(cacheKey, insight, this.INSIGHT_CACHE_TTL);
+    await this.cache.set(cacheKey, insight, ResearchService.INSIGHT_CACHE_TTL);
 
     return insight;
   }
