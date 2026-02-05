@@ -145,25 +145,41 @@ if [ "$GENERATE_EMBEDDINGS" = true ]; then
     echo ""
     
     # Check if model service is available
-    MODEL_HEALTH=$(curl -s http://localhost:8080/health 2>/dev/null)
-    if [ -z "$MODEL_HEALTH" ]; then
-        echo -e "${RED}Error: Model service is not running on port 8080${NC}"
-        echo -e "${YELLOW}Start it with: cd python/model-service && ./run.sh${NC}"
-        echo -e "${YELLOW}Skipping embedding generation.${NC}"
-    else
-        # Get initial count
-        get_embedding_counts() {
-            TOTAL=$(curl -s "http://localhost:9280/journeyworks_communications/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
-            WITH_EMBEDDINGS=$(curl -s "http://localhost:9280/journeyworks_communications/_count" \
-                -H "Content-Type: application/json" \
-                -d '{"query":{"exists":{"field":"embedding"}}}' 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
-            echo "$WITH_EMBEDDINGS $TOTAL"
-        }
-        
-        COUNTS=$(get_embedding_counts)
-        INITIAL_WITH=$(echo $COUNTS | cut -d' ' -f1)
-        TOTAL_DOCS=$(echo $COUNTS | cut -d' ' -f2)
-        NEED_EMBEDDINGS=$((TOTAL_DOCS - INITIAL_WITH))
+    echo -e "${YELLOW}Checking model service health...${NC}"
+    
+    # Try to connect to model service
+    if ! curl -s --connect-timeout 5 http://localhost:8080/health > /dev/null 2>&1; then
+        echo -e "${RED}╔════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  ERROR: Model service is not running!          ║${NC}"
+        echo -e "${RED}╚════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "${YELLOW}The model service (port 8080) is required for embedding generation.${NC}"
+        echo -e "${YELLOW}To start it, run in a separate terminal:${NC}"
+        echo ""
+        echo -e "  ${CYAN}cd python/model-service && ./run.sh${NC}"
+        echo ""
+        echo -e "${YELLOW}Then re-run this script with --with-embeddings${NC}"
+        echo ""
+        echo -e "${RED}Embedding generation skipped.${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ Model service is healthy${NC}"
+    echo ""
+    
+    # Get initial count
+    get_embedding_counts() {
+        TOTAL=$(curl -s "http://localhost:9280/journeyworks_communications/_count" 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+        WITH_EMBEDDINGS=$(curl -s "http://localhost:9280/journeyworks_communications/_count" \
+            -H "Content-Type: application/json" \
+            -d '{"query":{"exists":{"field":"embedding"}}}' 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
+        echo "$WITH_EMBEDDINGS $TOTAL"
+    }
+    
+    COUNTS=$(get_embedding_counts)
+    INITIAL_WITH=$(echo $COUNTS | cut -d' ' -f1)
+    TOTAL_DOCS=$(echo $COUNTS | cut -d' ' -f2)
+    NEED_EMBEDDINGS=$((TOTAL_DOCS - INITIAL_WITH))
         
         echo -e "${CYAN}Communications in index: ${TOTAL_DOCS}${NC}"
         echo -e "${CYAN}Already have embeddings: ${INITIAL_WITH}${NC}"
@@ -181,10 +197,15 @@ if [ "$GENERATE_EMBEDDINGS" = true ]; then
                     -H "Content-Type: application/json" \
                     -d "{\"limit\": $BATCH_SIZE}" 2>/dev/null)
                 
-                # Check for error
-                if echo "$RESPONSE" | grep -q '"error"'; then
-                    echo -e "${RED}Error generating embeddings: $RESPONSE${NC}"
-                    break
+                # Check for error (API returns "error" or "statusCode" for errors)
+                if echo "$RESPONSE" | grep -qE '"error"|"statusCode":[45]'; then
+                    echo ""
+                    echo -e "${RED}Error generating embeddings!${NC}"
+                    echo -e "${RED}Response: $RESPONSE${NC}"
+                    echo ""
+                    echo -e "${YELLOW}This usually means the model service is not responding correctly.${NC}"
+                    echo -e "${YELLOW}Check that the model service is running: curl http://localhost:8080/health${NC}"
+                    exit 1
                 fi
                 
                 # Get updated counts
@@ -237,7 +258,6 @@ if [ "$GENERATE_EMBEDDINGS" = true ]; then
             echo -e "${GREEN}✓ All communications already have embeddings${NC}"
         fi
         echo ""
-    fi
 fi
 
 echo -e "${CYAN}Generated data includes:${NC}"

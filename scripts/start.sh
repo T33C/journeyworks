@@ -6,7 +6,8 @@
 #   ./start.sh --full       # Start all services (infrastructure + API + ML)
 #   ./start.sh --dev        # Start infrastructure and run API in dev mode
 #   ./start.sh --dev-full   # Start infra + ML services, then run API in dev mode
-#   ./start.sh --ml         # Start infrastructure + ML services
+#   ./start.sh --ml         # Start infrastructure + ML services (Docker)
+#   ./start.sh --model      # Start infrastructure + model service (Docker) for embeddings
 #   ./start.sh --debug      # Start with Kibana for debugging
 
 set -e
@@ -30,6 +31,7 @@ MODE="infra"
 PROFILE=""
 DEV_MODE=false
 INCLUDE_ML=false
+START_MODEL=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -53,6 +55,10 @@ while [[ $# -gt 0 ]]; do
             PROFILE="--profile ml"
             shift
             ;;
+        --model)
+            START_MODEL=true
+            shift
+            ;;
         --debug)
             PROFILE="--profile debug"
             shift
@@ -61,10 +67,11 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --full      Start all services (infrastructure + API + ML)"
+            echo "  --full      Start all services (infrastructure + API + ML via Docker)"
             echo "  --dev       Start infrastructure and run API in dev mode locally"
-            echo "  --dev-full  Start infra + ML services, then run API in dev mode"
-            echo "  --ml        Start infrastructure + ML services (model & analysis)"
+            echo "  --dev-full  Start infra + ML services (Docker), then run API in dev mode"
+            echo "  --ml        Start infrastructure + ML services via Docker"
+            echo "  --model     Start infrastructure + model service (Docker) for embeddings"
             echo "  --debug     Include Kibana for Elasticsearch debugging"
             echo "  -h,--help   Show this help message"
             echo ""
@@ -74,6 +81,9 @@ while [[ $# -gt 0 ]]; do
             echo "  Infrastructure: Elasticsearch (9280), Redis (6380)"
             echo "  ML Services:    Model Service (8080), Analysis Service (8081)"
             echo "  API:            NestJS API (3080)"
+            echo ""
+            echo "Examples:"
+            echo "  ./start.sh --model --dev   # Start infra + model locally, then API in dev mode"
             exit 0
             ;;
         *)
@@ -118,12 +128,16 @@ case $MODE in
     "infra")
         echo -e "${YELLOW}Starting infrastructure services...${NC}"
         echo ""
-        $DOCKER_COMPOSE up -d elasticsearch redis $PROFILE
+        if [ "$START_MODEL" = true ]; then
+            $DOCKER_COMPOSE up -d elasticsearch redis model-service $PROFILE
+        else
+            $DOCKER_COMPOSE up -d elasticsearch redis $PROFILE
+        fi
         ;;
     "full")
-        echo -e "${YELLOW}Starting all services...${NC}"
+        echo -e "${YELLOW}Starting all services (infrastructure + API + ML)...${NC}"
         echo ""
-        $DOCKER_COMPOSE up -d $PROFILE
+        $DOCKER_COMPOSE --profile ml up -d $PROFILE
         ;;
     "ml")
         echo -e "${YELLOW}Starting infrastructure + ML services...${NC}"
@@ -133,7 +147,11 @@ case $MODE in
     "dev")
         echo -e "${YELLOW}Starting infrastructure for development...${NC}"
         echo ""
-        $DOCKER_COMPOSE up -d elasticsearch redis $PROFILE
+        if [ "$START_MODEL" = true ]; then
+            $DOCKER_COMPOSE up -d elasticsearch redis model-service $PROFILE
+        else
+            $DOCKER_COMPOSE up -d elasticsearch redis $PROFILE
+        fi
         ;;
     "dev-full")
         echo -e "${YELLOW}Starting infrastructure + ML services for development...${NC}"
@@ -176,10 +194,17 @@ else
     echo -e "${RED}✗ Redis failed to start${NC}"
 fi
 
-# Check ML services if started
+# Check ML services if started via Docker
 if [ "$MODE" = "full" ] || [ "$MODE" = "ml" ] || [ "$INCLUDE_ML" = true ]; then
     wait_for_service "Model Service" "http://localhost:8080/health" 60
     wait_for_service "Analysis Service" "http://localhost:8081/health" 30
+fi
+
+# Wait for model service if --model flag was used
+if [ "$START_MODEL" = true ]; then
+    echo ""
+    echo -e "${YELLOW}Waiting for Model Service to be ready (this may take a few minutes on first run)...${NC}"
+    wait_for_service "Model Service" "http://localhost:8080/health" 90
 fi
 
 # Check API if started in full mode
@@ -197,8 +222,12 @@ echo -e "  ${CYAN}Elasticsearch:${NC}  http://localhost:9280"
 echo -e "  ${CYAN}Redis:${NC}          redis://localhost:6380"
 
 if [ "$MODE" = "ml" ] || [ "$MODE" = "full" ] || [ "$INCLUDE_ML" = true ]; then
-    echo -e "  ${CYAN}Model Service:${NC}  http://localhost:8080"
-    echo -e "  ${CYAN}Analysis:${NC}       http://localhost:8081"
+    echo -e "  ${CYAN}Model Service:${NC}  http://localhost:8080 (Docker)"
+    echo -e "  ${CYAN}Analysis:${NC}       http://localhost:8081 (Docker)"
+fi
+
+if [ "$START_MODEL" = true ] && [ "$MODE" != "ml" ] && [ "$MODE" != "full" ] && [ "$INCLUDE_ML" != true ]; then
+    echo -e "  ${CYAN}Model Service:${NC}  http://localhost:8080 (Docker)"
 fi
 
 if [ "$MODE" = "full" ]; then

@@ -91,6 +91,17 @@ else
     echo -e "${GREEN}✓ No local Python services running${NC}"
 fi
 
+# Check for model service started via start.sh --model
+if [ -f /tmp/journeyworks-model-service.pid ]; then
+    MODEL_PID=$(cat /tmp/journeyworks-model-service.pid 2>/dev/null)
+    if [ -n "$MODEL_PID" ] && ps -p $MODEL_PID > /dev/null 2>&1; then
+        echo -e "${YELLOW}Stopping local model service (PID: $MODEL_PID)...${NC}"
+        kill $MODEL_PID 2>/dev/null || true
+        echo -e "${GREEN}✓ Local model service stopped${NC}"
+    fi
+    rm -f /tmp/journeyworks-model-service.pid
+fi
+
 # Stop Docker containers
 echo ""
 echo -e "${YELLOW}Stopping Docker containers...${NC}"
