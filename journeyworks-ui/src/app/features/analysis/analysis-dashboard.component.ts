@@ -259,7 +259,7 @@ import { ResearchPanelComponent } from './research-panel/research-panel.componen
       }
 
       .timeline-section {
-        flex: 0 0 45%;
+        flex: 0 0 60%;
         background: white;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -267,9 +267,10 @@ import { ResearchPanelComponent } from './research-panel/research-panel.componen
       }
 
       .bottom-charts {
-        flex: 1;
+        flex: 0 0 40%;
         display: flex;
         gap: 16px;
+        min-height: 280px;
       }
 
       .quadrant-section,
