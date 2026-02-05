@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,8 +23,10 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { AnalysisStateService } from '../../../core/services/analysis-state.service';
 import { AnalysisDataService } from '../../../core/services/analysis-data.service';
+import { ResearchService } from '../../../core/services/research.service';
 import {
   ResearchInsight,
   EvidenceItem,
@@ -52,6 +55,7 @@ interface ChatMessage {
     MatDividerModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
+    MarkdownPipe,
   ],
   templateUrl: './research-panel.component.html',
   styleUrl: './research-panel.component.scss',
@@ -59,6 +63,8 @@ interface ChatMessage {
 export class ResearchPanelComponent implements AfterViewChecked {
   private stateService = inject(AnalysisStateService);
   private dataService = inject(AnalysisDataService);
+  private researchService = inject(ResearchService);
+  private router = inject(Router);
 
   @ViewChild('chatHistoryContainer') chatHistoryContainer!: ElementRef;
   @ViewChild('chatSectionEl') chatSectionEl!: ElementRef;
@@ -68,9 +74,23 @@ export class ResearchPanelComponent implements AfterViewChecked {
   isTyping = signal(false);
   insight = signal<ResearchInsight | null>(null);
   chatInput = '';
-  chatHistory = signal<ChatMessage[]>([]);
   isChatExpanded = signal(false);
   private shouldScrollToBottom = false;
+
+  // Chat history - computed from the shared ResearchService for persistence
+  // This allows chat to persist when navigating between dashboard and research page
+  readonly chatHistory = computed(() => {
+    const sharedMessages = this.researchService.messages();
+    return sharedMessages.map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'ai',
+      message: msg.content,
+      timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
+    })) as ChatMessage[];
+  });
+
+  // Shared conversation state from ResearchService
+  readonly hasSharedConversation = this.researchService.hasConversation;
+  readonly sharedMessageCount = this.researchService.messageCount;
 
   // Resize state
   chatHeight = signal<number | null>(null); // null means use CSS default
@@ -193,7 +213,7 @@ export class ResearchPanelComponent implements AfterViewChecked {
       } else {
         // Context was cleared - reset to initial state
         this.insight.set(null);
-        this.chatHistory.set([]);
+        // Note: Don't clear shared conversation state here - let user explicitly clear it
         this.isLoading.set(false);
         this.isTyping.set(false);
       }
@@ -272,14 +292,29 @@ export class ResearchPanelComponent implements AfterViewChecked {
     const userMessage = this.chatInput;
     const ctx = this.context();
 
-    this.chatHistory.update((h) => [
-      ...h,
-      {
-        role: 'user',
-        message: userMessage,
-        timestamp: new Date(),
-      },
-    ]);
+    // Add to shared ResearchService state (chatHistory is derived from this)
+    this.researchService.addUserMessage(userMessage);
+    if (ctx) {
+      // Convert AnalysisContext to ResearchContext format
+      this.researchService.setContext({
+        event: ctx.event
+          ? {
+              id: ctx.event.id,
+              type: ctx.event.type,
+              label: ctx.event.label,
+            }
+          : undefined,
+        timeWindow: ctx.timeWindow
+          ? {
+              start: ctx.timeWindow.start.toISOString(),
+              end: ctx.timeWindow.end.toISOString(),
+            }
+          : undefined,
+        journeyStage: ctx.journeyStage?.stage,
+        quadrant: ctx.quadrant,
+      });
+    }
+
     this.chatInput = '';
     this.shouldScrollToBottom = true;
 
@@ -298,14 +333,10 @@ export class ResearchPanelComponent implements AfterViewChecked {
           this.isTyping.set(false);
           // Format the response from the insight
           const response = this.formatInsightAsResponse(insight, userMessage);
-          this.chatHistory.update((h) => [
-            ...h,
-            {
-              role: 'ai',
-              message: response,
-              timestamp: new Date(),
-            },
-          ]);
+
+          // Add to shared ResearchService state (chatHistory is derived from this)
+          this.researchService.addAssistantMessage(response);
+
           this.shouldScrollToBottom = true;
           // Update suggested questions from the new response
           if (insight.suggestedQuestions?.length) {
@@ -314,6 +345,8 @@ export class ResearchPanelComponent implements AfterViewChecked {
                 ? { ...current, suggestedQuestions: insight.suggestedQuestions }
                 : current,
             );
+            // Also update shared suggestions
+            this.researchService.setSuggestions(insight.suggestedQuestions);
           }
         },
         error: (err) => {
@@ -321,14 +354,8 @@ export class ResearchPanelComponent implements AfterViewChecked {
           this.isTyping.set(false);
           // Fallback to generated response on error
           const response = this.generateChatResponse(userMessage);
-          this.chatHistory.update((h) => [
-            ...h,
-            {
-              role: 'ai',
-              message: response,
-              timestamp: new Date(),
-            },
-          ]);
+          // Add to shared state
+          this.researchService.addAssistantMessage(response);
           this.shouldScrollToBottom = true;
         },
       });
@@ -338,17 +365,18 @@ export class ResearchPanelComponent implements AfterViewChecked {
       setTimeout(() => {
         this.isTyping.set(false);
         const response = this.generateChatResponse(userMessage);
-        this.chatHistory.update((h) => [
-          ...h,
-          {
-            role: 'ai',
-            message: response,
-            timestamp: new Date(),
-          },
-        ]);
+        // Add to shared state
+        this.researchService.addAssistantMessage(response);
         this.shouldScrollToBottom = true;
       }, thinkTime);
     }
+  }
+
+  /**
+   * Navigate to the full research page to continue the conversation
+   */
+  openFullResearchPage(): void {
+    this.router.navigate(['/research']);
   }
 
   /**

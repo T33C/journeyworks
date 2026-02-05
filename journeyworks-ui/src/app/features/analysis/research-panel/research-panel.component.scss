@@ -1,4 +1,7 @@
-// Animations
+@use "styles/variables" as *;
+@use "styles/mixins" as *;
+
+// Animations - must be defined in component scope
 @keyframes fadeSlideIn {
   from {
     opacity: 0;
@@ -7,6 +10,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes typingBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-8px);
   }
 }
 
@@ -20,48 +34,48 @@
 }
 
 .research-panel-container {
-  display: flex;
-  flex-direction: column;
+  @include flex-column;
   height: 100%;
   max-height: 100%;
   overflow: hidden;
   box-sizing: border-box;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  @include card-layout;
 }
 
 // Scrollable content area
 .scrollable-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px 16px 20px;
+  padding: 0 $spacing-lg $spacing-md $spacing-lg;
   min-height: 0; // Important for flex overflow
+  position: relative;
+  z-index: 1; // Lower than chat-section to ensure proper stacking
 }
 
 // Header
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 40px 16px 20px;
+  @include flex-between;
+  padding: $spacing-md ($spacing-xl + $spacing-lg) $spacing-md $spacing-lg;
   flex-shrink: 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid $border-light;
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+  background: #ffffff; // Explicit white background
+  position: relative;
+  z-index: 10; // Stay above scrollable content
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: $spacing-sm;
   flex-shrink: 0;
   min-width: 0;
 
   mat-icon {
-    color: #7c4dff;
+    color: $ai-primary;
     font-size: 28px;
     width: 28px;
     height: 28px;
@@ -70,17 +84,17 @@
 
   h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: $font-size-lg;
     font-weight: 600;
-    color: #1a237e;
+    color: $ai-primary-dark;
     white-space: nowrap;
   }
 }
 
 .context-chip {
-  background-color: #e8eaf6 !important;
-  color: #3949ab !important;
-  font-size: 11px !important;
+  background-color: $chat-suggestion-bg !important;
+  color: $chat-suggestion-text !important;
+  font-size: $font-size-xs !important;
   max-width: 150px;
   min-width: 0;
   flex-shrink: 1;
@@ -94,21 +108,19 @@
 
 // Loading
 .loading-state {
-  display: flex;
+  @include flex-center;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 40px 0;
-  color: #666;
-  font-size: 13px;
+  gap: $spacing-sm + 4px;
+  padding: $spacing-xl 0;
+  color: $text-secondary;
+  font-size: $font-size-sm;
 }
 
 // Empty State
 .empty-state {
-  display: flex;
-  flex-direction: column;
+  @include flex-column;
   align-items: center;
-  padding: 40px 20px;
+  padding: $spacing-xl $spacing-lg;
   text-align: center;
   animation: fadeSlideIn 0.5s ease-out;
 }
@@ -117,49 +129,50 @@
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
+  background: linear-gradient(
+    135deg,
+    $chat-suggestion-bg 0%,
+    $chat-suggestion-hover 100%
+  );
+  @include flex-center;
+  margin-bottom: $spacing-md;
 
   mat-icon {
     font-size: 36px;
     width: 36px;
     height: 36px;
-    color: #5c6bc0;
+    color: $ai-primary-light;
   }
 }
 
 .empty-state h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
+  margin: 0 0 $spacing-sm 0;
+  font-size: $font-size-lg;
   font-weight: 600;
-  color: #1a237e;
+  color: $ai-primary-dark;
 }
 
 .empty-description {
-  margin: 0 0 24px 0;
-  font-size: 14px;
-  color: #666;
+  margin: 0 0 $spacing-lg 0;
+  font-size: $font-size-sm;
+  color: $text-secondary;
   max-width: 280px;
 }
 
 .hint-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  @include flex-column;
+  gap: $spacing-sm;
   width: 100%;
 }
 
 .hint-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #fafafa;
-  border-radius: 10px;
-  border: 1px solid #e0e0e0;
+  gap: $spacing-sm + 4px;
+  padding: $spacing-sm + 4px $spacing-md;
+  background: $bg-surface;
+  border-radius: $border-radius-md;
+  border: 1px solid $border-default;
   text-align: left;
   transition: all 0.2s ease;
 
@@ -167,80 +180,78 @@
     font-size: 20px;
     width: 20px;
     height: 20px;
-    color: #7c4dff;
+    color: $ai-primary;
     flex-shrink: 0;
   }
 
   span {
-    font-size: 13px;
-    color: #444;
-    line-height: 1.4;
+    font-size: $font-size-sm;
+    color: $text-primary;
+    line-height: $line-height-tight;
 
     strong {
-      color: #3949ab;
+      color: $chat-suggestion-text;
     }
   }
 
   &:hover {
-    background: #f0f4ff;
-    border-color: #c5cae9;
+    background: $evidence-hover-bg;
+    border-color: $chat-input-border;
     transform: translateX(4px);
   }
 }
 
 // Summary
 .summary-section {
-  margin-bottom: 16px;
+  margin-bottom: $spacing-md;
   animation: fadeSlideIn 0.4s ease-out;
 }
 
 .summary-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  padding-right: 40px;
+  @include flex-between;
+  margin-bottom: $spacing-sm;
+  padding-right: $spacing-xl + $spacing-lg;
 
   h3 {
     margin: 0;
-    font-size: 14px;
+    font-size: $font-size-sm;
     font-weight: 600;
-    color: #333;
+    color: $text-primary;
   }
 }
 
 .confidence-chip {
-  font-size: 10px !important;
+  font-size: $font-size-xs !important;
 
   &.confidence-high {
-    background-color: #c8e6c9 !important;
-    color: #2e7d32 !important;
+    background-color: rgba($confidence-high, 0.2) !important;
+    color: $confidence-high !important;
   }
 
   &.confidence-medium {
-    background-color: #fff3e0 !important;
-    color: #e65100 !important;
+    background-color: rgba($confidence-medium, 0.15) !important;
+    color: $confidence-medium !important;
   }
 
   &.confidence-low {
-    background-color: #ffcdd2 !important;
-    color: #c62828 !important;
+    background-color: rgba($confidence-low, 0.15) !important;
+    color: $confidence-low !important;
   }
 }
 
 .summary-text {
   margin: 0;
-  font-size: 14px;
+  font-size: $font-size-sm;
   line-height: 1.7;
-  color: #333;
-  padding: 12px;
-  background: linear-gradient(135deg, #f3e5f5 0%, #fff 60%);
-  border-left: 3px solid #7c4dff;
-  border-radius: 0 8px 8px 0;
+  color: $text-primary;
+  padding: $spacing-sm + 4px;
+  background: linear-gradient(135deg, $ai-message-bg 0%, $bg-card 60%);
+  border-left: 3px solid $evidence-border;
+  border-radius: 0 $border-radius-md $border-radius-md 0;
 }
 
 mat-divider {
-  margin: 16px 0;
+  margin: $spacing-md 0;
 }
 
 // Drivers
@@ -248,10 +259,10 @@ mat-divider {
   animation: fadeSlideIn 0.4s ease-out 0.1s both;
 
   h3 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
+    margin: 0 0 $spacing-sm 0;
+    font-size: $font-size-sm;
     font-weight: 600;
-    color: #333;
+    color: $text-primary;
   }
 }
 
@@ -263,10 +274,10 @@ mat-divider {
   li {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 6px 0;
-    font-size: 13px;
-    color: #444;
+    gap: $spacing-sm;
+    padding: $spacing-xs + 2px 0;
+    font-size: $font-size-sm;
+    color: $text-primary;
     animation: fadeIn 0.3s ease-out both;
 
     // Staggered animation delays
@@ -287,7 +298,7 @@ mat-divider {
       font-size: 16px;
       width: 16px;
       height: 16px;
-      color: #5c6bc0;
+      color: $ai-primary-light;
       flex-shrink: 0;
       margin-top: 2px;
     }
@@ -297,46 +308,41 @@ mat-divider {
 // Evidence Panel
 .evidence-panel,
 .reasoning-panel {
-  margin: 8px 0;
+  margin: $spacing-sm 0;
   box-shadow: none !important;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px !important;
+  border: 1px solid $border-default;
+  border-radius: $border-radius-md !important;
 
   mat-panel-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: $spacing-sm;
+    font-size: $font-size-sm;
     font-weight: 500;
 
     mat-icon {
       font-size: 18px;
       width: 18px;
       height: 18px;
-      color: #5c6bc0;
+      color: $ai-primary-light;
     }
   }
 }
 
 .evidence-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  @include flex-column;
+  gap: $spacing-sm + 4px;
 }
 
 .evidence-item {
-  padding: 10px;
-  background: #fafafa;
-  border-radius: 6px;
-  border-left: 3px solid #5c6bc0;
-  transition: all 0.2s ease;
+  @include evidence-card;
 
   &.clickable {
     cursor: pointer;
 
     &:hover {
-      background: #f0f4ff;
-      border-left-color: #3949ab;
+      background: $evidence-hover-bg;
+      border-left-color: $chat-suggestion-text;
       transform: translateX(2px);
     }
   }
@@ -345,47 +351,47 @@ mat-divider {
 .link-indicator {
   display: flex;
   align-items: center;
-  margin-left: 8px;
+  margin-left: $spacing-sm;
 
   mat-icon {
     font-size: 12px;
     width: 12px;
     height: 12px;
-    color: #5c6bc0;
+    color: $ai-primary-light;
   }
 }
 
 .evidence-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-xs + 2px;
 
   mat-icon {
     font-size: 14px;
     width: 14px;
     height: 14px;
-    color: #666;
+    color: $text-secondary;
   }
 
   .evidence-source {
     font-weight: 500;
-    font-size: 12px;
-    color: #333;
+    font-size: $font-size-xs;
+    color: $text-primary;
   }
 
   .evidence-time {
-    font-size: 11px;
-    color: #999;
+    font-size: $font-size-xs;
+    color: $text-hint;
     margin-left: auto;
   }
 }
 
 .evidence-excerpt {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #555;
+  margin: 0 0 $spacing-sm 0;
+  font-size: $font-size-xs;
+  line-height: $line-height-base;
+  color: $text-secondary;
   font-style: italic;
 }
 
@@ -395,122 +401,127 @@ mat-divider {
 }
 
 .sentiment-badge {
-  font-size: 10px;
+  font-size: $font-size-xs;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 2px $spacing-xs + 2px;
+  border-radius: $border-radius-md;
 
   &.positive {
-    background: #c8e6c9;
-    color: #2e7d32;
+    background: rgba($confidence-high, 0.2);
+    color: $confidence-high;
   }
   &.warning {
-    background: #fff3e0;
-    color: #e65100;
+    background: rgba($confidence-medium, 0.15);
+    color: $confidence-medium;
   }
   &.negative {
-    background: #ffcdd2;
-    color: #c62828;
+    background: rgba($confidence-low, 0.15);
+    color: $confidence-low;
   }
 }
 
 .reasoning-text {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #444;
+  font-size: $font-size-sm;
+  line-height: $line-height-base;
+  color: $text-primary;
 }
 
 // Actions
 .actions-section {
-  margin-top: 16px;
+  margin-top: $spacing-md;
 
   h3 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
+    margin: 0 0 $spacing-sm 0;
+    font-size: $font-size-sm;
     font-weight: 600;
-    color: #333;
+    color: $text-primary;
   }
 }
 
 .action-chips {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  @include flex-column;
+  gap: $spacing-sm;
 }
 
 .action-chip {
-  background-color: #e3f2fd !important;
-  color: #1565c0 !important;
-  font-size: 11px !important;
+  background-color: $user-message-bg !important;
+  color: $user-avatar-color !important;
+  font-size: $font-size-xs !important;
   white-space: normal !important;
   height: auto !important;
-  padding: 8px 12px !important;
+  padding: $spacing-sm $spacing-sm + 4px !important;
 
   mat-icon {
     font-size: 14px !important;
     width: 14px !important;
     height: 14px !important;
-    margin-right: 6px;
+    margin-right: $spacing-xs + 2px;
   }
 }
 
 // Follow-Up Question Panel
 .followup-panel {
-  margin: 8px 0;
+  margin: $spacing-sm 0;
   box-shadow: none !important;
-  border: 1px solid #d1c4e9;
-  border-radius: 8px !important;
-  background: linear-gradient(135deg, #f3e5f5 0%, #ede7f6 100%) !important;
+  border: 1px solid lighten($ai-primary, 30%);
+  border-radius: $border-radius-md !important;
+  background: linear-gradient(
+    135deg,
+    $ai-message-bg-start 0%,
+    lighten($ai-message-bg-end, 3%) 100%
+  ) !important;
 
   mat-panel-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: $spacing-sm;
+    font-size: $font-size-sm;
     font-weight: 600;
-    color: #6a1b9a;
+    color: darken($ai-primary, 15%);
 
     mat-icon {
       font-size: 18px;
       width: 18px;
       height: 18px;
-      color: #7c4dff;
+      color: $ai-primary;
     }
   }
 }
 
 .followup-answer {
-  font-size: 13px;
+  font-size: $font-size-sm;
   line-height: 1.7;
-  color: #333;
-  padding: 12px;
-  background: white;
-  border-radius: 6px;
-  border-left: 3px solid #7c4dff;
+  color: $text-primary;
+  padding: $spacing-sm + 4px;
+  background: $bg-card;
+  border-radius: $border-radius-sm;
+  border-left: 3px solid $evidence-border;
 }
 
 // Chat
 .chat-section {
   flex: 0 0 auto;
-  padding: 12px 20px 16px 20px;
-  border-top: 1px solid #e0e0e0;
-  background: white;
-  display: flex;
-  flex-direction: column;
+  padding: $spacing-sm + 4px $spacing-lg $spacing-md $spacing-lg;
+  border-top: 1px solid $border-default;
+  background: #ffffff; // Explicit white background to prevent content showing through
+  @include flex-column;
   box-sizing: border-box;
   min-height: 140px;
+  position: relative;
+  z-index: 10; // Ensure chat section stays above scrollable content
 
   &.expanded {
     flex: 1 1 auto;
     min-height: 200px;
-    max-height: 50%;
+    max-height: 70%;
   }
 
   // When resizing, use explicit height and ignore expanded state
   &.resizing {
     flex: 0 0 auto !important;
     max-height: none !important;
+    z-index: 20; // Higher z-index when actively resizing
   }
 }
 
@@ -518,21 +529,21 @@ mat-divider {
 .resize-handle {
   position: relative;
   height: 12px;
-  margin: -12px -20px 8px -20px;
+  margin: -12px (-$spacing-lg) $spacing-sm (-$spacing-lg);
   cursor: ns-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @include flex-center;
+  background: #ffffff; // Cover any content underneath
+  z-index: 15;
 
   &:hover .handle-bar {
-    background: #7c4dff;
+    background: $ai-primary;
     width: 60px;
   }
 
   .handle-bar {
     width: 40px;
     height: 4px;
-    background: #d0d0d0;
+    background: lighten($border-default, 5%);
     border-radius: 2px;
     transition: all 0.2s ease;
   }
@@ -540,36 +551,44 @@ mat-divider {
 
 // Chat Header
 .chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  @include flex-between;
+  margin-bottom: $spacing-sm;
   flex-shrink: 0;
+  background: #ffffff; // Explicit white background
+  position: relative;
+  z-index: 5;
 }
 
 .chat-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: $spacing-xs + 2px;
+  font-size: $font-size-sm;
   font-weight: 600;
-  color: #333;
+  color: $text-primary;
 
   mat-icon {
     font-size: 18px;
     width: 18px;
     height: 18px;
-    color: #7c4dff;
+    color: $ai-primary;
   }
 
   .message-count {
-    font-size: 11px;
-    color: #666;
+    font-size: $font-size-xs;
+    color: $text-secondary;
     font-weight: 400;
   }
 }
 
-.expand-btn {
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.expand-btn,
+.open-full-btn {
   width: 32px !important;
   height: 32px !important;
   flex-shrink: 0;
@@ -578,11 +597,11 @@ mat-divider {
     font-size: 20px;
     width: 20px;
     height: 20px;
-    color: #5c6bc0;
+    color: $ai-primary-light;
   }
 
   &:hover mat-icon {
-    color: #3949ab;
+    color: $chat-suggestion-text;
   }
 }
 
@@ -590,32 +609,38 @@ mat-divider {
 .suggested-questions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: $spacing-xs + 2px;
+  margin-bottom: $spacing-sm;
   align-items: center;
   flex-shrink: 0;
+  background: #ffffff; // Explicit white background
+  position: relative;
+  z-index: 5;
 }
 
 .suggestion-label {
-  font-size: 11px;
-  color: #666;
-  margin-right: 4px;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  margin-right: $spacing-xs;
 }
 
 .suggestion-chip {
-  background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
-  border: none;
-  border-radius: 16px;
-  padding: 6px 12px;
-  font-size: 11px;
-  color: #3949ab;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  @include chat-suggestion-chip;
+  background: linear-gradient(
+    135deg,
+    $chat-suggestion-bg 0%,
+    $chat-suggestion-hover 100%
+  );
+  padding: $spacing-xs + 2px $spacing-sm + 4px;
+  font-size: $font-size-xs;
 
   &:hover {
-    background: linear-gradient(135deg, #c5cae9 0%, #9fa8da 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(63, 81, 181, 0.2);
+    background: linear-gradient(
+      135deg,
+      $chat-suggestion-hover 0%,
+      darken($chat-suggestion-hover, 10%) 100%
+    );
+    box-shadow: $shadow-sm;
   }
 
   &:active {
@@ -624,19 +649,23 @@ mat-divider {
 }
 
 .chat-history {
-  flex: 1;
+  flex: 1 1 0;
   overflow-y: auto;
-  margin-bottom: 8px;
+  overflow-x: hidden;
+  margin-bottom: $spacing-sm;
   scroll-behavior: smooth;
-  min-height: 0; // Important for flex overflow
+  min-height: 0; // Critical for flex overflow to work
+  background: #ffffff; // Solid background
+  position: relative;
+  z-index: 5;
 }
 
 .chat-message {
   display: flex;
-  gap: 10px;
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 12px;
+  gap: $spacing-sm;
+  padding: $spacing-sm + 4px;
+  margin-bottom: $spacing-sm;
+  border-radius: $border-radius-md;
   animation: fadeSlideIn 0.3s ease-out;
 
   .message-avatar {
@@ -644,9 +673,7 @@ mat-divider {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @include flex-center;
 
     mat-icon {
       font-size: 18px;
@@ -658,80 +685,166 @@ mat-divider {
   .message-content {
     flex: 1;
     min-width: 0;
+    font-size: $font-size-sm;
+    line-height: $line-height-base;
+    word-wrap: break-word;
+
+    // Markdown rendered content styles
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: $spacing-md 0 $spacing-sm 0;
+      font-weight: 600;
+      color: $text-primary;
+      line-height: 1.3;
+
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+
+    h1 {
+      font-size: 1.25em;
+    }
+    h2 {
+      font-size: 1.15em;
+    }
+    h3 {
+      font-size: 1.05em;
+    }
+    h4 {
+      font-size: 1em;
+    }
 
     p {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-wrap: break-word;
+      margin: 0 0 $spacing-sm 0;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    strong {
+      font-weight: 600;
+      color: $text-primary;
+    }
+
+    em {
+      font-style: italic;
+    }
+
+    ul,
+    ol {
+      margin: $spacing-sm 0;
+      padding-left: $spacing-md + 4px;
+
+      li {
+        margin-bottom: $spacing-xs;
+        line-height: 1.5;
+      }
+    }
+
+    ul {
+      list-style-type: disc;
+
+      &.sub-list {
+        margin: $spacing-xs 0 $spacing-xs $spacing-md;
+        padding-left: $spacing-md;
+        list-style-type: circle;
+      }
+    }
+
+    ol {
+      list-style-type: decimal;
+
+      > li {
+        margin-bottom: $spacing-sm;
+
+        > ul.sub-list {
+          margin-top: $spacing-xs;
+        }
+      }
+    }
+
+    code {
+      background: rgba(0, 0, 0, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "Menlo", "Monaco", "Consolas", monospace;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: rgba(0, 0, 0, 0.05);
+      padding: $spacing-sm;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: $spacing-sm 0;
+
+      code {
+        background: none;
+        padding: 0;
+      }
+    }
+
+    blockquote {
+      border-left: 3px solid $ai-primary;
+      padding-left: $spacing-sm;
+      margin: $spacing-sm 0;
+      color: $text-secondary;
+      font-style: italic;
+    }
+
+    a {
+      color: $ai-primary;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
   }
 
   &.user {
-    background: #e3f2fd;
+    background: $user-message-bg;
 
     .message-avatar {
-      background: #bbdefb;
+      background: $user-avatar-bg;
       mat-icon {
-        color: #1565c0;
+        color: $user-avatar-color;
       }
     }
   }
 
   &.ai {
-    background: linear-gradient(135deg, #f3e5f5 0%, #ede7f6 100%);
+    background: linear-gradient(
+      135deg,
+      $ai-message-bg-start 0%,
+      lighten($ai-message-bg-end, 2%) 100%
+    );
 
     .message-avatar {
-      background: #e1bee7;
+      background: $ai-avatar-bg;
       mat-icon {
-        color: #7c4dff;
+        color: $ai-primary;
       }
     }
   }
 }
 
-// Typing Indicator
-@keyframes typingBounce {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-  }
-  30% {
-    transform: translateY(-4px);
-  }
-}
-
+// Typing Indicator (using global animation from mixins)
 .typing-indicator {
-  display: flex;
-  gap: 4px;
-  padding: 4px 0;
-
-  span {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #9575cd;
-    animation: typingBounce 1.4s infinite ease-in-out;
-
-    &:nth-child(1) {
-      animation-delay: 0s;
-    }
-    &:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-    &:nth-child(3) {
-      animation-delay: 0.4s;
-    }
-  }
+  @include typing-indicator;
 }
 
 .chat-input-row {
   display: flex;
-  gap: 8px;
+  gap: $spacing-sm;
   align-items: center;
   flex-shrink: 0;
+  margin-top: auto; // Push to bottom of container
+  padding-top: $spacing-sm; // Add some spacing from chat history
 
   .chat-field {
     flex: 1;

@@ -221,16 +221,26 @@
           <span class="message-count">({{ chatHistory().length }})</span>
         }
       </span>
-      <button
-        mat-icon-button
-        class="expand-btn"
-        (click)="toggleChatExpanded()"
-        [matTooltip]="isChatExpanded() ? 'Collapse chat' : 'Expand chat'"
-      >
-        <mat-icon>{{
-          isChatExpanded() ? "expand_more" : "expand_less"
-        }}</mat-icon>
-      </button>
+      <div class="chat-header-actions">
+        <button
+          mat-icon-button
+          class="expand-btn"
+          (click)="toggleChatExpanded()"
+          [matTooltip]="isChatExpanded() ? 'Collapse chat' : 'Expand chat'"
+        >
+          <mat-icon>{{
+            isChatExpanded() ? "expand_more" : "expand_less"
+          }}</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          class="open-full-btn"
+          (click)="openFullResearchPage()"
+          matTooltip="Open full research page"
+        >
+          <mat-icon>open_in_new</mat-icon>
+        </button>
+      </div>
     </div>
 
     <!-- Suggested Questions -->
@@ -246,38 +256,37 @@
       }
     </div>
 
-    @if (chatHistory().length > 0) {
-      <div class="chat-history" #chatHistoryContainer>
-        @for (msg of chatHistory(); track $index) {
-          <div class="chat-message" [ngClass]="msg.role">
-            <div class="message-avatar">
-              <mat-icon>{{
-                msg.role === "user" ? "person" : "psychology"
-              }}</mat-icon>
-            </div>
-            <div class="message-content">
-              <p>{{ msg.message }}</p>
-            </div>
+    <div class="chat-history" #chatHistoryContainer>
+      @for (msg of chatHistory(); track $index) {
+        <div class="chat-message" [ngClass]="msg.role">
+          <div class="message-avatar">
+            <mat-icon>{{
+              msg.role === "user" ? "person" : "psychology"
+            }}</mat-icon>
           </div>
-        }
-      </div>
-    }
+          <div
+            class="message-content"
+            [innerHTML]="msg.message | markdown"
+          ></div>
+        </div>
+      }
 
-    <!-- Typing Indicator -->
-    @if (isTyping()) {
-      <div class="chat-message ai typing">
-        <div class="message-avatar">
-          <mat-icon>psychology</mat-icon>
-        </div>
-        <div class="message-content">
-          <div class="typing-indicator">
-            <span></span>
-            <span></span>
-            <span></span>
+      <!-- Typing Indicator (inside scrollable area) -->
+      @if (isTyping()) {
+        <div class="chat-message ai typing">
+          <div class="message-avatar">
+            <mat-icon>psychology</mat-icon>
+          </div>
+          <div class="message-content">
+            <div class="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </div>
         </div>
-      </div>
-    }
+      }
+    </div>
 
     <div class="chat-input-row">
       <mat-form-field appearance="outline" class="chat-field">

@@ -2,7 +2,6 @@ import {
   Component,
   OnInit,
   inject,
-  signal,
   ViewChild,
   ElementRef,
   AfterViewChecked,
@@ -18,12 +17,12 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
+import { MarkdownPipe } from '../../shared/pipes/markdown.pipe';
 import {
   ResearchService,
-  ConversationMessage,
   ResearchSource,
-  ReasoningStep,
 } from '../../core/services/research.service';
 
 @Component({
@@ -41,30 +40,43 @@ import {
     MatChipsModule,
     MatExpansionModule,
     MatTooltipModule,
+    MatSnackBarModule,
+    MarkdownPipe,
   ],
   templateUrl: './research.component.html',
   styleUrl: './research.component.scss',
 })
 export class ResearchComponent implements OnInit, AfterViewChecked {
-  private readonly researchService = inject(ResearchService);
+  // Inject the shared research service
+  readonly researchService = inject(ResearchService);
+  private readonly snackBar = inject(MatSnackBar);
 
   @ViewChild('messagesContainer') messagesContainer!: ElementRef;
   @ViewChild('queryInput') queryInput!: ElementRef;
 
-  messages = signal<ConversationMessage[]>([]);
+  // Use shared state from service - these are readonly signals
+  readonly messages = this.researchService.messages;
+  readonly isLoading = this.researchService.isLoading;
+  readonly sessionId = this.researchService.sessionId;
+  readonly suggestions = this.researchService.suggestions;
+  readonly lastReasoningSteps = this.researchService.lastReasoningSteps;
+  readonly lastSources = this.researchService.lastSources;
+  readonly isApiAvailable = this.researchService.isApiAvailable;
+  readonly hasConversation = this.researchService.hasConversation;
+  readonly currentContext = this.researchService.currentContext;
+
+  // Local component state
   currentQuery = '';
-  isLoading = signal(false);
-  sessionId = signal<string>(this.generateSessionId());
-  suggestions = signal<string[]>([]);
-  currentThinking = signal<string>('');
-  showReasoning = signal(false);
-  lastReasoningSteps = signal<ReasoningStep[]>([]);
-  lastSources = signal<ResearchSource[]>([]);
+  showReasoning = false;
+  currentThinking = '';
 
   private shouldScroll = false;
 
   ngOnInit(): void {
-    this.loadSuggestions();
+    // Load suggestions if no conversation exists
+    if (!this.hasConversation()) {
+      this.loadInitialSuggestions();
+    }
   }
 
   ngAfterViewChecked(): void {
@@ -80,63 +92,38 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
     const query = this.currentQuery.trim();
     this.currentQuery = '';
 
-    // Add user message
-    const userMessage: ConversationMessage = {
-      id: this.generateMessageId(),
-      role: 'user',
-      content: query,
-      timestamp: new Date().toISOString(),
-    };
-    this.messages.update((msgs) => [...msgs, userMessage]);
+    // Add user message to shared state
+    this.researchService.addUserMessage(query);
     this.shouldScroll = true;
 
-    // Send to API
-    this.isLoading.set(true);
-    this.currentThinking.set('Analyzing your question...');
+    // Send to API using shared service
+    this.currentThinking = 'Analyzing your question...';
 
-    this.researchService
-      .query({
-        query,
-        sessionId: this.sessionId(),
-      })
-      .subscribe({
-        next: (response) => {
-          // Add assistant message
-          const assistantMessage: ConversationMessage = {
-            id: this.generateMessageId(),
-            role: 'assistant',
-            content: response.answer,
-            timestamp: new Date().toISOString(),
-            sources: response.sources,
-          };
-          this.messages.update((msgs) => [...msgs, assistantMessage]);
-          this.lastReasoningSteps.set(response.reasoning);
-          this.lastSources.set(response.sources);
-          this.suggestions.set(response.suggestedFollowUps);
-          this.isLoading.set(false);
-          this.currentThinking.set('');
-          this.shouldScroll = true;
-        },
-        error: (err) => {
-          console.error('Research query failed', err);
-          // Add mock response for demo
-          const mockResponse = this.getMockResponse(query);
-          const assistantMessage: ConversationMessage = {
-            id: this.generateMessageId(),
-            role: 'assistant',
-            content: mockResponse.answer,
-            timestamp: new Date().toISOString(),
-            sources: mockResponse.sources,
-          };
-          this.messages.update((msgs) => [...msgs, assistantMessage]);
-          this.lastReasoningSteps.set(mockResponse.reasoning);
-          this.lastSources.set(mockResponse.sources);
-          this.suggestions.set(mockResponse.suggestions);
-          this.isLoading.set(false);
-          this.currentThinking.set('');
-          this.shouldScroll = true;
-        },
-      });
+    this.researchService.sendMessage(query).subscribe({
+      next: (response) => {
+        // Add assistant message to shared state
+        this.researchService.addAssistantMessage(
+          response.answer,
+          response.sources,
+        );
+        this.currentThinking = '';
+        this.shouldScroll = true;
+      },
+      error: (err) => {
+        console.error('Research query failed', err);
+
+        // Add error message to conversation
+        this.researchService.addAssistantMessage(this.getErrorMessage(err));
+        this.currentThinking = '';
+        this.shouldScroll = true;
+
+        this.snackBar.open(
+          'Research service unavailable. Please ensure the API is running.',
+          'Dismiss',
+          { duration: 5000 },
+        );
+      },
+    });
   }
 
   useSuggestion(suggestion: string): void {
@@ -145,25 +132,57 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
   }
 
   clearConversation(): void {
-    this.messages.set([]);
-    this.sessionId.set(this.generateSessionId());
-    this.lastReasoningSteps.set([]);
-    this.lastSources.set([]);
-    this.loadSuggestions();
+    this.researchService.clearConversation();
   }
 
   toggleReasoning(): void {
-    this.showReasoning.update((v) => !v);
+    this.showReasoning = !this.showReasoning;
   }
 
-  private loadSuggestions(): void {
-    this.suggestions.set([
-      'What are the main customer pain points this month?',
-      'Show me sentiment trends for enterprise customers',
-      'Which customers are at risk of churning?',
-      'Summarize escalated cases from last week',
-      'What topics are trending in customer communications?',
-    ]);
+  private loadInitialSuggestions(): void {
+    // Try to get suggestions from API
+    this.researchService.getSuggestions(this.sessionId()).subscribe({
+      next: (suggestions) => {
+        if (suggestions?.length) {
+          this.researchService.setSuggestions(suggestions);
+        } else {
+          this.researchService.loadDefaultSuggestions();
+        }
+      },
+      error: () => {
+        this.researchService.loadDefaultSuggestions();
+      },
+    });
+  }
+
+  private getErrorMessage(err: unknown): string {
+    const error = err as { status?: number; message?: string };
+
+    if (error.status === 0) {
+      return `**Unable to connect to the research service.**
+
+The API server may not be running. Please ensure:
+1. The backend API is started (\`./scripts/start.sh --dev\`)
+2. The service is accessible at the configured endpoint
+
+Once the service is available, try your question again.`;
+    }
+
+    if (error.status === 503 || error.status === 502) {
+      return `**The research service is temporarily unavailable.**
+
+This may be because:
+- The LLM service is initializing
+- The analysis service is not running
+
+Please wait a moment and try again.`;
+    }
+
+    return `**Something went wrong while processing your request.**
+
+Error: ${error.message || 'Unknown error'}
+
+Please try again or rephrase your question.`;
   }
 
   private scrollToBottom(): void {
@@ -171,14 +190,6 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
       const element = this.messagesContainer.nativeElement;
       element.scrollTop = element.scrollHeight;
     }
-  }
-
-  private generateSessionId(): string {
-    return `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  }
-
-  private generateMessageId(): string {
-    return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   }
 
   getSourceIcon(type: string): string {
@@ -190,73 +201,5 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
       analysis: 'analytics',
     };
     return icons[type] || 'description';
-  }
-
-  private getMockResponse(query: string): {
-    answer: string;
-    sources: ResearchSource[];
-    reasoning: ReasoningStep[];
-    suggestions: string[];
-  } {
-    return {
-      answer: `Based on my analysis of customer communications data, here's what I found regarding "${query}":\n\n**Key Findings:**\n\n1. **Sentiment Analysis**: Overall customer sentiment has improved by 12% over the past month, with enterprise clients showing the most positive trend.\n\n2. **Common Topics**: The most frequently discussed topics include account access (23%), portfolio performance (18%), and fee structures (15%).\n\n3. **Risk Indicators**: 8 customers are currently flagged as at-risk based on declining sentiment scores and increased complaint frequency.\n\n**Recommendations:**\n- Proactively reach out to at-risk customers\n- Address the recurring account access issues\n- Consider fee structure transparency improvements`,
-      sources: [
-        {
-          type: 'communication',
-          id: 'comm-1',
-          title: 'Enterprise Client Feedback',
-          snippet: 'Recent communications show positive sentiment...',
-          relevanceScore: 0.92,
-        },
-        {
-          type: 'analysis',
-          id: 'analysis-1',
-          title: 'Monthly Sentiment Report',
-          snippet: 'Sentiment trends for March 2024...',
-          relevanceScore: 0.88,
-        },
-        {
-          type: 'case',
-          id: 'case-1',
-          title: 'Escalation Report',
-          snippet: 'Summary of escalated cases...',
-          relevanceScore: 0.75,
-        },
-      ],
-      reasoning: [
-        {
-          step: 1,
-          thought:
-            'I need to understand what information the user is looking for',
-          action: 'parse_query',
-          observation: 'User wants insights about customer data',
-        },
-        {
-          step: 2,
-          thought:
-            'I should search the knowledge base for relevant communications',
-          action: 'search_knowledge_base',
-          observation: 'Found 47 relevant documents',
-        },
-        {
-          step: 3,
-          thought: 'Let me analyze sentiment trends',
-          action: 'analyze_sentiment_trends',
-          observation: 'Sentiment improved 12% month-over-month',
-        },
-        {
-          step: 4,
-          thought: 'I should identify at-risk customers',
-          action: 'analyze_customer_health',
-          observation: '8 customers flagged as at-risk',
-        },
-      ],
-      suggestions: [
-        'Tell me more about the at-risk customers',
-        'What are the specific account access issues?',
-        'Compare sentiment between customer tiers',
-        'Show me the top escalated cases',
-      ],
-    };
   }
 }

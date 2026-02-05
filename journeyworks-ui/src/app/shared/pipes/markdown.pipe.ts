@@ -20,83 +20,189 @@ export class MarkdownPipe implements PipeTransform {
       return '';
     }
 
-    let html = value;
+    // Process the text line by line for better list handling
+    const lines = value.split('\n');
+    const result: string[] = [];
+    let inList = false;
+    let listType: 'ul' | 'ol' | null = null;
+    let inSubList = false;
 
-    // Convert headers (h1-h4)
-    html = html.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
-    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
 
-    // Convert bold (**text** or __text__)
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+      // Convert headers (h1-h4)
+      if (line.match(/^####\s/)) {
+        if (inList) {
+          result.push(inSubList ? '</ul>' : '');
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          inSubList = false;
+          listType = null;
+        }
+        result.push(line.replace(/^####\s(.*)$/, '<h4>$1</h4>'));
+        continue;
+      }
+      if (line.match(/^###\s/)) {
+        if (inList) {
+          result.push(inSubList ? '</ul>' : '');
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          inSubList = false;
+          listType = null;
+        }
+        result.push(line.replace(/^###\s(.*)$/, '<h3>$1</h3>'));
+        continue;
+      }
+      if (line.match(/^##\s/)) {
+        if (inList) {
+          result.push(inSubList ? '</ul>' : '');
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          inSubList = false;
+          listType = null;
+        }
+        result.push(line.replace(/^##\s(.*)$/, '<h2>$1</h2>'));
+        continue;
+      }
+      if (line.match(/^#\s/)) {
+        if (inList) {
+          result.push(inSubList ? '</ul>' : '');
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          inSubList = false;
+          listType = null;
+        }
+        result.push(line.replace(/^#\s(.*)$/, '<h1>$1</h1>'));
+        continue;
+      }
+
+      // Check for numbered list item (e.g., "1. Item")
+      const numberedMatch = line.match(/^(\d+)\.\s+(.*)$/);
+      if (numberedMatch) {
+        if (inSubList) {
+          result.push('</ul>');
+          inSubList = false;
+        }
+        if (!inList || listType !== 'ol') {
+          if (inList) {
+            result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          }
+          result.push('<ol>');
+          inList = true;
+          listType = 'ol';
+        }
+        result.push(`<li>${this.processInline(numberedMatch[2])}</li>`);
+        continue;
+      }
+
+      // Check for bullet point with indentation (sub-item)
+      const subBulletMatch = line.match(/^[\s\t]+[•\-\*]\s+(.*)$/);
+      if (subBulletMatch) {
+        if (!inSubList) {
+          result.push('<ul class="sub-list">');
+          inSubList = true;
+        }
+        result.push(`<li>${this.processInline(subBulletMatch[1])}</li>`);
+        continue;
+      }
+
+      // Check for bullet point (top-level)
+      const bulletMatch = line.match(/^[•\-\*]\s+(.*)$/);
+      if (bulletMatch) {
+        if (inSubList) {
+          result.push('</ul>');
+          inSubList = false;
+        }
+        if (!inList || listType !== 'ul') {
+          if (inList) {
+            result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          }
+          result.push('<ul>');
+          inList = true;
+          listType = 'ul';
+        }
+        result.push(`<li>${this.processInline(bulletMatch[1])}</li>`);
+        continue;
+      }
+
+      // Empty line - close lists
+      if (line.trim() === '') {
+        if (inSubList) {
+          result.push('</ul>');
+          inSubList = false;
+        }
+        if (inList) {
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          listType = null;
+        }
+        result.push('<br>');
+        continue;
+      }
+
+      // Regular paragraph text
+      if (inSubList) {
+        result.push('</ul>');
+        inSubList = false;
+      }
+      if (inList) {
+        result.push(listType === 'ul' ? '</ul>' : '</ol>');
+        inList = false;
+        listType = null;
+      }
+      result.push(`<p>${this.processInline(line)}</p>`);
+    }
+
+    // Close any open lists
+    if (inSubList) {
+      result.push('</ul>');
+    }
+    if (inList) {
+      result.push(listType === 'ul' ? '</ul>' : '</ol>');
+    }
+
+    let html = result.join('\n');
+
+    // Clean up multiple consecutive <br> tags
+    html = html.replace(/(<br>\s*){2,}/g, '<br>');
+
+    // Clean up empty paragraphs
+    html = html.replace(/<p>\s*<\/p>/g, '');
+
+    // Clean up <br> right before block elements
+    html = html.replace(/<br>\s*(<(?:h[1-4]|ul|ol|p)>)/g, '$1');
+
+    // Clean up <br> right after block elements
+    html = html.replace(/(<\/(?:h[1-4]|ul|ol|p)>)\s*<br>/g, '$1');
+
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  /**
+   * Process inline markdown (bold, italic, code, links)
+   */
+  private processInline(text: string): string {
+    let result = text;
+
+    // Convert bold (**text** or __text__) - use .+? to require at least one char
+    // Handle multiple bold sections in the same line
+    result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
 
     // Convert italic (*text* or _text_) - careful not to match bold
-    html = html.replace(
-      /(?<!\*)\*(?!\*)([^*]+)(?<!\*)\*(?!\*)/g,
-      '<em>$1</em>',
-    );
-    html = html.replace(/(?<!_)_(?!_)([^_]+)(?<!_)_(?!_)/g, '<em>$1</em>');
-
-    // Convert bullet points (• or - or *)
-    html = html.replace(/^[•\-\*]\s+(.*$)/gm, '<li>$1</li>');
-
-    // Wrap consecutive list items in <ul>
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
-
-    // Convert numbered lists
-    html = html.replace(/^\d+\.\s+(.*$)/gm, '<li>$1</li>');
-
-    // Wrap numbered list items in <ol>
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-      // Check if this block wasn't already wrapped
-      if (!match.startsWith('<ul>') && !match.startsWith('<ol>')) {
-        return `<ol>${match}</ol>`;
-      }
-      return match;
-    });
+    // Only match single asterisks not preceded/followed by another asterisk
+    result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+    result = result.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em>$1</em>');
 
     // Convert inline code (`code`)
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-    // Convert code blocks (```code```)
-    html = html.replace(
-      /```(\w+)?\n([\s\S]*?)```/g,
-      '<pre><code class="language-$1">$2</code></pre>',
-    );
-
-    // Convert blockquotes (> text)
-    html = html.replace(/^>\s+(.*$)/gm, '<blockquote>$1</blockquote>');
+    result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
 
     // Convert links ([text](url))
-    html = html.replace(
+    result = result.replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener">$1</a>',
     );
 
-    // Convert line breaks (double newline = paragraph)
-    html = html.replace(/\n\n/g, '</p><p>');
-
-    // Convert single newlines to <br> within paragraphs
-    html = html.replace(/\n/g, '<br>');
-
-    // Wrap in paragraph if not already wrapped
-    if (!html.startsWith('<')) {
-      html = `<p>${html}</p>`;
-    }
-
-    // Clean up empty paragraphs
-    html = html.replace(/<p><\/p>/g, '');
-    html = html.replace(/<p>(<h[1-4]>)/g, '$1');
-    html = html.replace(/(<\/h[1-4]>)<\/p>/g, '$1');
-    html = html.replace(/<p>(<ul>)/g, '$1');
-    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
-    html = html.replace(/<p>(<ol>)/g, '$1');
-    html = html.replace(/(<\/ol>)<\/p>/g, '$1');
-    html = html.replace(/<p>(<blockquote>)/g, '$1');
-    html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
-
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    return result;
   }
 }

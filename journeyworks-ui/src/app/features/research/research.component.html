@@ -3,14 +3,31 @@
     <!-- Chat Area -->
     <div class="chat-area">
       <div class="chat-header">
-        <h1>Research Assistant</h1>
+        <div class="header-title">
+          <mat-icon>psychology</mat-icon>
+          <h1>AI Research Assistant</h1>
+          @if (currentContext()) {
+            <span
+              class="context-badge"
+              matTooltip="Conversation context from dashboard"
+            >
+              <mat-icon>link</mat-icon>
+              Dashboard Context
+            </span>
+          }
+        </div>
         <div class="header-actions">
+          @if (!isApiAvailable()) {
+            <span class="api-status offline" matTooltip="API connection lost">
+              <mat-icon>cloud_off</mat-icon>
+            </span>
+          }
           <button
             mat-icon-button
             (click)="toggleReasoning()"
-            [matTooltip]="showReasoning() ? 'Hide reasoning' : 'Show reasoning'"
+            [matTooltip]="showReasoning ? 'Hide reasoning' : 'Show reasoning'"
           >
-            <mat-icon>psychology</mat-icon>
+            <mat-icon>auto_awesome</mat-icon>
           </button>
           <button
             mat-icon-button
@@ -26,33 +43,43 @@
       <div class="messages-container" #messagesContainer>
         @if (messages().length === 0) {
           <div class="welcome-state">
-            <mat-icon class="welcome-icon">psychology_alt</mat-icon>
+            <div class="welcome-icon">
+              <mat-icon>psychology_alt</mat-icon>
+            </div>
             <h2>Ask me anything about your customer data</h2>
             <p>
               I can help you analyze communications, identify trends, find
-              at-risk customers, and more.
+              at-risk customers, and more. Powered by the ReAct agent with
+              access to your real data.
             </p>
 
             <div class="suggestion-chips">
               @for (suggestion of suggestions(); track suggestion) {
-                <button mat-stroked-button (click)="useSuggestion(suggestion)">
+                <button (click)="useSuggestion(suggestion)">
                   {{ suggestion }}
                 </button>
               }
             </div>
           </div>
         } @else {
+          <!-- Show a context banner if conversation came from dashboard -->
+          @if (currentContext() && messages().length > 0) {
+            <div class="context-banner">
+              <mat-icon>info_outline</mat-icon>
+              <span>Conversation continued from dashboard analysis</span>
+            </div>
+          }
           @for (message of messages(); track message.id) {
             <div class="message" [class]="'message-' + message.role">
               <div class="message-avatar">
                 <mat-icon>{{
-                  message.role === "user" ? "person" : "smart_toy"
+                  message.role === "user" ? "person" : "auto_awesome"
                 }}</mat-icon>
               </div>
               <div class="message-content">
                 <div
                   class="message-text"
-                  [innerHTML]="message.content | slice: 0 : 10000"
+                  [innerHTML]="message.content | markdown"
                 ></div>
 
                 @if (message.sources?.length) {
@@ -77,12 +104,16 @@
           @if (isLoading()) {
             <div class="message message-assistant">
               <div class="message-avatar">
-                <mat-icon>smart_toy</mat-icon>
+                <mat-icon>auto_awesome</mat-icon>
               </div>
               <div class="message-content">
                 <div class="thinking-indicator">
-                  <mat-spinner diameter="20"></mat-spinner>
-                  <span>{{ currentThinking() }}</span>
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <span>{{ currentThinking }}</span>
                 </div>
               </div>
             </div>
@@ -96,9 +127,9 @@
           messages().length > 0 && suggestions().length > 0 && !isLoading()
         ) {
           <div class="follow-up-suggestions">
+            <span class="suggestions-label">Suggested:</span>
             @for (suggestion of suggestions(); track suggestion) {
               <button
-                mat-stroked-button
                 (click)="useSuggestion(suggestion)"
                 class="suggestion-btn"
               >
@@ -121,7 +152,6 @@
           </mat-form-field>
           <button
             mat-fab
-            color="primary"
             (click)="sendQuery()"
             [disabled]="!currentQuery.trim() || isLoading()"
           >
@@ -132,9 +162,9 @@
     </div>
 
     <!-- Reasoning Panel -->
-    @if (showReasoning() && lastReasoningSteps().length > 0) {
+    @if (showReasoning && lastReasoningSteps().length > 0) {
       <div class="reasoning-panel">
-        <h3>Agent Reasoning</h3>
+        <h3><mat-icon>psychology</mat-icon> Agent Reasoning</h3>
         <div class="reasoning-steps">
           @for (step of lastReasoningSteps(); track step.step) {
             <mat-expansion-panel>
@@ -145,11 +175,11 @@
               </mat-expansion-panel-header>
               <div class="step-content">
                 <div class="step-thought">
-                  <strong>Thought:</strong> {{ step.thought }}
+                  {{ step.thought }}
                 </div>
                 @if (step.observation) {
                   <div class="step-observation">
-                    <strong>Observation:</strong> {{ step.observation }}
+                    <strong>Result:</strong> {{ step.observation }}
                   </div>
                 }
               </div>
@@ -158,7 +188,7 @@
         </div>
 
         @if (lastSources().length > 0) {
-          <h3>Sources Used</h3>
+          <h3><mat-icon>source</mat-icon> Sources Used</h3>
           <div class="sources-list">
             @for (source of lastSources(); track source.id) {
               <div class="source-item">
@@ -167,8 +197,8 @@
                   <span class="source-title">{{ source.title }}</span>
                   <span class="source-snippet">{{ source.snippet }}</span>
                   <span class="source-score"
-                    >Relevance:
-                    {{ source.relevanceScore * 100 | number: "1.0-0" }}%</span
+                    >{{ source.relevanceScore * 100 | number: "1.0-0" }}%
+                    match</span
                   >
                 </div>
               </div>

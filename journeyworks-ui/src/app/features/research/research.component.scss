@@ -1,278 +1,658 @@
+@use "styles/variables" as *;
+@use "styles/mixins" as *;
+
+// Animations - must be defined in component scope
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-8px);
+  }
+}
+
 .research-page {
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: $bg-surface;
 }
 
 .research-container {
   display: flex;
   flex: 1;
   overflow: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: $spacing-lg;
+  gap: $spacing-lg;
 }
 
 .chat-area {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #fafafa;
+  @include flex-column;
+  @include card-layout;
+  overflow: hidden;
 }
 
+// Header (using global styles)
 .chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
+  @include flex-between;
+  padding: $spacing-md $spacing-lg;
+  background: $bg-card;
+  border-bottom: 1px solid $border-light;
 
-  h1 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 500;
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+
+    mat-icon {
+      color: $ai-primary;
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: $font-size-lg;
+      font-weight: 600;
+      color: $ai-primary-dark;
+    }
+
+    .context-badge {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+      padding: $spacing-xs $spacing-sm;
+      background: $chat-suggestion-bg;
+      color: $chat-suggestion-text;
+      border-radius: $border-radius-lg;
+      font-size: $font-size-xs;
+      font-weight: 500;
+
+      mat-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+      }
+    }
   }
 
   .header-actions {
     display: flex;
-    gap: 8px;
+    gap: $spacing-sm;
+    align-items: center;
+
+    button {
+      mat-icon {
+        color: $ai-primary-light;
+      }
+
+      &:hover mat-icon {
+        color: $ai-primary;
+      }
+    }
+  }
+
+  .api-status {
+    display: flex;
+    align-items: center;
+    padding: $spacing-xs $spacing-sm;
+    border-radius: $border-radius-sm;
+    font-size: $font-size-xs;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    &.offline {
+      color: $status-closed;
+      background: rgba($status-closed, 0.1);
+    }
+  }
+}
+
+// Context banner when conversation continued from dashboard
+.context-banner {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  margin-bottom: $spacing-md;
+  background: linear-gradient(
+    135deg,
+    $chat-suggestion-bg 0%,
+    lighten($chat-suggestion-bg, 5%) 100%
+  );
+  border-radius: $border-radius-md;
+  color: $chat-suggestion-text;
+  font-size: $font-size-sm;
+  animation: fadeSlideIn 0.3s ease-out;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
   }
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: $spacing-lg;
+  scroll-behavior: smooth;
 }
 
+// Welcome State (using global animations)
 .welcome-state {
-  display: flex;
+  @include flex-center;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
   text-align: center;
-  color: #666;
+  animation: fadeSlideIn 0.5s ease-out;
 
   .welcome-icon {
-    font-size: 64px;
-    width: 64px;
-    height: 64px;
-    color: #1976d2;
-    margin-bottom: 16px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(
+      135deg,
+      $chat-suggestion-bg 0%,
+      $chat-suggestion-hover 100%
+    );
+    @include flex-center;
+    margin-bottom: $spacing-lg;
+    font-size: 40px !important;
+    color: $ai-primary-light !important;
   }
 
   h2 {
-    margin: 0 0 8px;
-    font-weight: 500;
-    color: #333;
+    margin: 0 0 $spacing-sm;
+    font-size: $font-size-xl;
+    font-weight: 600;
+    color: $ai-primary-dark;
   }
 
   p {
-    margin: 0 0 24px;
+    margin: 0 0 $spacing-xl;
     max-width: 400px;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    line-height: $line-height-base;
   }
 
   .suggestion-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: $spacing-sm;
     justify-content: center;
-    max-width: 600px;
+    max-width: 700px;
 
     button {
-      font-size: 13px;
+      @include chat-suggestion-chip;
+      background: linear-gradient(
+        135deg,
+        $chat-suggestion-bg 0%,
+        $chat-suggestion-hover 100%
+      );
+      color: $chat-suggestion-text;
+      box-shadow: $shadow-sm;
+
+      &:hover {
+        background: linear-gradient(
+          135deg,
+          $chat-suggestion-hover 0%,
+          darken($chat-suggestion-hover, 10%) 100%
+        );
+        box-shadow: $shadow-md;
+      }
+
+      &:active {
+        transform: translateY(0);
+      }
     }
   }
 }
 
+// Messages (using global AI message styling)
 .message {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  max-width: 800px;
+  gap: $spacing-sm + 4px;
+  margin-bottom: $spacing-md;
+  max-width: 850px;
+  animation: fadeSlideIn 0.3s ease-out;
 
   &.message-user {
     margin-left: auto;
     flex-direction: row-reverse;
 
     .message-avatar {
-      background: #1976d2;
+      background: $user-avatar-bg;
+
+      mat-icon {
+        color: $user-avatar-color;
+      }
     }
 
     .message-content {
-      background: #e3f2fd;
-      border-radius: 16px 16px 0 16px;
+      background: $user-message-bg;
+      border-radius: $border-radius-lg $border-radius-lg 0 $border-radius-lg;
     }
   }
 
   &.message-assistant {
     .message-avatar {
-      background: #4caf50;
+      background: $ai-avatar-bg;
+
+      mat-icon {
+        color: $ai-primary;
+      }
     }
 
     .message-content {
-      background: white;
-      border-radius: 16px 16px 16px 0;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      background: linear-gradient(
+        135deg,
+        $ai-message-bg-start 0%,
+        lighten($ai-message-bg-end, 2%) 100%
+      );
+      border-radius: $border-radius-lg $border-radius-lg $border-radius-lg 0;
     }
   }
 }
 
 .message-avatar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @include flex-center;
   flex-shrink: 0;
 
   mat-icon {
-    color: white;
-    font-size: 20px;
-    width: 20px;
-    height: 20px;
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
   }
 }
 
 .message-content {
-  padding: 12px 16px;
-  max-width: 600px;
+  padding: $spacing-md $spacing-md + 4px;
+  max-width: 650px;
+  min-width: 200px;
 
   .message-text {
-    line-height: 1.5;
-    white-space: pre-wrap;
+    font-size: $font-size-sm;
+    line-height: 1.7;
+    word-wrap: break-word;
+    color: $text-primary;
+
+    // Markdown rendered content styles
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: $spacing-md 0 $spacing-sm 0;
+      font-weight: 600;
+      color: $text-primary;
+      line-height: 1.3;
+
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+    h2 {
+      font-size: 1.2em;
+    }
+    h3 {
+      font-size: 1.1em;
+    }
+    h4 {
+      font-size: 1em;
+    }
+
+    p {
+      margin: 0 0 $spacing-sm 0;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    strong {
+      font-weight: 600;
+      color: $text-primary;
+    }
+
+    em {
+      font-style: italic;
+    }
+
+    ul,
+    ol {
+      margin: $spacing-sm 0;
+      padding-left: $spacing-md + 8px;
+
+      li {
+        margin-bottom: $spacing-xs;
+        line-height: 1.6;
+      }
+    }
+
+    ul {
+      list-style-type: disc;
+
+      &.sub-list {
+        margin: $spacing-xs 0 $spacing-xs $spacing-md;
+        padding-left: $spacing-md;
+        list-style-type: circle;
+      }
+    }
+
+    ol {
+      list-style-type: decimal;
+
+      > li {
+        margin-bottom: $spacing-sm;
+
+        > ul.sub-list {
+          margin-top: $spacing-xs;
+        }
+      }
+    }
+
+    code {
+      background: rgba(0, 0, 0, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "Menlo", "Monaco", "Consolas", monospace;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: rgba(0, 0, 0, 0.06);
+      padding: $spacing-sm $spacing-md;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: $spacing-sm 0;
+
+      code {
+        background: none;
+        padding: 0;
+      }
+    }
+
+    blockquote {
+      border-left: 3px solid $ai-primary;
+      padding-left: $spacing-md;
+      margin: $spacing-sm 0;
+      color: $text-secondary;
+      font-style: italic;
+    }
+
+    a {
+      color: $ai-primary;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
   .message-sources {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #e0e0e0;
+    gap: $spacing-sm;
+    margin-top: $spacing-md;
+    padding-top: $spacing-md;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
     align-items: center;
 
     .sources-label {
-      font-size: 12px;
-      color: #666;
+      font-size: $font-size-xs;
+      color: $text-secondary;
+      font-weight: 500;
     }
 
     mat-chip {
-      font-size: 11px;
-      min-height: 24px;
+      font-size: $font-size-xs;
+      min-height: 26px;
+      background: $bg-card !important;
+      border: 1px solid $border-default;
 
       mat-icon {
         font-size: 14px;
         width: 14px;
         height: 14px;
-        margin-right: 4px;
+        margin-right: $spacing-xs;
+        color: $ai-primary-light;
       }
     }
   }
 
   .message-time {
     display: block;
-    font-size: 11px;
-    color: #999;
-    margin-top: 8px;
+    font-size: $font-size-xs;
+    color: $text-hint;
+    margin-top: $spacing-sm;
   }
 }
 
+// Typing Indicator (using global mixin)
 .thinking-indicator {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #666;
+  gap: $spacing-sm + 4px;
+  color: $text-secondary;
+  font-size: $font-size-sm;
+
+  .typing-dots {
+    @include typing-indicator;
+  }
 }
 
+// Input Area
 .input-area {
-  padding: 16px 24px;
-  background: white;
-  border-top: 1px solid #e0e0e0;
+  padding: $spacing-md $spacing-lg;
+  background: $bg-card;
+  border-top: 1px solid $border-light;
 
   .follow-up-suggestions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: $spacing-sm;
+    margin-bottom: $spacing-md;
+    align-items: center;
+
+    .suggestions-label {
+      font-size: $font-size-xs;
+      color: $text-secondary;
+      margin-right: $spacing-xs;
+    }
 
     .suggestion-btn {
-      font-size: 12px;
+      @include chat-suggestion-chip;
+      background: linear-gradient(
+        135deg,
+        $chat-suggestion-bg 0%,
+        $chat-suggestion-hover 100%
+      );
+      padding: $spacing-xs + 2px $spacing-md;
+      font-size: $font-size-xs;
+
+      &:hover {
+        background: linear-gradient(
+          135deg,
+          $chat-suggestion-hover 0%,
+          darken($chat-suggestion-hover, 10%) 100%
+        );
+        box-shadow: $shadow-sm;
+      }
     }
   }
 
   .input-row {
     display: flex;
-    gap: 12px;
+    gap: $spacing-sm + 4px;
     align-items: center;
 
     .query-input {
       flex: 1;
       margin-bottom: -1.25em;
+
+      ::ng-deep {
+        .mat-mdc-text-field-wrapper {
+          border-radius: $border-radius-xl;
+        }
+
+        .mdc-notched-outline__leading,
+        .mdc-notched-outline__notch,
+        .mdc-notched-outline__trailing {
+          border-color: $chat-input-border !important;
+        }
+
+        &:hover .mdc-notched-outline__leading,
+        &:hover .mdc-notched-outline__notch,
+        &:hover .mdc-notched-outline__trailing {
+          border-color: $chat-input-focus !important;
+        }
+      }
+    }
+
+    button[mat-fab] {
+      background: linear-gradient(
+        135deg,
+        $ai-primary 0%,
+        $chat-send-btn-bg 100%
+      ) !important;
+      box-shadow: 0 4px 12px rgba($ai-primary, 0.3);
+
+      &:hover {
+        box-shadow: 0 6px 16px rgba($ai-primary, 0.4);
+      }
+
+      &:disabled {
+        background: $border-default !important;
+        box-shadow: none;
+      }
     }
   }
 }
 
 // Reasoning Panel
 .reasoning-panel {
-  width: 350px;
-  background: white;
-  border-left: 1px solid #e0e0e0;
-  padding: 16px;
+  width: 380px;
+  @include card-layout;
+  padding: $spacing-lg;
   overflow-y: auto;
+  animation: fadeSlideIn 0.3s ease-out;
 
   h3 {
-    margin: 0 0 16px;
-    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    margin: 0 0 $spacing-md;
+    font-size: $font-size-sm;
     font-weight: 600;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: $ai-primary-dark;
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: $ai-primary;
+    }
   }
 
   .reasoning-steps {
-    margin-bottom: 24px;
+    margin-bottom: $spacing-lg;
 
     mat-expansion-panel {
-      margin-bottom: 8px;
+      margin-bottom: $spacing-sm;
+      box-shadow: none !important;
+      border: 1px solid $border-default;
+      border-radius: $border-radius-md !important;
+
+      mat-panel-title {
+        display: flex;
+        align-items: center;
+        gap: $spacing-sm;
+        font-size: $font-size-sm;
+        font-weight: 500;
+        color: $text-primary;
+      }
     }
 
     .step-content {
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: $font-size-sm;
+      line-height: $line-height-base;
+      color: $text-primary;
 
-      .step-thought,
+      .step-thought {
+        margin-bottom: $spacing-sm;
+        padding: $spacing-sm;
+        background: linear-gradient(135deg, $ai-message-bg 0%, $bg-card 60%);
+        border-left: 3px solid $evidence-border;
+        border-radius: 0 $border-radius-sm $border-radius-sm 0;
+      }
+
       .step-observation {
-        margin-bottom: 8px;
+        margin-bottom: $spacing-sm;
+        padding: $spacing-sm;
+        background: $bg-surface;
+        border-radius: $border-radius-sm;
       }
     }
   }
 
   .sources-list {
     .source-item {
+      @include evidence-card;
       display: flex;
-      gap: 12px;
-      padding: 12px;
-      background: #fafafa;
-      border-radius: 8px;
-      margin-bottom: 8px;
+      gap: $spacing-sm + 4px;
+      padding: $spacing-sm + 4px;
 
       mat-icon {
-        color: #1976d2;
+        color: $ai-primary-light;
+        flex-shrink: 0;
       }
 
       .source-info {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: $spacing-xs;
+        min-width: 0;
 
         .source-title {
           font-weight: 500;
+          font-size: $font-size-sm;
+          color: $text-primary;
         }
 
         .source-snippet {
-          font-size: 12px;
-          color: #666;
+          font-size: $font-size-xs;
+          color: $text-secondary;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -280,26 +660,36 @@
         }
 
         .source-score {
-          font-size: 11px;
-          color: #999;
+          font-size: $font-size-xs;
+          color: $ai-primary;
+          font-weight: 500;
         }
       }
     }
   }
 }
 
-// Helper function in template
-@function getSourceIcon($type) {
-  @if $type == "communication" {
-    @return "email";
-  } @else if $type == "case" {
-    @return "folder";
-  } @else if $type == "customer" {
-    @return "person";
-  } @else if $type == "social" {
-    @return "public";
-  } @else if $type == "analysis" {
-    @return "analytics";
+// Responsive adjustments
+@include lg-up {
+  .reasoning-panel {
+    width: 380px;
   }
-  @return "description";
+}
+
+@media (max-width: $breakpoint-lg) {
+  .reasoning-panel {
+    width: 320px;
+  }
+}
+
+@media (max-width: $breakpoint-md) {
+  .research-container {
+    flex-direction: column;
+    padding: $spacing-md;
+  }
+
+  .reasoning-panel {
+    width: 100%;
+    max-height: 300px;
+  }
 }
