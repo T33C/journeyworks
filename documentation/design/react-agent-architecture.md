@@ -88,6 +88,16 @@ Agent:
 │  │ • get_customer_info │    │                     │    │                  ││
 │  │ • find_similar      │    │                     │    │                  ││
 │  │ • analyze_trends    │    │                     │    │                  ││
+│  │ • analyze_channel_  │    │                     │    │                  ││
+│  │   escalation        │    │                     │    │                  ││
+│  │ • analyze_cdd_cases │    │                     │    │                  ││
+│  │ • get_daily_volumes │    │                     │    │                  ││
+│  │ • analyze_resolution│    │                     │    │                  ││
+│  │   _times            │    │                     │    │                  ││
+│  │ • analyze_sla_      │    │                     │    │                  ││
+│  │   compliance        │    │                     │    │                  ││
+│  │ • get_category_     │    │                     │    │                  ││
+│  │   breakdown         │    │                     │    │                  ││
 │  └─────────────────────┘    └─────────────────────┘    └──────────────────┘│
 │           │                                                                  │
 │           ▼                                                                  │
@@ -187,7 +197,7 @@ ReAct (Reasoning + Acting) is an agent architecture from the paper ["ReAct: Syne
 
 ## Agent Tools
 
-The agent has access to 9 specialized tools:
+The agent has access to 16 specialized tools across three categories:
 
 ### Information Retrieval
 
@@ -208,6 +218,17 @@ The agent has access to 9 specialized tools:
 | `analyze_trends`          | Time-series analysis | Spot emerging patterns          |
 | `assess_risk`             | Risk scoring         | Identify at-risk customers      |
 | `analyze_customer_health` | Health score         | Relationship assessment         |
+
+### Specialized Analytics (NEW)
+
+| Tool                         | Description                                                    | Example Use                                |
+| ---------------------------- | -------------------------------------------------------------- | ------------------------------------------ |
+| `analyze_channel_escalation` | Track escalations between channels (chatbot→human, chat→phone) | "How many chats escalate to phone calls?"  |
+| `analyze_cdd_cases`          | CDD remediation analysis with reasons and trends               | "Show CDD cases with account restrictions" |
+| `get_daily_volumes`          | Daily aggregations for communications/cases                    | "Cases per day this month"                 |
+| `analyze_resolution_times`   | Resolution time statistics (avg, min, max)                     | "Average time to resolve CDD cases?"       |
+| `analyze_sla_compliance`     | SLA breach rate tracking by category                           | "How many cases breached SLA?"             |
+| `get_category_breakdown`     | Category/subcategory statistics                                | "Top complaint reasons?"                   |
 
 ### Tool Definition Structure
 
@@ -621,6 +642,51 @@ Conversation history is included in the prompt so the agent can:
 - Understand pronoun references ("it", "they", "that issue")
 - Build on prior research
 
+### Follow-up Question Routing
+
+Follow-up questions from the UI (e.g., after clicking a sentiment bubble) are now routed through the ReAct agent instead of direct LLM calls:
+
+```
+Frontend: askFollowUpQuestion(context, question)
+    │
+    ▼
+POST /api/research/conversation/:id
+    {
+      query: "How many CDD cases per day?",
+      context: {
+        selectedBubble: { date: "2026-01-15", sentiment: "negative" },
+        timeWindow: { start: "...", end: "..." }
+      }
+    }
+    │
+    ▼
+ReAct Agent (uses specialized tools like get_daily_volumes)
+    │
+    ▼
+Multi-day aggregated response with full reasoning
+```
+
+This ensures follow-up questions have access to the full tool suite and can perform comprehensive analysis beyond the initially selected data scope.
+
+---
+
+## Data Model Support
+
+The agent tools leverage enhanced data fields:
+
+### Communication Fields
+
+| Field           | Type                             | Description                                         |
+| --------------- | -------------------------------- | --------------------------------------------------- |
+| `channel`       | email/phone/chat/letter/social   | Communication channel                               |
+| `chatMode`      | chatbot/human-agent              | For chat: distinguishes bot vs human (NEW)          |
+| `escalatedFrom` | chatbot/email/chat               | Tracks escalation source (NEW)                      |
+| `status`        | open/in_progress/resolved/escalated | Communication status                           |
+
+These fields enable the `analyze_channel_escalation` tool to answer questions like:
+- "How many chatbot conversations escalate to human agents?"
+- "What percentage of phone calls are escalations from chat?"
+
 ---
 
 ## Adding New Tools
@@ -660,6 +726,7 @@ this.tools.set('my_new_tool', {
 4. **Human-in-the-Loop**: Allow user approval for certain actions
 5. **Memory**: Long-term memory across sessions
 6. **Planning**: Multi-step planning before execution
+7. **Chart Generation**: Automatic visualization from tool results
 
 ---
 
