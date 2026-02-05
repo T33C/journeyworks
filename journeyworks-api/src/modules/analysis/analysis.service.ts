@@ -32,6 +32,61 @@ import {
   QuadrantItem,
 } from './analysis.types';
 
+/**
+ * Configuration constants for analysis operations.
+ * Centralizes magic numbers for maintainability and clarity.
+ */
+const ANALYSIS_CONFIG = {
+  /** Default number of communications to analyze if not specified */
+  DEFAULT_LIMIT: 100,
+  /** Maximum allowed limit to prevent resource exhaustion */
+  MAX_LIMIT: 1000,
+  /** Number of sample communications for LLM sentiment analysis */
+  SENTIMENT_SAMPLE_SIZE: 10,
+  /** Number of sample communications for LLM topic analysis */
+  TOPIC_SAMPLE_SIZE: 5,
+  /** Number of high-risk communications to sample for risk assessment */
+  RISK_SAMPLE_SIZE: 15,
+  /** Number of issue communications to sample for issue detection */
+  ISSUE_SAMPLE_SIZE: 10,
+  /** Maximum number of topics to display */
+  MAX_TOPICS_DISPLAY: 10,
+  /** Maximum number of topics to analyze */
+  MAX_TOPICS_ANALYZE: 20,
+  /** Maximum content length for LLM analysis (characters) */
+  MAX_CONTENT_LENGTH: 300,
+  /** Shorter content length for summaries */
+  SHORT_CONTENT_LENGTH: 200,
+  /** Number of recent communications to consider for trend */
+  TREND_RECENT_COUNT: 10,
+  /** Number of older communications for comparison */
+  TREND_COMPARISON_COUNT: 20,
+  /** Number of days for recent volume trend calculation */
+  TREND_RECENT_DAYS: 7,
+  /** Number of days for previous volume trend calculation */
+  TREND_PREVIOUS_DAYS: 14,
+  /** Maximum recommendations to return */
+  MAX_RECOMMENDATIONS: 5,
+  /** Maximum insights to extract from plain text fallback */
+  MAX_FALLBACK_INSIGHTS: 5,
+  /** Threshold for increasing trend detection */
+  TREND_INCREASE_THRESHOLD: 1.1,
+  /** Threshold for decreasing trend detection */
+  TREND_DECREASE_THRESHOLD: 0.9,
+  /** Confidence scores for different analysis types */
+  CONFIDENCE: {
+    SENTIMENT: 0.85,
+    TOPICS: 0.8,
+    TRENDS: 0.75,
+    CUSTOMER_HEALTH: 0.8,
+    RISK: 0.75,
+    PATTERNS: 0.85,
+    ISSUES: 0.7,
+    RELATIONSHIP: 0.8,
+    DATA_CARD: 0.9,
+  },
+} as const;
+
 // Product name mapping: UI names -> ES names
 const PRODUCT_NAME_MAP: Record<string, string> = {
   cards: 'credit-card',
@@ -151,7 +206,10 @@ export class AnalysisService {
     )[0][0];
 
     // Use LLM for deeper analysis
-    const sampleComms = communications.slice(0, 10);
+    const sampleComms = communications.slice(
+      0,
+      ANALYSIS_CONFIG.SENTIMENT_SAMPLE_SIZE,
+    );
     const prompt = this.promptTemplate.renderNamed(
       'analysis:sentiment_analysis',
       {
@@ -159,7 +217,10 @@ export class AnalysisService {
         averageScore: avgScore.toFixed(2),
         sampleCommunications: JSON.stringify(
           sampleComms.map((c) => ({
-            content: c.content.substring(0, 200),
+            content: c.content.substring(
+              0,
+              ANALYSIS_CONFIG.SHORT_CONTENT_LENGTH,
+            ),
             sentiment: c.sentiment,
             channel: c.channel,
           })),
@@ -180,7 +241,7 @@ export class AnalysisService {
     return {
       type: 'sentiment',
       summary: `Analyzed ${communications.length} communications. Dominant sentiment: ${dominantSentiment} (${((sentimentCounts[dominantSentiment] / communications.length) * 100).toFixed(1)}%)`,
-      confidence: 0.85,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.SENTIMENT,
       insights,
       metrics: {
         totalCommunications: communications.length,
@@ -230,14 +291,14 @@ export class AnalysisService {
 
     const sortedTopics = Object.entries(topicCounts)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 20);
+      .slice(0, ANALYSIS_CONFIG.MAX_TOPICS_ANALYZE);
 
     // Use LLM for topic clustering and analysis
     const prompt = this.promptTemplate.renderNamed('analysis:topic_analysis', {
       topics: JSON.stringify(sortedTopics),
       sampleContent: communications
-        .slice(0, 5)
-        .map((c) => c.content.substring(0, 300))
+        .slice(0, ANALYSIS_CONFIG.TOPIC_SAMPLE_SIZE)
+        .map((c) => c.content.substring(0, ANALYSIS_CONFIG.MAX_CONTENT_LENGTH))
         .join('\n---\n'),
     });
 
@@ -252,23 +313,25 @@ export class AnalysisService {
     return {
       type: 'topics',
       summary: `Identified ${sortedTopics.length} topics across ${communications.length} communications. Top topic: "${sortedTopics[0]?.[0] || 'N/A'}"`,
-      confidence: 0.8,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.TOPICS,
       insights,
       metrics: {
         totalCommunications: communications.length,
         topicCounts: Object.fromEntries(sortedTopics),
         topTopics: sortedTopics
-          .slice(0, 10)
+          .slice(0, ANALYSIS_CONFIG.MAX_TOPICS_DISPLAY)
           .map(([topic, count]) => ({ topic, count })),
       },
       visualizations: [
         {
           type: 'bar',
           title: 'Top Topics',
-          data: sortedTopics.slice(0, 10).map(([topic, count]) => ({
-            label: topic,
-            value: count,
-          })),
+          data: sortedTopics
+            .slice(0, ANALYSIS_CONFIG.MAX_TOPICS_DISPLAY)
+            .map(([topic, count]) => ({
+              label: topic,
+              value: count,
+            })),
         },
       ],
       processingTime: 0,
@@ -318,22 +381,26 @@ export class AnalysisService {
 
     // Detect trend direction
     const recentVolume = volumeTrend
-      .slice(-7)
+      .slice(-ANALYSIS_CONFIG.TREND_RECENT_DAYS)
       .reduce((s, d) => s + d.volume, 0);
     const previousVolume = volumeTrend
-      .slice(-14, -7)
+      .slice(
+        -ANALYSIS_CONFIG.TREND_PREVIOUS_DAYS,
+        -ANALYSIS_CONFIG.TREND_RECENT_DAYS,
+      )
       .reduce((s, d) => s + d.volume, 0);
     const trendDirection =
-      recentVolume > previousVolume * 1.1
+      recentVolume > previousVolume * ANALYSIS_CONFIG.TREND_INCREASE_THRESHOLD
         ? 'increasing'
-        : recentVolume < previousVolume * 0.9
+        : recentVolume <
+            previousVolume * ANALYSIS_CONFIG.TREND_DECREASE_THRESHOLD
           ? 'decreasing'
           : 'stable';
 
     return {
       type: 'trends',
       summary: `Communication volume is ${trendDirection}. Analyzed ${communications.length} communications over ${dates.length} days.`,
-      confidence: 0.75,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.TRENDS,
       insights: [
         {
           category: 'Volume Trend',
@@ -413,8 +480,11 @@ export class AnalysisService {
     healthScore = Math.max(0, Math.min(100, healthScore));
 
     // Determine trend
-    const recentComms = comms.slice(0, 10);
-    const olderComms = comms.slice(10, 20);
+    const recentComms = comms.slice(0, ANALYSIS_CONFIG.TREND_RECENT_COUNT);
+    const olderComms = comms.slice(
+      ANALYSIS_CONFIG.TREND_RECENT_COUNT,
+      ANALYSIS_CONFIG.TREND_COMPARISON_COUNT,
+    );
     const recentAvg =
       recentComms.reduce((s, c) => s + (c.sentiment?.score || 0), 0) /
       recentComms.length;
@@ -471,7 +541,7 @@ export class AnalysisService {
     return {
       type: 'customer-health',
       summary: `Customer "${customerName}" has a health score of ${healthScore.toFixed(0)}/100 with ${trend} trend.`,
-      confidence: 0.8,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.CUSTOMER_HEALTH,
       insights: [
         {
           category: 'Health Score',
@@ -512,7 +582,7 @@ export class AnalysisService {
           c.priority === 'high' ||
           c.priority === 'urgent',
       )
-      .slice(0, 15);
+      .slice(0, ANALYSIS_CONFIG.RISK_SAMPLE_SIZE);
 
     const prompt = this.promptTemplate.renderNamed('analysis:risk_assessment', {
       totalCommunications: communications.length,
@@ -524,7 +594,7 @@ export class AnalysisService {
       ).length,
       sampleHighRiskCommunications: JSON.stringify(
         sampleComms.map((c) => ({
-          content: c.content.substring(0, 300),
+          content: c.content.substring(0, ANALYSIS_CONFIG.MAX_CONTENT_LENGTH),
           sentiment: c.sentiment,
           priority: c.priority,
           customer: c.customerName,
@@ -542,6 +612,7 @@ export class AnalysisService {
 
     // Parse LLM response for structured risk assessment
     let riskAssessment: RiskAssessment;
+    let parsedFromFallback = false;
     try {
       const parsed = JSON.parse(llmAnalysis);
       riskAssessment = {
@@ -551,7 +622,12 @@ export class AnalysisService {
         mitigations: parsed.mitigations || [],
         affectedCustomers: parsed.affectedCustomers,
       };
-    } catch {
+    } catch (error) {
+      // Log and flag fallback for transparency
+      this.logger.warn(
+        `Failed to parse LLM risk assessment as JSON, using fallback: ${(error as Error).message}`,
+      );
+      parsedFromFallback = true;
       // Fallback to basic assessment
       const negativeRatio =
         communications.filter((c) => c.sentiment?.label === 'negative').length /
@@ -581,8 +657,8 @@ export class AnalysisService {
 
     return {
       type: 'risk-assessment',
-      summary: `Risk level: ${riskAssessment.riskLevel.toUpperCase()} (score: ${riskAssessment.riskScore.toFixed(0)}/100). ${riskAssessment.factors.length} risk factors identified.`,
-      confidence: 0.75,
+      summary: `Risk level: ${riskAssessment.riskLevel.toUpperCase()} (score: ${riskAssessment.riskScore.toFixed(0)}/100). ${riskAssessment.factors.length} risk factors identified.${parsedFromFallback ? ' (basic assessment)' : ''}`,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.RISK,
       insights: riskAssessment.factors.map((f) => ({
         category: 'Risk Factor',
         text: `${f.factor}: ${f.description}`,
@@ -669,7 +745,7 @@ export class AnalysisService {
     return {
       type: 'communication-patterns',
       summary: `Analyzed ${communications.length} communications. Peak activity: ${dayNames[parseInt(peakDay[0])]}s at ${peakHour[0]}:00. Primary channel: ${Object.entries(channelCounts).sort(([, a], [, b]) => b - a)[0][0]}.`,
-      confidence: 0.85,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.PATTERNS,
       insights: [
         {
           category: 'Peak Activity',
@@ -727,13 +803,18 @@ export class AnalysisService {
       totalCommunications: communications.length,
       problematicCount: problematicComms.length,
       samples: JSON.stringify(
-        problematicComms.slice(0, 10).map((c) => ({
-          content: c.content.substring(0, 400),
-          customer: c.customerName,
-          sentiment: c.sentiment,
-          priority: c.priority,
-          timestamp: c.timestamp,
-        })),
+        problematicComms
+          .slice(0, ANALYSIS_CONFIG.ISSUE_SAMPLE_SIZE)
+          .map((c) => ({
+            content: c.content.substring(
+              0,
+              ANALYSIS_CONFIG.MAX_CONTENT_LENGTH + 100,
+            ),
+            customer: c.customerName,
+            sentiment: c.sentiment,
+            priority: c.priority,
+            timestamp: c.timestamp,
+          })),
         null,
         2,
       ),
@@ -750,7 +831,7 @@ export class AnalysisService {
     return {
       type: 'issue-detection',
       summary: `Detected ${insights.filter((i) => i.severity === 'high' || i.severity === 'critical').length} significant issues from ${problematicComms.length} concerning communications.`,
-      confidence: 0.7,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.ISSUES,
       insights,
       metrics: {
         totalCommunications: communications.length,
@@ -817,7 +898,7 @@ export class AnalysisService {
     return {
       type: 'relationship-summary',
       summary,
-      confidence: 0.8,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.RELATIONSHIP,
       insights: [],
       metrics: {
         customerId: request.targetId,
@@ -889,7 +970,7 @@ export class AnalysisService {
       summary:
         serviceDataCard.description ||
         `Generated data card for ${communications.length} records.`,
-      confidence: 0.9,
+      confidence: ANALYSIS_CONFIG.CONFIDENCE.DATA_CARD,
       insights: serviceDataCard.insights.map((text) => ({
         category: 'data-quality',
         text,
@@ -910,7 +991,10 @@ export class AnalysisService {
   private async getCommunicationsForAnalysis(
     request: AnalysisRequest,
   ): Promise<any[]> {
-    const limit = request.options?.limit || 100;
+    // Apply limit with cap to prevent resource exhaustion
+    const requestedLimit =
+      request.options?.limit || ANALYSIS_CONFIG.DEFAULT_LIMIT;
+    const limit = Math.min(requestedLimit, ANALYSIS_CONFIG.MAX_LIMIT);
 
     const results = await this.communicationsService.search({
       query: request.query,
@@ -940,6 +1024,7 @@ export class AnalysisService {
 
   /**
    * Extract insights from LLM response
+   * @returns Insights array with optional parseFailed flag when JSON parsing fails
    */
   private extractInsights(llmResponse: string): Insight[] {
     try {
@@ -953,14 +1038,23 @@ export class AnalysisService {
           relatedEntities: i.relatedEntities,
         }));
       }
-    } catch {
+    } catch (error) {
+      // Log parse failure for debugging and monitoring
+      this.logger.warn(
+        `Failed to parse LLM insights as JSON, falling back to text extraction: ${(error as Error).message}`,
+      );
       // Try to extract insights from plain text
       const lines = llmResponse.split('\n').filter((l) => l.trim());
-      return lines.slice(0, 5).map((line) => ({
-        category: 'General',
-        text: line.replace(/^[-•*]\s*/, ''),
-        severity: 'medium' as const,
-      }));
+      const fallbackInsights = lines
+        .slice(0, ANALYSIS_CONFIG.MAX_FALLBACK_INSIGHTS)
+        .map((line) => ({
+          category: 'General',
+          text: line.replace(/^[-•*]\s*/, ''),
+          severity: 'medium' as const,
+          // Mark insights as parsed from fallback for transparency
+          parsedFromFallback: true,
+        }));
+      return fallbackInsights;
     }
 
     return [];
@@ -1045,7 +1139,7 @@ export class AnalysisService {
       recommendations.push(`Address: ${factor}`);
     }
 
-    return recommendations.slice(0, 5);
+    return recommendations.slice(0, ANALYSIS_CONFIG.MAX_RECOMMENDATIONS);
   }
 
   // ============================================================
@@ -1539,14 +1633,25 @@ export class AnalysisService {
   }
 
   /**
-   * Convert sentiment to NPS breakdown
+   * Convert sentiment to NPS breakdown.
+   *
+   * @warning DEMO/MOCK DATA: This function uses random variation to simulate
+   * realistic NPS distribution for demonstration purposes. In production,
+   * this should be replaced with actual NPS survey data or a deterministic
+   * algorithm based on real customer feedback.
+   *
+   * The random component adds variation to make demo charts look realistic,
+   * but means repeated calls with the same sentiment may return different values.
    */
   private sentimentToNPS(sentiment: number): {
     npsScore: number;
     promoterPct: number;
     passivePct: number;
     detractorPct: number;
+    /** Indicates this is simulated data, not actual NPS survey results */
+    isSimulated: true;
   } {
+    // Base percentages vary by sentiment tier with random demo variation
     if (sentiment < -0.5) {
       const detractorPct = 70 + Math.floor(Math.random() * 15);
       const passivePct = 15 + Math.floor(Math.random() * 10);
@@ -1556,6 +1661,7 @@ export class AnalysisService {
         promoterPct,
         passivePct,
         detractorPct,
+        isSimulated: true,
       };
     } else if (sentiment < -0.2) {
       const detractorPct = 50 + Math.floor(Math.random() * 15);
@@ -1566,6 +1672,7 @@ export class AnalysisService {
         promoterPct,
         passivePct,
         detractorPct,
+        isSimulated: true,
       };
     } else if (sentiment < 0.2) {
       const detractorPct = 30 + Math.floor(Math.random() * 10);
@@ -1576,6 +1683,7 @@ export class AnalysisService {
         promoterPct,
         passivePct,
         detractorPct,
+        isSimulated: true,
       };
     } else if (sentiment < 0.5) {
       const promoterPct = 40 + Math.floor(Math.random() * 15);
@@ -1586,6 +1694,7 @@ export class AnalysisService {
         promoterPct,
         passivePct,
         detractorPct,
+        isSimulated: true,
       };
     } else {
       const promoterPct = 55 + Math.floor(Math.random() * 20);
@@ -1596,6 +1705,7 @@ export class AnalysisService {
         promoterPct,
         passivePct,
         detractorPct,
+        isSimulated: true,
       };
     }
   }
