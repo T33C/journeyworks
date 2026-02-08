@@ -9,7 +9,7 @@
 // COMMUNICATION CHANNELS
 // =============================================================================
 
-export const CHANNELS = ['email', 'phone', 'chat', 'social', 'portal'] as const;
+export const CHANNELS = ['email', 'phone', 'chat', 'social', 'letter'] as const;
 export type Channel = (typeof CHANNELS)[number];
 
 export const CHANNEL_LABELS: Record<Channel, string> = {
@@ -17,7 +17,7 @@ export const CHANNEL_LABELS: Record<Channel, string> = {
   phone: 'Phone',
   chat: 'Chat',
   social: 'Social Media',
-  portal: 'Customer Portal',
+  letter: 'Letter',
 };
 
 export const CHANNEL_ICONS: Record<Channel, string> = {
@@ -25,7 +25,7 @@ export const CHANNEL_ICONS: Record<Channel, string> = {
   phone: 'phone',
   chat: 'chat',
   social: 'public',
-  portal: 'web',
+  letter: 'mail',
 };
 
 // =============================================================================

@@ -6,19 +6,32 @@ export interface Communication {
   direction: 'inbound' | 'outbound';
   subject?: string;
   content: string;
+  summary?: string;
   timestamp: string;
   status: CommunicationStatus;
   priority: Priority;
   sentiment?: SentimentAnalysis;
-  topics?: string[];
+  intent?: {
+    primary: string;
+    secondary?: string[];
+    confidence: number;
+  };
+  entities?: Array<{ type: string; value: string; confidence?: number }>;
+  tags?: string[];
   caseId?: string;
   assignedTo?: string;
   metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
 
   // AI Classification fields
   aiClassification?: AIClassification;
   messages?: CommunicationMessage[];
   threadId?: string;
+
+  // Search result fields
+  score?: number;
+  highlights?: Record<string, string[]>;
 }
 
 export interface AIClassification {
@@ -66,7 +79,7 @@ export type CommunicationChannel =
   | 'phone'
   | 'chat'
   | 'social'
-  | 'portal';
+  | 'letter';
 export type CommunicationStatus =
   | 'open'
   | 'in_progress'
@@ -78,39 +91,53 @@ export interface SentimentAnalysis {
   score: number;
   label: 'positive' | 'neutral' | 'negative' | 'mixed';
   confidence: number;
+  emotionalTones?: string[];
 }
 
 export interface CommunicationSearchParams {
   query?: string;
-  channel?: CommunicationChannel;
-  status?: CommunicationStatus;
-  priority?: Priority;
-  sentiment?: string;
+  channels?: CommunicationChannel[];
+  statuses?: CommunicationStatus[];
+  priorities?: Priority[];
+  sentiments?: string[];
+  direction?: 'inbound' | 'outbound';
   customerId?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  page?: number;
-  limit?: number;
+  startDate?: string;
+  endDate?: string;
+  tags?: string[];
+  product?: string;
+  from?: number;
+  size?: number;
+  sortField?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface PaginatedResponse<T> {
-  data: T[];
+  items: T[];
   total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  from: number;
+  size: number;
+  hasMore: boolean;
 }
 
 export interface Customer {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   company?: string;
-  tier: 'standard' | 'premium' | 'enterprise';
+  tier: string;
   accountManager?: string;
+  relationshipManager?: string;
+  accountType?: string;
+  portfolioValue?: number;
+  riskProfile?: string;
   healthScore?: number;
   riskLevel?: 'low' | 'medium' | 'high';
-  totalCommunications: number;
-  openCases: number;
+  totalCommunications?: number;
+  openCases?: number;
+  region?: string;
+  joinedDate?: string;
   lastContactDate?: string;
+  communicationPreference?: string;
 }

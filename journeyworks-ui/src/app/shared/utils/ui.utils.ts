@@ -14,7 +14,7 @@ const CHANNEL_ICONS: Record<string, string> = {
   phone: 'phone',
   chat: 'chat',
   social: 'public',
-  portal: 'web',
+  letter: 'mail',
 };
 
 /**
