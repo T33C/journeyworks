@@ -133,6 +133,6 @@ $sidebar-collapsed-width: 60px;
 // Content Area
 .content-area {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   background: $bg-page;
 }
