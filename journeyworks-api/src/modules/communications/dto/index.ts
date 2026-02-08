@@ -432,6 +432,11 @@ export class SearchCommunicationsDto {
   @IsString({ each: true })
   tags?: string[];
 
+  @ApiPropertyOptional({ description: 'Filter by product slug' })
+  @IsOptional()
+  @IsString()
+  product?: string;
+
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @IsNumber()

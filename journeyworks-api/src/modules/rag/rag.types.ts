@@ -70,6 +70,12 @@ export interface RagResponse {
     excerpt: string;
   }>;
   processingTime: number;
+  /** Present when the response was generated in a degraded mode */
+  degradedMode?: {
+    queryEnhancementFailed?: boolean;
+    rerankingFailed?: boolean;
+    reason?: string;
+  };
 }
 
 export interface ChunkingConfig {

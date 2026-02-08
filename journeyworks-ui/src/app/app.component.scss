@@ -1,4 +1,5 @@
 /* JourneyWorks App Shell Styles */
+@use "styles/variables" as *;
 
 $header-height: 56px;
 $sidebar-width: 200px;
@@ -14,11 +15,24 @@ $sidebar-collapsed-width: 60px;
 // Header
 .app-header {
   height: $header-height;
-  background: linear-gradient(135deg, #5c6bc0 0%, #3f51b5 100%);
-  color: white;
+  background: $bg-header;
+  color: $text-inverse;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 100;
   padding: 0 16px;
+
+  // Make all toolbar icons white
+  button[mat-icon-button] {
+    color: $text-inverse;
+
+    mat-icon {
+      color: $text-inverse;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
 
   .brand {
     display: flex;
@@ -60,7 +74,7 @@ $sidebar-collapsed-width: 60px;
 // Sidebar
 .sidebar {
   width: $sidebar-width;
-  background: #1e1e2f;
+  background: $bg-sidebar;
   display: flex;
   flex-direction: column;
   padding: 12px 8px;
@@ -105,9 +119,13 @@ $sidebar-collapsed-width: 60px;
     }
 
     &.active {
-      background: linear-gradient(135deg, #5c6bc0 0%, #7c4dff 100%);
-      color: white;
-      box-shadow: 0 2px 8px rgba(92, 107, 192, 0.4);
+      background: linear-gradient(
+        135deg,
+        $brand-secondary 0%,
+        $brand-secondary-light 100%
+      );
+      color: $text-inverse;
+      box-shadow: 0 2px 8px rgba(48, 90, 133, 0.4);
     }
   }
 }
@@ -116,5 +134,5 @@ $sidebar-collapsed-width: 60px;
 .content-area {
   flex: 1;
   overflow: hidden;
-  background: #f5f5f5;
+  background: $bg-page;
 }

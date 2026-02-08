@@ -201,6 +201,7 @@ export class CommunicationsService {
         startDate: dto.startDate,
         endDate: dto.endDate,
         tags: dto.tags,
+        product: dto.product,
       },
       {
         from: dto.from || 0,

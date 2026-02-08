@@ -24,6 +24,7 @@ import {
   ResearchService,
   ResearchSource,
 } from '../../core/services/research.service';
+import { InsightChartCardComponent } from '../analysis/research-panel/insight-chart-card.component';
 
 @Component({
   selector: 'app-research',
@@ -42,6 +43,7 @@ import {
     MatTooltipModule,
     MatSnackBarModule,
     MarkdownPipe,
+    InsightChartCardComponent,
   ],
   templateUrl: './research.component.html',
   styleUrl: './research.component.scss',
@@ -105,6 +107,7 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
         this.researchService.addAssistantMessage(
           response.answer,
           response.sources,
+          response.charts,
         );
         this.currentThinking = '';
         this.shouldScroll = true;

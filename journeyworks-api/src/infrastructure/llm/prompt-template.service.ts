@@ -39,6 +39,7 @@ import {
   RAG_QUERY_PROMPT,
   RAG_ANSWER_PROMPT,
   CONTEXTUAL_EMBEDDING_PROMPT,
+  CUSTOMER_SUMMARY_PROMPT,
 } from './prompts/rag';
 
 // RRG prompts
@@ -170,6 +171,7 @@ export class PromptTemplateService {
     this.registerTemplate('rag:query', RAG_QUERY_PROMPT);
     this.registerTemplate('rag:answer', RAG_ANSWER_PROMPT);
     this.registerTemplate('rag:contextual', CONTEXTUAL_EMBEDDING_PROMPT);
+    this.registerTemplate('rag:customerSummary', CUSTOMER_SUMMARY_PROMPT);
 
     // RRG prompts
     this.registerTemplate('rrg:nl_to_dsl', NL_TO_DSL_PROMPT);

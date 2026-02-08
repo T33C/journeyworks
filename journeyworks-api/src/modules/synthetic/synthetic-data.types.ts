@@ -132,7 +132,7 @@ export interface SyntheticCase {
 
 export interface SyntheticSocialMention {
   id: string;
-  platform: 'twitter' | 'linkedin' | 'facebook' | 'reddit' | 'trustpilot';
+  platform: 'twitter' | 'linkedin' | 'reddit' | 'trustpilot';
   author: string;
   authorHandle: string;
   content: string;

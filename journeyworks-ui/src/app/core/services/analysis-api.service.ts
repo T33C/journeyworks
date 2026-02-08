@@ -151,6 +151,9 @@ export class AnalysisApiService {
     if (filters?.product && filters.product !== 'all') {
       params = params.set('product', filters.product);
     }
+    if (filters?.channel && filters.channel !== 'all') {
+      params = params.set('channel', filters.channel);
+    }
 
     return this.http
       .get<QuadrantItem[]>(`${this.baseUrl}/quadrant/items`, { params })
@@ -172,8 +175,15 @@ export class AnalysisApiService {
         event: context.event
           ? {
               id: context.event.id,
+              date:
+                context.event.date instanceof Date
+                  ? context.event.date.toISOString()
+                  : context.event.date,
               type: context.event.type,
               label: context.event.label,
+              product: context.event.product,
+              severity: context.event.severity,
+              description: context.event.description,
             }
           : undefined,
         timeWindow: context.timeWindow
@@ -228,8 +238,15 @@ export class AnalysisApiService {
         event: context.event
           ? {
               id: context.event.id,
+              date:
+                context.event.date instanceof Date
+                  ? context.event.date.toISOString()
+                  : context.event.date,
               type: context.event.type,
               label: context.event.label,
+              product: context.event.product,
+              severity: context.event.severity,
+              description: context.event.description,
             }
           : undefined,
         timeWindow: context.timeWindow

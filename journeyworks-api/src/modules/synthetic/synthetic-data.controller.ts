@@ -90,10 +90,16 @@ export class SyntheticDataController {
   @ApiOperation({ summary: 'Get all synthetic customers' })
   @ApiQuery({ name: 'tier', required: false })
   @ApiQuery({ name: 'region', required: false })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Max results (default 100)',
+  })
   @ApiResponse({ status: 200, description: 'List of customers' })
   async getCustomers(
     @Query('tier') tier?: string,
     @Query('region') region?: string,
+    @Query('limit') limit?: string,
   ): Promise<any[]> {
     let customers = await this.service.getAllCustomers();
 
@@ -105,7 +111,8 @@ export class SyntheticDataController {
       customers = customers.filter((c) => c.region === region);
     }
 
-    return customers;
+    const maxResults = Math.min(parseInt(limit || '100', 10) || 100, 1000);
+    return customers.slice(0, maxResults);
   }
 
   @Get('customers/:id')
@@ -123,11 +130,17 @@ export class SyntheticDataController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'priority', required: false })
   @ApiQuery({ name: 'customerId', required: false })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Max results (default 100)',
+  })
   @ApiResponse({ status: 200, description: 'List of cases' })
   async getCases(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
     @Query('customerId') customerId?: string,
+    @Query('limit') limit?: string,
   ): Promise<any[]> {
     let cases = await this.service.getAllCases();
 
@@ -143,7 +156,8 @@ export class SyntheticDataController {
       cases = cases.filter((c) => c.customerId === customerId);
     }
 
-    return cases;
+    const maxResults = Math.min(parseInt(limit || '100', 10) || 100, 1000);
+    return cases.slice(0, maxResults);
   }
 
   @Get('cases/:id')
@@ -160,10 +174,16 @@ export class SyntheticDataController {
   @ApiOperation({ summary: 'Get all synthetic social mentions' })
   @ApiQuery({ name: 'platform', required: false })
   @ApiQuery({ name: 'sentiment', required: false })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Max results (default 100)',
+  })
   @ApiResponse({ status: 200, description: 'List of social mentions' })
   async getSocialMentions(
     @Query('platform') platform?: string,
     @Query('sentiment') sentiment?: string,
+    @Query('limit') limit?: string,
   ): Promise<any[]> {
     let mentions = await this.service.getAllSocialMentions();
 
@@ -175,7 +195,8 @@ export class SyntheticDataController {
       mentions = mentions.filter((m) => m.sentiment?.label === sentiment);
     }
 
-    return mentions;
+    const maxResults = Math.min(parseInt(limit || '100', 10) || 100, 1000);
+    return mentions.slice(0, maxResults);
   }
 
   @Get('social-mentions/:id')
@@ -225,15 +246,16 @@ export class SyntheticDataController {
         min: size === 'small' ? 3 : 10,
         max: size === 'small' ? 10 : 40,
       },
-      casesPercentage: 90,
+      casesPercentage: 30,
       casesPerCustomer: { min: 1, max: 3 },
-      socialMentionsCount: customerCount * 2,
+      socialMentionsCount: customerCount * 6,
+      eventsCount: size === 'small' ? 20 : size === 'medium' ? 50 : 100,
     });
 
     return {
       success: true,
       result,
-      message: `Successfully seeded ${result.customers} customers with ${result.communications} communications`,
+      message: `Successfully seeded ${result.customers} customers, ${result.communications} communications, ${result.cases} cases, ${result.surveys} surveys, ${result.events} events, ${result.socialMentions} social mentions, and ${result.chunks} chunks`,
     };
   }
 }

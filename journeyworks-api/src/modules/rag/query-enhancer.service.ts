@@ -16,6 +16,9 @@ import {
 } from '../../infrastructure/llm';
 import { RedisCacheService } from '../../infrastructure/redis';
 
+/** LLM call timeout in milliseconds */
+const LLM_TIMEOUT_MS = 60_000;
+
 export interface EnhancedQuery {
   originalIntent: string;
   enhancedQueries: Array<{
@@ -93,7 +96,7 @@ export class QueryEnhancerService {
       );
 
       // Call LLM for query enhancement
-      const response = await this.llmClient.prompt(prompt, systemPrompt, {
+      const response = await this.promptWithTimeout(prompt, systemPrompt, {
         rateLimitKey: 'llm:query-enhance',
       });
 
@@ -154,9 +157,10 @@ export class QueryEnhancerService {
     for (const word of words) {
       if (synonymMap[word]) {
         // Create variations with synonyms
+        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         for (const synonym of synonymMap[word]) {
           if (synonym !== word) {
-            expansions.add(query.replace(new RegExp(word, 'gi'), synonym));
+            expansions.add(query.replace(new RegExp(escaped, 'gi'), synonym));
           }
         }
       }
@@ -228,8 +232,11 @@ export class QueryEnhancerService {
     originalQuery: string,
   ): EnhancedQuery {
     try {
-      // Try to parse as JSON
-      const parsed = JSON.parse(response);
+      // Use brace-matching to handle preamble/postamble from LLM
+      const braceStart = response.indexOf('{');
+      const jsonStr =
+        braceStart >= 0 ? this.extractJsonObject(response, braceStart) : null;
+      const parsed = jsonStr ? JSON.parse(jsonStr) : JSON.parse(response);
 
       return {
         originalIntent: parsed.originalIntent || originalQuery,
@@ -268,5 +275,42 @@ export class QueryEnhancerService {
       subQuestions: [],
       analysisHints: [],
     };
+  }
+
+  /**
+   * Wrap LLM prompt call with a timeout to prevent indefinite hangs
+   */
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const result = await Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM prompt timed out')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
+  }
+
+  /**
+   * Extract a JSON object from a string using brace-matching
+   */
+  private extractJsonObject(text: string, startIndex: number): string | null {
+    let depth = 0;
+    for (let i = startIndex; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.substring(startIndex, i + 1);
+        }
+      }
+    }
+    return null;
   }
 }

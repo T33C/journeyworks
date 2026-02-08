@@ -79,6 +79,16 @@
         <p class="summary-text">{{ insight()!.summary }}</p>
       </section>
 
+      <!-- Charts Section -->
+      @if (insight()?.charts?.length) {
+        <section class="charts-section">
+          <h3>Supporting Data</h3>
+          @for (chart of insight()!.charts!; track chart.title) {
+            <app-insight-chart-card [chart]="chart" />
+          }
+        </section>
+      }
+
       <mat-divider></mat-divider>
 
       <!-- Key Drivers -->

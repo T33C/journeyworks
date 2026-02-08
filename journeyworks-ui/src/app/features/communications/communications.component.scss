@@ -1,3 +1,5 @@
+@use "styles/variables" as *;
+
 .communications-page {
   padding: 24px;
 }
@@ -13,7 +15,7 @@
 
   .subtitle {
     margin: 4px 0 0;
-    color: #666;
+    color: $text-secondary;
     font-size: 14px;
   }
 }
@@ -55,7 +57,7 @@
 
   .customer-link,
   .subject-link {
-    color: #1976d2;
+    color: $brand-secondary;
     text-decoration: none;
 
     &:hover {
@@ -84,7 +86,7 @@
       font-size: 14px;
       width: 14px;
       height: 14px;
-      color: #999;
+      color: $text-muted;
     }
   }
 
@@ -100,23 +102,23 @@
     font-size: 12px;
 
     &.priority-low {
-      background: #e8f5e9;
-      color: #388e3c;
+      background: $sentiment-positive-bg;
+      color: $priority-low;
     }
 
     &.priority-medium {
-      background: #fff3e0;
-      color: #f57c00;
+      background: $sentiment-mixed-bg;
+      color: $priority-medium;
     }
 
     &.priority-high {
-      background: #ffebee;
-      color: #d32f2f;
+      background: $sentiment-negative-bg;
+      color: $priority-high;
     }
 
     &.priority-urgent {
-      background: #f3e5f5;
-      color: #7b1fa2;
+      background: #f5f0f7;
+      color: $priority-urgent;
     }
   }
 }

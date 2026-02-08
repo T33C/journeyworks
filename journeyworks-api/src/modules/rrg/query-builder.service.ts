@@ -121,6 +121,12 @@ export class QueryBuilder {
           searchable: false,
           aggregatable: true,
         },
+        {
+          name: 'aiClassification.product',
+          type: 'keyword',
+          searchable: false,
+          aggregatable: true,
+        },
       ],
     },
     cases: {
@@ -187,6 +193,12 @@ export class QueryBuilder {
         {
           name: 'slaDeadline',
           type: 'date',
+          searchable: false,
+          aggregatable: true,
+        },
+        {
+          name: 'product',
+          type: 'keyword',
           searchable: false,
           aggregatable: true,
         },
@@ -366,6 +378,15 @@ export class QueryBuilder {
       filter.push({ terms: { status: entities.statuses } });
     }
 
+    if (entities.products?.length) {
+      // Product field path differs by index
+      const productField =
+        schema.name === 'communications'
+          ? 'aiClassification.product'
+          : 'product';
+      filter.push({ terms: { [productField]: entities.products } });
+    }
+
     // Process explicit filters
     for (const f of intent.filters) {
       const clause = this.filterToClause(f);
@@ -513,6 +534,9 @@ export class QueryBuilder {
     }
     if (entities.topics?.length) {
       parts.push(`about: ${entities.topics.join(', ')}`);
+    }
+    if (entities.products?.length) {
+      parts.push(`for product(s): ${entities.products.join(', ')}`);
     }
 
     // Time range

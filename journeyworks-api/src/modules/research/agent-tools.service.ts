@@ -10,6 +10,8 @@ import { RrgService } from '../rrg/rrg.service';
 import { AnalysisService } from '../analysis/analysis.service';
 import { CommunicationsService } from '../communications/communications.service';
 import { ElasticsearchClientService } from '../../infrastructure/elasticsearch';
+import { DateRangeParser } from '../../shared/utils/date-range.util';
+import { findProductByTerm } from '../synthetic/data/products';
 import { AgentTool, ResearchSource, ToolParameters } from './research.types';
 
 @Injectable()
@@ -23,8 +25,8 @@ export class AgentTools {
     cases: 'journeyworks_cases',
   } as const;
 
-  // Default time range for queries
-  private static readonly DEFAULT_TIME_RANGE = 'last 30 days';
+  // Default time range for queries - 'all' means no date filter
+  private static readonly DEFAULT_TIME_RANGE = 'all';
 
   constructor(
     private readonly ragService: RagService,
@@ -68,9 +70,11 @@ export class AgentTools {
     return this.getTools()
       .map((tool) => {
         const params = Object.entries(tool.parameters.properties)
-          .map(
-            ([key, prop]) => `    - ${key} (${prop.type}): ${prop.description}`,
-          )
+          .map(([key, prop]) => {
+            const defaultStr =
+              prop.default !== undefined ? ` (default: ${prop.default})` : '';
+            return `    - ${key} (${prop.type}): ${prop.description}${defaultStr}`;
+          })
           .join('\n');
         return `${tool.name}: ${tool.description}\n  Parameters:\n${params}`;
       })
@@ -332,7 +336,7 @@ export class AgentTools {
     this.tools.set('analyze_sentiment', {
       name: 'analyze_sentiment',
       description:
-        'Analyze sentiment across communications. Can be filtered by customer, time range, or other criteria.',
+        'Analyze sentiment across communications. Can be filtered by customer, time range, product, or other criteria.',
       parameters: {
         type: 'object',
         properties: {
@@ -342,11 +346,17 @@ export class AgentTools {
           },
           timeRange: {
             type: 'string',
-            description: 'Time range (e.g., "last 7 days", "this month")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
           },
           query: {
             type: 'string',
             description: 'Optional text query to filter communications',
+          },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
           },
         },
       },
@@ -354,10 +364,12 @@ export class AgentTools {
         const timeRange = input.timeRange
           ? this.parseTimeRange(input.timeRange)
           : undefined;
+        const product = this.normalizeProduct(input.product);
         const result = await this.analysisService.analyze({
           type: 'sentiment',
           targetId: input.customerId,
           query: input.query,
+          product,
           timeRange,
         });
         return {
@@ -373,7 +385,7 @@ export class AgentTools {
     this.tools.set('analyze_topics', {
       name: 'analyze_topics',
       description:
-        'Identify and analyze topics across communications. Shows what customers are talking about.',
+        'Identify and analyze topics across communications. Shows what customers are talking about. Can filter by product.',
       parameters: {
         type: 'object',
         properties: {
@@ -383,7 +395,13 @@ export class AgentTools {
           },
           timeRange: {
             type: 'string',
-            description: 'Time range (e.g., "last 30 days")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
+          },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
           },
         },
       },
@@ -391,9 +409,11 @@ export class AgentTools {
         const timeRange = input.timeRange
           ? this.parseTimeRange(input.timeRange)
           : undefined;
+        const product = this.normalizeProduct(input.product);
         const result = await this.analysisService.analyze({
           type: 'topics',
           targetId: input.customerId,
+          product,
           timeRange,
         });
         return {
@@ -529,17 +549,23 @@ export class AgentTools {
     this.tools.set('analyze_trends', {
       name: 'analyze_trends',
       description:
-        'Analyze trends over time in communications. Shows volume, sentiment, and topic trends.',
+        'Analyze trends over time in communications. Shows volume, sentiment, and topic trends. Can filter by product.',
       parameters: {
         type: 'object',
         properties: {
           timeRange: {
             type: 'string',
-            description: 'Time range to analyze (e.g., "last 30 days")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
           },
           customerId: {
             type: 'string',
             description: 'Optional customer ID to filter',
+          },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
           },
         },
       },
@@ -547,9 +573,11 @@ export class AgentTools {
         const timeRange = input.timeRange
           ? this.parseTimeRange(input.timeRange)
           : undefined;
+        const product = this.normalizeProduct(input.product);
         const result = await this.analysisService.analyze({
           type: 'trends',
           targetId: input.customerId,
+          product,
           timeRange,
         });
         return {
@@ -587,7 +615,8 @@ export class AgentTools {
           },
           timeRange: {
             type: 'string',
-            description: 'Time range (e.g., "last 30 days")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
           },
         },
       },
@@ -597,13 +626,14 @@ export class AgentTools {
 
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
-          const filter: any[] = [
-            {
+          const filter: any[] = [];
+          if (timeRange) {
+            filter.push({
               range: { timestamp: { gte: timeRange.from, lte: timeRange.to } },
-            },
-          ];
+            });
+          }
 
           // Filter by escalatedFrom field
           if (input.fromChannel) {
@@ -671,7 +701,8 @@ export class AgentTools {
           },
           timeRange: {
             type: 'string',
-            description: 'Time range (e.g., "last 30 days")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
           },
           includeChannelBreakdown: {
             type: 'boolean',
@@ -683,16 +714,21 @@ export class AgentTools {
         try {
           const client = this.getElasticClient();
 
+          // Only parse time range if explicitly provided by user
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
           const filter: any[] = [
-            {
-              range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
-            },
             { term: { 'category.keyword': 'CDD Remediation' } },
           ];
+
+          // Only add date filter if timeRange was specified
+          if (timeRange) {
+            filter.push({
+              range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
+            });
+          }
 
           if (input.reason) {
             filter.push({ match: { subcategory: input.reason } });
@@ -754,7 +790,7 @@ export class AgentTools {
     this.tools.set('get_daily_volumes', {
       name: 'get_daily_volumes',
       description:
-        'Get daily volume counts for communications or cases. Use for "per day" type questions.',
+        'Get daily volume counts for communications or cases. Use for "per day" type questions. Can filter by product.',
       parameters: {
         type: 'object',
         properties: {
@@ -774,9 +810,15 @@ export class AgentTools {
             type: 'string',
             description: 'Filter by status (e.g., escalated, open)',
           },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
+          },
           timeRange: {
             type: 'string',
-            description: 'Time range (e.g., "last 30 days")',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., \"last 7 days\", \"this month\"). Omit to search all data.',
           },
         },
         required: ['dataType'],
@@ -787,7 +829,7 @@ export class AgentTools {
 
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
           const index =
             input.dataType === 'cases'
@@ -796,13 +838,14 @@ export class AgentTools {
           const dateField =
             input.dataType === 'cases' ? 'createdAt' : 'timestamp';
 
-          const filter: any[] = [
-            {
+          const filter: any[] = [];
+          if (timeRange) {
+            filter.push({
               range: {
                 [dateField]: { gte: timeRange.from, lte: timeRange.to },
               },
-            },
-          ];
+            });
+          }
 
           if (input.channel) filter.push({ term: { channel: input.channel } });
           if (input.category) {
@@ -813,6 +856,17 @@ export class AgentTools {
             filter.push({ term: { [catField]: input.category } });
           }
           if (input.status) filter.push({ term: { status: input.status } });
+
+          if (input.product) {
+            const slug = this.normalizeProduct(input.product);
+            if (slug) {
+              const productField =
+                input.dataType === 'cases'
+                  ? 'product'
+                  : 'aiClassification.product';
+              filter.push({ term: { [productField]: slug } });
+            }
+          }
 
           const response = await client.search({
             index,
@@ -871,14 +925,14 @@ export class AgentTools {
 
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
-          const filter: any[] = [
-            {
+          const filter: any[] = [{ exists: { field: 'resolvedAt' } }];
+          if (timeRange) {
+            filter.push({
               range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
-            },
-            { exists: { field: 'resolvedAt' } },
-          ];
+            });
+          }
           if (input.category) {
             filter.push({ term: { 'category.keyword': input.category } });
           }
@@ -887,31 +941,44 @@ export class AgentTools {
             index: AgentTools.ES_INDICES.cases,
             body: {
               query: { bool: { filter } },
-              size: 100,
-              _source: ['createdAt', 'resolvedAt', 'category'],
+              size: 0,
+              aggs: {
+                resolution_stats: {
+                  scripted_metric: {
+                    init_script: 'state.times = []',
+                    map_script: `
+                      if (doc['resolvedAt'].size() > 0 && doc['createdAt'].size() > 0) {
+                        def resolved = doc['resolvedAt'].value.toInstant().toEpochMilli();
+                        def created = doc['createdAt'].value.toInstant().toEpochMilli();
+                        state.times.add((resolved - created) / 86400000.0);
+                      }
+                    `,
+                    combine_script: 'return state.times',
+                    reduce_script: `
+                      def all = [];
+                      for (t in states) { all.addAll(t); }
+                      if (all.size() == 0) return ['count': 0];
+                      def sum = 0.0; def min = all.get(0); def max = all.get(0);
+                      for (v in all) { sum += v; if (v < min) min = v; if (v > max) max = v; }
+                      return ['count': all.size(), 'avg': sum / all.size(), 'min': min, 'max': max];
+                    `,
+                  },
+                },
+              },
             },
           });
 
-          const hits = response.hits?.hits || [];
-          const resolutionTimes = hits.map((h: any) => {
-            const created = new Date(h._source.createdAt).getTime();
-            const resolved = new Date(h._source.resolvedAt).getTime();
-            return (resolved - created) / (1000 * 60 * 60 * 24); // days
-          });
+          const stats = (response.aggregations as any)?.resolution_stats?.value;
 
-          if (resolutionTimes.length === 0) {
+          if (!stats || stats.count === 0) {
             return { error: 'No resolved cases found in time range' };
           }
 
-          const avg =
-            resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length;
           return {
-            casesAnalyzed: resolutionTimes.length,
-            avgResolutionDays: Math.round(avg * 10) / 10,
-            minResolutionDays:
-              Math.round(Math.min(...resolutionTimes) * 10) / 10,
-            maxResolutionDays:
-              Math.round(Math.max(...resolutionTimes) * 10) / 10,
+            casesAnalyzed: stats.count,
+            avgResolutionDays: Math.round(stats.avg * 10) / 10,
+            minResolutionDays: Math.round(stats.min * 10) / 10,
+            maxResolutionDays: Math.round(stats.max * 10) / 10,
             timeRange,
           };
         } catch (error) {
@@ -944,13 +1011,14 @@ export class AgentTools {
 
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
-          const filter: any[] = [
-            {
+          const filter: any[] = [];
+          if (timeRange) {
+            filter.push({
               range: { createdAt: { gte: timeRange.from, lte: timeRange.to } },
-            },
-          ];
+            });
+          }
           if (input.category) {
             filter.push({ term: { 'category.keyword': input.category } });
           }
@@ -1002,7 +1070,7 @@ export class AgentTools {
     this.tools.set('get_category_breakdown', {
       name: 'get_category_breakdown',
       description:
-        'Get breakdown of cases or communications by category and subcategory. Shows top complaint reasons.',
+        'Get breakdown of cases or communications by category and subcategory. Shows top complaint reasons. Can filter by product.',
       parameters: {
         type: 'object',
         properties: {
@@ -1014,6 +1082,11 @@ export class AgentTools {
             type: 'string',
             description: 'Time range',
           },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
+          },
         },
       },
       execute: async (input) => {
@@ -1022,7 +1095,7 @@ export class AgentTools {
 
           const timeRange = input.timeRange
             ? this.parseTimeRange(input.timeRange)
-            : this.parseTimeRange(AgentTools.DEFAULT_TIME_RANGE);
+            : null; // null = no date filter (all time)
 
           const index =
             input.dataType === 'cases'
@@ -1035,18 +1108,31 @@ export class AgentTools {
               ? 'category.keyword'
               : 'aiClassification.category.keyword';
 
+          const filterClauses: any[] = [];
+          if (timeRange) {
+            filterClauses.push({
+              range: {
+                [dateField]: { gte: timeRange.from, lte: timeRange.to },
+              },
+            });
+          }
+          if (input.product) {
+            const slug = this.normalizeProduct(input.product);
+            if (slug) {
+              const productField =
+                input.dataType === 'cases'
+                  ? 'product'
+                  : 'aiClassification.product';
+              filterClauses.push({ term: { [productField]: slug } });
+            }
+          }
+
           const response = await client.search({
             index,
             body: {
               query: {
                 bool: {
-                  filter: [
-                    {
-                      range: {
-                        [dateField]: { gte: timeRange.from, lte: timeRange.to },
-                      },
-                    },
-                  ],
+                  filter: filterClauses,
                 },
               },
               size: 0,
@@ -1089,46 +1175,24 @@ export class AgentTools {
   }
 
   /**
-   * Parse time range string into from/to dates
+   * Parse time range string into from/to dates.
+   * Delegates to the shared DateRangeParser utility.
+   * Returns null for "all" / "all time" / unrecognised (no date filter).
    */
-  private parseTimeRange(timeRange: string): { from: string; to: string } {
-    const now = new Date();
-    const lowerRange = timeRange.toLowerCase();
+  private parseTimeRange(
+    timeRange: string,
+  ): { from: string; to: string } | null {
+    return DateRangeParser.parse(timeRange);
+  }
 
-    const match = lowerRange.match(/last\s+(\d+)\s+(day|week|month|year)s?/);
-    if (match) {
-      const amount = parseInt(match[1], 10);
-      const unit = match[2];
-
-      const from = new Date(now);
-      switch (unit) {
-        case 'day':
-          from.setDate(from.getDate() - amount);
-          break;
-        case 'week':
-          from.setDate(from.getDate() - amount * 7);
-          break;
-        case 'month':
-          from.setMonth(from.getMonth() - amount);
-          break;
-        case 'year':
-          from.setFullYear(from.getFullYear() - amount);
-          break;
-      }
-
-      return {
-        from: from.toISOString(),
-        to: now.toISOString(),
-      };
-    }
-
-    // Default to last 30 days
-    const from = new Date(now);
-    from.setDate(from.getDate() - 30);
-    return {
-      from: from.toISOString(),
-      to: now.toISOString(),
-    };
+  /**
+   * Normalize a product term (name, alias, or slug) to the canonical ES slug.
+   * Returns undefined if the term doesn't match any known product.
+   */
+  private normalizeProduct(product: string | undefined): string | undefined {
+    if (!product) return undefined;
+    const found = findProductByTerm(product);
+    return found ? found.slug : product;
   }
 
   /**

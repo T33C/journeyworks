@@ -141,6 +141,43 @@ class AnalysisRequestDto implements AnalysisRequest {
   query?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TARGET_ID_LENGTH)
+  product?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TimeRangeDto)
+  timeRange?: TimeRangeDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AnalysisOptionsDto)
+  options?: AnalysisOptionsDto;
+}
+
+/**
+ * DTO for convenience endpoints (POST /analysis/sentiment, /topics, etc.)
+ * where the analysis type is set by the route, not the body.
+ * This avoids the Omit<> problem where class-validator still requires `type`.
+ */
+class AnalysisBodyDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TARGET_ID_LENGTH)
+  targetId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_QUERY_LENGTH)
+  query?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TARGET_ID_LENGTH)
+  product?: string;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => TimeRangeDto)
   timeRange?: TimeRangeDto;
@@ -167,7 +204,7 @@ export class AnalysisController {
   @ApiOperation({ summary: 'Analyze sentiment across communications' })
   @ApiResponse({ status: 200, description: 'Sentiment analysis result' })
   async analyzeSentiment(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
+    @Body() dto: AnalysisBodyDto,
   ): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'sentiment' });
   }
@@ -175,18 +212,14 @@ export class AnalysisController {
   @Post('topics')
   @ApiOperation({ summary: 'Analyze topics in communications' })
   @ApiResponse({ status: 200, description: 'Topic analysis result' })
-  async analyzeTopics(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
-  ): Promise<AnalysisResult> {
+  async analyzeTopics(@Body() dto: AnalysisBodyDto): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'topics' });
   }
 
   @Post('trends')
   @ApiOperation({ summary: 'Analyze trends over time' })
   @ApiResponse({ status: 200, description: 'Trend analysis result' })
-  async analyzeTrends(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
-  ): Promise<AnalysisResult> {
+  async analyzeTrends(@Body() dto: AnalysisBodyDto): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'trends' });
   }
 
@@ -223,18 +256,14 @@ export class AnalysisController {
   @Post('risk')
   @ApiOperation({ summary: 'Assess risk across communications' })
   @ApiResponse({ status: 200, description: 'Risk assessment result' })
-  async assessRisk(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
-  ): Promise<AnalysisResult> {
+  async assessRisk(@Body() dto: AnalysisBodyDto): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'risk-assessment' });
   }
 
   @Post('patterns')
   @ApiOperation({ summary: 'Analyze communication patterns' })
   @ApiResponse({ status: 200, description: 'Pattern analysis result' })
-  async analyzePatterns(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
-  ): Promise<AnalysisResult> {
+  async analyzePatterns(@Body() dto: AnalysisBodyDto): Promise<AnalysisResult> {
     return this.analysisService.analyze({
       ...dto,
       type: 'communication-patterns',
@@ -244,9 +273,7 @@ export class AnalysisController {
   @Post('issues')
   @ApiOperation({ summary: 'Detect issues in communications' })
   @ApiResponse({ status: 200, description: 'Issue detection result' })
-  async detectIssues(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
-  ): Promise<AnalysisResult> {
+  async detectIssues(@Body() dto: AnalysisBodyDto): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'issue-detection' });
   }
 
@@ -254,7 +281,7 @@ export class AnalysisController {
   @ApiOperation({ summary: 'Generate data card for communications' })
   @ApiResponse({ status: 200, description: 'Data card result' })
   async generateDataCard(
-    @Body() dto: Omit<AnalysisRequestDto, 'type'>,
+    @Body() dto: AnalysisBodyDto,
   ): Promise<AnalysisResult> {
     return this.analysisService.analyze({ ...dto, type: 'data-card' });
   }
@@ -377,16 +404,23 @@ export class AnalysisController {
     required: false,
     description: 'Filter by product',
   })
+  @ApiQuery({
+    name: 'channel',
+    required: false,
+    description: 'Filter by channel',
+  })
   @ApiResponse({ status: 200, description: 'Quadrant items' })
   async getQuadrantItems(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('product') product?: string,
+    @Query('channel') channel?: string,
   ) {
     return this.analysisService.getQuadrantItems({
       startDate: parseDate(startDate),
       endDate: parseDate(endDate),
       product,
+      channel,
     });
   }
 }

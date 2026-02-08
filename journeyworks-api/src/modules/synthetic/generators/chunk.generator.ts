@@ -10,6 +10,7 @@ import {
   SyntheticChunk,
   SyntheticCommunication,
 } from '../synthetic-data.types';
+import { hashCode } from '../utils/random.util';
 
 const CHUNK_TYPES = ['paragraph', 'sentence', 'section'] as const;
 
@@ -113,6 +114,8 @@ export class ChunkGenerator {
       chunkType,
       tokenCount,
       overlap: chunkType === 'sentence' ? Math.floor(tokenCount * 0.1) : 0,
+      denseEmbedding: this.generateMockEmbedding(content),
+      sparseEmbedding: this.generateMockSparseEmbedding(content),
       metadata: {
         channel: communication.channel,
         timestamp: communication.timestamp,
@@ -148,19 +151,24 @@ export class ChunkGenerator {
   }
 
   /**
-   * Generate a mock embedding vector (placeholder)
-   * In production, this would call an embedding service
+   * Generate a deterministic mock embedding vector from content.
+   * Uses content hash as seed for reproducible vectors.
+   * In production, this would call an embedding service.
    */
-  generateMockEmbedding(dimensions: number = 768): number[] {
-    return Array.from({ length: dimensions }, () => Math.random() * 2 - 1);
+  generateMockEmbedding(content: string, dimensions: number = 768): number[] {
+    const seed = hashCode(content);
+    return Array.from({ length: dimensions }, (_, i) => {
+      // Simple deterministic pseudo-random based on seed + index
+      const x = Math.sin(seed * 9301 + i * 49297) * 49297;
+      return (x - Math.floor(x)) * 2 - 1;
+    });
   }
 
   /**
-   * Generate mock sparse embedding (placeholder)
-   * In production, this would come from a sparse encoder
+   * Generate deterministic mock sparse embedding from content.
+   * In production, this would come from a sparse encoder.
    */
   generateMockSparseEmbedding(content: string): Record<string, number> {
-    // Create sparse vector from top words (simplified)
     const words = content
       .toLowerCase()
       .split(/\W+/)
@@ -168,21 +176,13 @@ export class ChunkGenerator {
     const uniqueWords = [...new Set(words)].slice(0, 50);
 
     const sparse: Record<string, number> = {};
-    uniqueWords.forEach((word, index) => {
-      // Use word hash as dimension key, random weight
-      sparse[String(this.hashCode(word) % 30000)] = Math.random() * 2;
+    uniqueWords.forEach((word) => {
+      const h = hashCode(word);
+      // Deterministic weight from hash
+      const weight = ((h * 9301 + 49297) % 233280) / 233280;
+      sparse[String(h % 30000)] = weight * 2;
     });
 
     return sparse;
-  }
-
-  private hashCode(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash);
   }
 }

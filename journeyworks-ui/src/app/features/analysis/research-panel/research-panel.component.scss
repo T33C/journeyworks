@@ -161,6 +161,7 @@
 
 .hint-cards {
   @include flex-column;
+  align-items: center;
   gap: $spacing-sm;
   width: 100%;
 }
@@ -175,19 +176,27 @@
   border: 1px solid $border-default;
   text-align: left;
   transition: all 0.2s ease;
+  width: 75%;
+  min-width: 300px;
 
   mat-icon {
     font-size: 20px;
     width: 20px;
     height: 20px;
+    line-height: 20px;
     color: $ai-primary;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   span {
     font-size: $font-size-sm;
     color: $text-primary;
     line-height: $line-height-tight;
+    display: flex;
+    align-items: center;
 
     strong {
       color: $chat-suggestion-text;
@@ -248,6 +257,31 @@
   background: linear-gradient(135deg, $ai-message-bg 0%, $bg-card 60%);
   border-left: 3px solid $evidence-border;
   border-radius: 0 $border-radius-md $border-radius-md 0;
+}
+
+// Charts Section
+.charts-section {
+  margin: $spacing-md 0;
+  animation: fadeSlideIn 0.4s ease-out 0.15s both;
+
+  h3 {
+    margin: 0 0 $spacing-sm 0;
+    font-size: $font-size-sm;
+    font-weight: 600;
+    color: $text-primary;
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+
+    &::before {
+      content: '';
+      display: block;
+      width: 3px;
+      height: 14px;
+      background: $ai-primary-light;
+      border-radius: 2px;
+    }
+  }
 }
 
 mat-divider {
@@ -464,12 +498,12 @@ mat-divider {
 .followup-panel {
   margin: $spacing-sm 0;
   box-shadow: none !important;
-  border: 1px solid lighten($ai-primary, 30%);
+  border: 1px solid $ai-primary-light;
   border-radius: $border-radius-md !important;
   background: linear-gradient(
     135deg,
     $ai-message-bg-start 0%,
-    lighten($ai-message-bg-end, 3%) 100%
+    $brand-white 100%
   ) !important;
 
   mat-panel-title {
@@ -478,7 +512,7 @@ mat-divider {
     gap: $spacing-sm;
     font-size: $font-size-sm;
     font-weight: 600;
-    color: darken($ai-primary, 15%);
+    color: $ai-primary-dark;
 
     mat-icon {
       font-size: 18px;
@@ -543,7 +577,7 @@ mat-divider {
   .handle-bar {
     width: 40px;
     height: 4px;
-    background: lighten($border-default, 5%);
+    background: $grey-2;
     border-radius: 2px;
     transition: all 0.2s ease;
   }
@@ -638,7 +672,7 @@ mat-divider {
     background: linear-gradient(
       135deg,
       $chat-suggestion-hover 0%,
-      darken($chat-suggestion-hover, 10%) 100%
+      $grey-3 100%
     );
     box-shadow: $shadow-sm;
   }
@@ -821,7 +855,7 @@ mat-divider {
     background: linear-gradient(
       135deg,
       $ai-message-bg-start 0%,
-      lighten($ai-message-bg-end, 2%) 100%
+      $brand-white 100%
     );
 
     .message-avatar {

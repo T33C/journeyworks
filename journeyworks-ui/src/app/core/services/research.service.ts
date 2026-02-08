@@ -2,6 +2,7 @@ import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject, map, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { InsightChart } from '../models/analysis.model';
 
 @Injectable({
   providedIn: 'root',
@@ -84,6 +85,7 @@ export class ResearchService {
   addAssistantMessage(
     content: string,
     sources?: ResearchSource[],
+    charts?: InsightChart[],
   ): ConversationMessage {
     const message: ConversationMessage = {
       id: this.generateMessageId(),
@@ -91,6 +93,7 @@ export class ResearchService {
       content,
       timestamp: new Date().toISOString(),
       sources,
+      charts,
     };
     this._messages.update((msgs) => [...msgs, message]);
     return message;
@@ -357,6 +360,7 @@ export class ResearchService {
       sessionId,
       answer: response.answer,
       sources: response.sources || [],
+      charts: response.charts || [],
       reasoning: response.reasoning || [],
       suggestedFollowUps: response.suggestedFollowUps || [],
       processingTime: response.processingTime || 0,
@@ -368,6 +372,7 @@ export class ResearchService {
 interface AgentResponse {
   answer: string;
   sources?: ResearchSource[];
+  charts?: InsightChart[];
   reasoning?: ReasoningStep[];
   suggestedFollowUps?: string[];
   processingTime?: number;
@@ -421,6 +426,7 @@ export interface ResearchResponse {
   sessionId: string;
   answer: string;
   sources: ResearchSource[];
+  charts: InsightChart[];
   reasoning: ReasoningStep[];
   suggestedFollowUps: string[];
   processingTime: number;
@@ -461,4 +467,5 @@ export interface ConversationMessage {
   content: string;
   timestamp: string;
   sources?: ResearchSource[];
+  charts?: InsightChart[];
 }

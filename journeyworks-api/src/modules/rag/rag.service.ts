@@ -48,12 +48,8 @@ const RAG_CONFIG = {
   DEFAULT_MAX_COMMUNICATIONS: 20,
 } as const;
 
-/** Metadata about degraded operation modes */
-interface DegradedModeInfo {
-  queryEnhancementFailed?: boolean;
-  rerankingFailed?: boolean;
-  reason?: string;
-}
+/** LLM call timeout in milliseconds */
+const LLM_TIMEOUT_MS = 60_000;
 
 @Injectable()
 export class RagService {
@@ -92,7 +88,7 @@ export class RagService {
   async query(request: RagQuery): Promise<RagResponse> {
     const startTime = Date.now();
     const topK = request.topK || this.topK;
-    const degradedMode: DegradedModeInfo = {};
+    const degradedMode: RagResponse['degradedMode'] = {};
 
     this.logger.log(`Processing RAG query: "${request.query}"`);
 
@@ -153,6 +149,7 @@ export class RagService {
       results: finalResults,
       sources: answer.sources,
       processingTime,
+      ...(Object.keys(degradedMode).length > 0 && { degradedMode }),
     };
   }
 
@@ -321,29 +318,48 @@ ${content}
       this.promptTemplate.getTemplate('system:customerIntelligence') ||
       this.promptTemplate.getTemplate('system:researcher');
 
-    const response = await this.llmClient.prompt(prompt, systemPrompt, {
+    const response = await this.promptWithTimeout(prompt, systemPrompt, {
       rateLimitKey: 'llm:rag',
     });
 
-    // Try to parse JSON response
+    // Try to parse JSON response using brace-matching
     try {
-      const parsed = JSON.parse(response);
-      // Clamp confidence to valid range [0, 1]
-      const confidence = Math.min(
-        1,
-        Math.max(0, parsed.confidence || RAG_CONFIG.DEFAULT_CONFIDENCE),
-      );
+      const braceStart = response.indexOf('{');
+      const jsonStr =
+        braceStart >= 0 ? this.extractJsonObject(response, braceStart) : null;
+      const parsed = jsonStr ? JSON.parse(jsonStr) : null;
+
+      if (parsed?.answer) {
+        // Clamp confidence to valid range [0, 1]
+        const confidence = Math.min(
+          1,
+          Math.max(0, parsed.confidence || RAG_CONFIG.DEFAULT_CONFIDENCE),
+        );
+        return {
+          content: parsed.answer,
+          confidence,
+          sources: (parsed.sources || []).map((s: any) => ({
+            id: s.documentId || s.id,
+            relevance: s.relevance || 'Relevant to the query',
+            excerpt: this.extractExcerpt(
+              includedDocs.find((r) => r.document.id === (s.documentId || s.id))
+                ?.document.content || '',
+            ),
+          })),
+        };
+      }
+
+      // Parsed but no answer field — treat as plain text
       return {
-        content: parsed.answer || response,
-        confidence,
-        sources: (parsed.sources || []).map((s: any) => ({
-          id: s.documentId || s.id,
-          relevance: s.relevance || 'Relevant to the query',
-          excerpt: this.extractExcerpt(
-            includedDocs.find((r) => r.document.id === (s.documentId || s.id))
-              ?.document.content || '',
-          ),
-        })),
+        content: response,
+        confidence: RAG_CONFIG.FALLBACK_CONFIDENCE,
+        sources: includedDocs
+          .slice(0, RAG_CONFIG.FALLBACK_SOURCE_COUNT)
+          .map((r) => ({
+            id: r.document.id,
+            relevance: 'Used in generating response',
+            excerpt: this.extractExcerpt(r.document.content),
+          })),
       };
     } catch {
       // If not JSON, return as plain text
@@ -397,9 +413,8 @@ ${content}
       return [];
     }
 
-    return this.semanticSearch(document.content, topK + 1, {}).then((results) =>
-      results.filter((r) => r.document.id !== documentId).slice(0, topK),
-    );
+    const results = await this.semanticSearch(document.content, topK + 1, {});
+    return results.filter((r) => r.document.id !== documentId).slice(0, topK);
   }
 
   /**
@@ -439,22 +454,31 @@ ${content}
       })
       .join('\n');
 
-    const prompt = `Summarize the following customer communications. Identify key themes, sentiment trends, and any issues or concerns raised.
+    const prompt = this.promptTemplate.renderNamed('rag:customerSummary', {
+      communications: communicationsSummary,
+    });
 
-Communications:
-${communicationsSummary}
-
-Provide a concise summary (2-3 paragraphs) covering:
-1. Overall relationship health and sentiment
-2. Key topics and concerns discussed
-3. Any action items or follow-ups needed`;
-
-    return this.llmClient.prompt(
-      prompt,
+    const systemPrompt =
       this.promptTemplate.getTemplate('system:customerIntelligence') ||
-        this.promptTemplate.getTemplate('system:analyst'),
-      { rateLimitKey: 'llm:rag' },
-    );
+      this.promptTemplate.getTemplate('system:analyst');
+
+    try {
+      return await this.promptWithTimeout(prompt, systemPrompt, {
+        rateLimitKey: 'llm:rag',
+      });
+    } catch (error) {
+      this.logger.error(`Customer summary generation failed: ${error.message}`);
+      // Return a basic summary from the raw data
+      const channelCounts: Record<string, number> = {};
+      results.hits.forEach((hit) => {
+        const ch = hit.source.channel || 'unknown';
+        channelCounts[ch] = (channelCounts[ch] || 0) + 1;
+      });
+      const channelBreakdown = Object.entries(channelCounts)
+        .map(([ch, count]) => `${ch}: ${count}`)
+        .join(', ');
+      return `Customer has ${results.hits.length} communications (${channelBreakdown}). Automated summary generation is temporarily unavailable.`;
+    }
   }
 
   /**
@@ -503,5 +527,43 @@ Provide a concise summary (2-3 paragraphs) covering:
       : 'latest';
 
     return `${start} to ${end}`;
+  }
+
+  /**
+   * Wrap LLM prompt call with a timeout to prevent indefinite hangs
+   */
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const result = await Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM prompt timed out')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
+  }
+
+  /**
+   * Extract a JSON object from a string using brace-matching.
+   * Handles LLM responses that include preamble text before/after JSON.
+   */
+  private extractJsonObject(text: string, startIndex: number): string | null {
+    let depth = 0;
+    for (let i = startIndex; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.substring(startIndex, i + 1);
+        }
+      }
+    }
+    return null;
   }
 }

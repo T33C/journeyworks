@@ -11,3 +11,4 @@
 export { RAG_QUERY_PROMPT } from './query.prompt';
 export { RAG_ANSWER_PROMPT } from './answer.prompt';
 export { CONTEXTUAL_EMBEDDING_PROMPT } from './contextual.prompt';
+export { CUSTOMER_SUMMARY_PROMPT } from './customer-summary.prompt';

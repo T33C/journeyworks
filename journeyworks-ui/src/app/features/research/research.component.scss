@@ -140,7 +140,7 @@
   background: linear-gradient(
     135deg,
     $chat-suggestion-bg 0%,
-    lighten($chat-suggestion-bg, 5%) 100%
+    $brand-white 100%
   );
   border-radius: $border-radius-md;
   color: $chat-suggestion-text;
@@ -220,7 +220,7 @@
         background: linear-gradient(
           135deg,
           $chat-suggestion-hover 0%,
-          darken($chat-suggestion-hover, 10%) 100%
+          $grey-3 100%
         );
         box-shadow: $shadow-md;
       }
@@ -271,7 +271,7 @@
       background: linear-gradient(
         135deg,
         $ai-message-bg-start 0%,
-        lighten($ai-message-bg-end, 2%) 100%
+        $brand-white 100%
       );
       border-radius: $border-radius-lg $border-radius-lg $border-radius-lg 0;
     }
@@ -505,7 +505,7 @@
         background: linear-gradient(
           135deg,
           $chat-suggestion-hover 0%,
-          darken($chat-suggestion-hover, 10%) 100%
+          $grey-3 100%
         );
         box-shadow: $shadow-sm;
       }

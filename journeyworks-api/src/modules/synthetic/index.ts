@@ -12,3 +12,4 @@ export * from './generators/case.generator';
 export * from './generators/social-mention.generator';
 export * from './generators/event.generator';
 export * from './generators/chunk.generator';
+export * from './generators/survey.generator';

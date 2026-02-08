@@ -71,7 +71,7 @@ export class SyntheticDataService {
           ) || 30,
       },
       casesPercentage:
-        this.configService.get<number>('syntheticData.casesPercentage') || 90,
+        this.configService.get<number>('syntheticData.casesPercentage') || 30,
       casesPerCustomer: {
         min:
           this.configService.get<number>(
@@ -84,7 +84,7 @@ export class SyntheticDataService {
       },
       socialMentionsCount:
         this.configService.get<number>('syntheticData.socialMentionsCount') ||
-        200,
+        500,
       eventsCount:
         this.configService.get<number>('syntheticData.eventsCount') || 50,
       dateRange: {
@@ -133,20 +133,14 @@ export class SyntheticDataService {
 
     // Store customers in Elasticsearch
     this.logger.log('Storing customers in Elasticsearch...');
-    // Map synthetic tier values to customer DTO tier values
-    const tierMapping: Record<string, string> = {
-      platinum: 'premium',
-      gold: 'standard',
-      silver: 'basic',
-      bronze: 'student',
-    };
+    // Customer generator now emits canonical tier names (platinum/gold/silver/bronze)
     const customerDtos = generatedCustomers.map((c) => ({
       id: c.id,
       name: c.name,
       email: c.email,
       phone: c.phone,
       company: c.company,
-      tier: tierMapping[c.tier] || c.tier,
+      tier: c.tier,
       relationshipManager: c.relationshipManager,
       accountType: c.accountType,
       portfolioValue: c.portfolioValue,
@@ -286,12 +280,30 @@ export class SyntheticDataService {
       generatedCases,
       generatedEvents,
     );
-    this.logger.log(`Generated ${generatedSurveys.length} NPS surveys`);
+    this.logger.log(
+      `Generated ${generatedSurveys.length} case-linked NPS surveys`,
+    );
+
+    // Generate standalone surveys spread across the full date range
+    // These ensure survey coverage across the entire timeline (especially recent dates)
+    const standaloneSurveyCount = Math.max(
+      200,
+      mergedConfig.customerCount * 10,
+    );
+    const standaloneSurveys = this.surveyGenerator.generateStandalone(
+      standaloneSurveyCount,
+      dateRange,
+    );
+    this.logger.log(
+      `Generated ${standaloneSurveys.length} standalone NPS surveys`,
+    );
+
+    const allSurveys = [...generatedSurveys, ...standaloneSurveys];
 
     // Store surveys in Elasticsearch
     this.logger.log('Storing surveys in Elasticsearch...');
-    await this.surveysService.bulkIndexSurveys(generatedSurveys);
-    this.logger.log(`Stored ${generatedSurveys.length} surveys`);
+    await this.surveysService.bulkIndexSurveys(allSurveys);
+    this.logger.log(`Stored ${allSurveys.length} surveys`);
 
     // 6. Generate and store social mentions
     this.logger.log('Generating social mentions...');
@@ -404,24 +416,29 @@ export class SyntheticDataService {
     socialMentions: number;
   }> {
     // Query counts from each service
-    const [customers, cases, socialMentions] = await Promise.all([
-      this.customersService
-        .getAll()
-        .then((r) => r.length)
-        .catch(() => 0),
-      this.casesService
-        .search()
-        .then((r) => r.total)
-        .catch(() => 0),
-      this.socialMentionsService
-        .search()
-        .then((r) => r.total)
-        .catch(() => 0),
-    ]);
+    const [customers, communications, cases, socialMentions] =
+      await Promise.all([
+        this.customersService
+          .getAll()
+          .then((r) => r.length)
+          .catch(() => 0),
+        this.communicationsService
+          .search({ size: 0 } as any)
+          .then((r) => r.total)
+          .catch(() => 0),
+        this.casesService
+          .search()
+          .then((r) => r.total)
+          .catch(() => 0),
+        this.socialMentionsService
+          .search()
+          .then((r) => r.total)
+          .catch(() => 0),
+      ]);
 
     return {
       customers,
-      communications: 0, // Would need to add count method to communications service
+      communications,
       cases,
       socialMentions,
     };
@@ -500,6 +517,7 @@ export class SyntheticDataService {
     socialMentions: number;
     events: number;
     surveys: number;
+    chunks: number;
   }> {
     this.logger.log('Clearing all synthetic data from Elasticsearch...');
 
@@ -510,6 +528,7 @@ export class SyntheticDataService {
       socialMentions: 0,
       events: 0,
       surveys: 0,
+      chunks: 0,
     };
 
     try {
@@ -559,6 +578,14 @@ export class SyntheticDataService {
       this.logger.warn(`Failed to clear surveys: ${error.message}`);
     }
 
+    try {
+      const chunkResult = await this.chunksService.deleteAll();
+      results.chunks = chunkResult.deleted;
+      this.logger.log(`Deleted ${results.chunks} chunks`);
+    } catch (error) {
+      this.logger.warn(`Failed to clear chunks: ${error.message}`);
+    }
+
     this.logger.log('Cleared all synthetic data');
     return results;
   }
@@ -570,9 +597,9 @@ export class SyntheticDataService {
     return this.generateAll({
       customerCount: 10,
       communicationsPerCustomer: { min: 3, max: 10 },
-      casesPercentage: 90,
+      casesPercentage: 30,
       casesPerCustomer: { min: 1, max: 2 },
-      socialMentionsCount: 20,
+      socialMentionsCount: 60,
     });
   }
 
@@ -583,9 +610,9 @@ export class SyntheticDataService {
     return this.generateAll({
       customerCount: 100,
       communicationsPerCustomer: { min: 10, max: 40 },
-      casesPercentage: 90,
+      casesPercentage: 30,
       casesPerCustomer: { min: 1, max: 4 },
-      socialMentionsCount: 300,
+      socialMentionsCount: 600,
     });
   }
 }

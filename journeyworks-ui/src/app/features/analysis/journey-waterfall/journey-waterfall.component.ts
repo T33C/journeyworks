@@ -22,6 +22,9 @@ import {
 import {
   CHART_CONFIG,
   getChartDimensions,
+  GREY,
+  RAG,
+  DATA_VIS,
 } from '../../../core/config/chart.config';
 
 @Component({
@@ -62,7 +65,7 @@ import {
         gap: 8px;
 
         mat-icon {
-          color: #5c6bc0;
+          color: #305a85;
           font-size: 20px;
           width: 20px;
           height: 20px;
@@ -71,13 +74,13 @@ import {
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: #333;
+          color: #333333;
         }
       }
 
       .chart-subtitle {
         font-size: 11px;
-        color: #999;
+        color: #9b9b9b;
       }
 
       .chart-area {
@@ -135,11 +138,16 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
   });
 
   constructor() {
-    // React to context and filter changes
+    // React to context, filter, and brush date range changes
     effect(() => {
       const ctx = this.stateService.context();
       const filters = this.stateService.filters();
-      this.loadJourneyData(ctx, filters);
+      const brushRange = this.stateService.brushDateRange();
+      // If the mini chart brush is active, override dateRangeObj with the brush range
+      const effectiveFilters = brushRange
+        ? { ...filters, dateRangeObj: brushRange }
+        : filters;
+      this.loadJourneyData(ctx, effectiveFilters);
     });
   }
 
@@ -199,7 +207,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('x2', width)
       .attr('y1', y(0))
       .attr('y2', y(0))
-      .attr('stroke', '#ccc')
+      .attr('stroke', GREY[3])
       .attr('stroke-dasharray', '4,4');
 
     // Connecting lines between bars (using NPS)
@@ -214,7 +222,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
         .attr('x2', nextX)
         .attr('y1', currY)
         .attr('y2', currY)
-        .attr('stroke', '#999')
+        .attr('stroke', GREY[5])
         .attr('stroke-width', 1)
         .attr('stroke-dasharray', '3,3');
     }
@@ -230,7 +238,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('y', y(0)) // Start from zero line
       .attr('width', x.bandwidth())
       .attr('height', 0) // Start with no height
-      .attr('fill', (d) => (d.change >= 0 ? '#66bb6a' : '#ef5350'))
+      .attr('fill', (d) => (d.change >= 0 ? RAG.green : RAG.red))
       .attr('rx', 4)
       .attr('opacity', 0.85)
       .style('cursor', 'pointer')
@@ -275,7 +283,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('font-weight', '600')
       .attr('fill', (d, i) => {
         const prevNPS = i === 0 ? 0 : stages[i - 1].npsScore;
-        return d.npsScore - prevNPS >= 0 ? '#2e7d32' : '#c62828';
+        return d.npsScore - prevNPS >= 0 ? RAG.green : RAG.red;
       })
       .attr('opacity', 0)
       .text((d, i) => {
@@ -301,7 +309,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('y', y(0))
       .attr('width', x.bandwidth())
       .attr('height', 0)
-      .attr('fill', netNPSChange >= 0 ? '#5c6bc0' : '#7b1fa2')
+      .attr('fill', netNPSChange >= 0 ? DATA_VIS.blue[2] : DATA_VIS.pink[1])
       .attr('rx', 4)
       .attr('opacity', 0.9)
       .style('cursor', 'pointer')
@@ -331,7 +339,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('text-anchor', 'middle')
       .attr('font-size', '11px')
       .attr('font-weight', '700')
-      .attr('fill', netNPSChange >= 0 ? '#303f9f' : '#6a1b9a')
+      .attr('fill', netNPSChange >= 0 ? DATA_VIS.blue[1] : DATA_VIS.pink[1])
       .attr('opacity', 0)
       .text((netNPSChange >= 0 ? '+' : '') + netNPSChange)
       .transition()
@@ -345,7 +353,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('transform', `translate(0,${height})`)
       .call(d3.axisBottom(x))
       .selectAll('text')
-      .attr('fill', (d) => (d === 'Net Outcome' ? '#5c6bc0' : '#666'))
+      .attr('fill', (d) => (d === 'Net Outcome' ? DATA_VIS.blue[2] : GREY[6]))
       .attr('font-size', '10px')
       .attr('font-weight', (d) => (d === 'Net Outcome' ? '600' : '400'))
       .attr('transform', 'rotate(-15)')
@@ -361,7 +369,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
           .tickFormat((d) => ((d as number) >= 0 ? '+' + d : '' + d)),
       )
       .selectAll('text')
-      .attr('fill', '#666');
+      .attr('fill', GREY[6]);
 
     // Y-axis label
     svg
@@ -371,7 +379,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
       .attr('x', -height / 2)
       .attr('text-anchor', 'middle')
       .attr('font-size', '11px')
-      .attr('fill', '#666')
+      .attr('fill', GREY[6])
       .text('Net Promoter Score');
   }
 
@@ -380,36 +388,55 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
   }
 
   private showTooltip(event: MouseEvent, stage: JourneyStage) {
-    d3.select('body')
+    const tooltip = d3
+      .select('body')
       .append('div')
       .attr('class', 'd3-tooltip')
       .style('position', 'absolute')
       .style('background', 'white')
-      .style('border', '1px solid #ddd')
+      .style('border', `1px solid ${GREY[3]}`)
       .style('border-radius', '8px')
       .style('padding', '10px')
       .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
       .style('font-size', '12px')
       .style('z-index', '1000')
+      .style('pointer-events', 'none')
       .html(
         `
         <strong>${stage.label}</strong><br/>
         <div style="margin-top: 6px;">
-          <strong style="font-size: 14px; color:${stage.npsScore >= 0 ? '#66bb6a' : '#ef5350'}">NPS: ${stage.npsScore > 0 ? '+' : ''}${stage.npsScore}</strong>
-          <span style="margin-left: 8px; color: ${stage.change >= 0 ? '#2e7d32' : '#c62828'};">(${stage.change >= 0 ? '+' : ''}${(stage.change * 100).toFixed(0)} pts)</span>
+          <strong style="font-size: 14px; color:${stage.npsScore >= 0 ? RAG.green : RAG.red}">NPS: ${stage.npsScore > 0 ? '+' : ''}${stage.npsScore}</strong>
+          <span style="margin-left: 8px; color: ${stage.change >= 0 ? RAG.green : RAG.red};">(${stage.change >= 0 ? '+' : ''}${(stage.change * 100).toFixed(0)} pts)</span>
         </div>
         <div style="margin-top: 4px; font-size: 11px;">
-          <span style="color: #66bb6a;">Promoters: ${stage.promoterPct}%</span> |
-          <span style="color: #ffb74d;">Passives: ${stage.passivePct}%</span> |
-          <span style="color: #ef5350;">Detractors: ${stage.detractorPct}%</span>
+          <span style="color: ${RAG.green};">Promoters: ${stage.promoterPct}%</span> |
+          <span style="color: ${RAG.amber};">Passives: ${stage.passivePct}%</span> |
+          <span style="color: ${RAG.red};">Detractors: ${stage.detractorPct}%</span>
         </div>
-        <div style="margin-top: 4px; border-top: 1px solid #eee; padding-top: 4px;">
+        <div style="margin-top: 4px; border-top: 1px solid ${GREY[2]}; padding-top: 4px;">
           <strong>${stage.communications}</strong> survey responses
         </div>
       `,
-      )
-      .style('left', event.pageX + 12 + 'px')
-      .style('top', event.pageY - 10 + 'px');
+      );
+
+    // Position with viewport bounds checking
+    const node = tooltip.node() as HTMLElement;
+    const tooltipHeight = node.offsetHeight;
+    const tooltipWidth = node.offsetWidth;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    let left = event.pageX + 12;
+    let top = event.pageY - 10;
+
+    if (event.clientY + tooltipHeight + 12 > viewportHeight) {
+      top = event.pageY - tooltipHeight - 12;
+    }
+    if (left + tooltipWidth > viewportWidth) {
+      left = event.pageX - tooltipWidth - 12;
+    }
+
+    tooltip.style('left', left + 'px').style('top', top + 'px');
   }
 
   private hideTooltip() {
@@ -424,38 +451,57 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
     const lastStage = stages[stages.length - 1];
     const firstStage = stages[0];
 
-    d3.select('body')
+    const tooltip = d3
+      .select('body')
       .append('div')
       .attr('class', 'd3-tooltip')
       .style('position', 'absolute')
       .style('background', 'white')
-      .style('border', '1px solid #5c6bc0')
+      .style('border', `1px solid ${DATA_VIS.blue[2]}`)
       .style('border-radius', '8px')
       .style('padding', '10px')
       .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
       .style('font-size', '12px')
       .style('z-index', '1000')
+      .style('pointer-events', 'none')
       .html(
         `
-        <strong style="color: #5c6bc0;">Net Outcome</strong><br/>
+        <strong style="color: ${DATA_VIS.blue[2]};">Net Outcome</strong><br/>
         <div style="margin-top: 6px;">
-          <strong style="font-size: 14px; color:${netNPSChange >= 0 ? '#5c6bc0' : '#7b1fa2'}">
+          <strong style="font-size: 14px; color:${netNPSChange >= 0 ? DATA_VIS.blue[2] : DATA_VIS.pink[1]}">
             NPS Change: ${netNPSChange >= 0 ? '+' : ''}${netNPSChange} points
           </strong>
         </div>
-        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #eee;">
+        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GREY[2]};">
           <div style="margin-bottom: 4px;"><strong>Journey Start:</strong> NPS ${firstStage.npsScore > 0 ? '+' : ''}${firstStage.npsScore}</div>
           <div><strong>Journey End:</strong> NPS ${lastStage.npsScore > 0 ? '+' : ''}${lastStage.npsScore}</div>
         </div>
-        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #eee; font-size: 11px;">
-          <div style="color: #666;">Post-Resolution Breakdown:</div>
-          <span style="color: #66bb6a;">Promoters: ${lastStage.promoterPct}%</span> |
-          <span style="color: #ffb74d;">Passives: ${lastStage.passivePct}%</span> |
-          <span style="color: #ef5350;">Detractors: ${lastStage.detractorPct}%</span>
+        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${GREY[2]}; font-size: 11px;">
+          <div style="color: ${GREY[6]};">Post-Resolution Breakdown:</div>
+          <span style="color: ${RAG.green};">Promoters: ${lastStage.promoterPct}%</span> |
+          <span style="color: ${RAG.amber};">Passives: ${lastStage.passivePct}%</span> |
+          <span style="color: ${RAG.red};">Detractors: ${lastStage.detractorPct}%</span>
         </div>
       `,
-      )
-      .style('left', event.pageX + 12 + 'px')
-      .style('top', event.pageY - 10 + 'px');
+      );
+
+    // Position with viewport bounds checking
+    const node = tooltip.node() as HTMLElement;
+    const tooltipHeight = node.offsetHeight;
+    const tooltipWidth = node.offsetWidth;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    let left = event.pageX + 12;
+    let top = event.pageY - 10;
+
+    if (event.clientY + tooltipHeight + 12 > viewportHeight) {
+      top = event.pageY - tooltipHeight - 12;
+    }
+    if (left + tooltipWidth > viewportWidth) {
+      left = event.pageX - tooltipWidth - 12;
+    }
+
+    tooltip.style('left', left + 'px').style('top', top + 'px');
   }
 }

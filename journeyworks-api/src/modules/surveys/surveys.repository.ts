@@ -70,6 +70,8 @@ export interface SurveySearchFilters {
   npsCategory?: NpsCategory;
   channel?: string;
   product?: string;
+  /** Array of product slugs (takes precedence over single product) */
+  products?: string[];
   startDate?: Date;
   endDate?: Date;
   responded?: boolean;
@@ -193,7 +195,13 @@ export class SurveysRepository extends BaseElasticsearchRepository<SurveyDocumen
       filter.push({ term: { channel: filters.channel } });
     }
 
-    if (filters?.product) {
+    if (filters?.products?.length) {
+      filter.push(
+        filters.products.length === 1
+          ? { term: { product: filters.products[0] } }
+          : { terms: { product: filters.products } },
+      );
+    } else if (filters?.product) {
       filter.push({ term: { product: filters.product } });
     }
 
@@ -236,7 +244,13 @@ export class SurveysRepository extends BaseElasticsearchRepository<SurveyDocumen
       filterClauses.push({ range: { surveyDate: range } });
     }
 
-    if (filters?.product) {
+    if (filters?.products?.length) {
+      filterClauses.push(
+        filters.products.length === 1
+          ? { term: { product: filters.products[0] } }
+          : { terms: { product: filters.products } },
+      );
+    } else if (filters?.product) {
       filterClauses.push({ term: { product: filters.product } });
     }
 
@@ -381,7 +395,13 @@ export class SurveysRepository extends BaseElasticsearchRepository<SurveyDocumen
       filterClauses.push({ range: { surveyDate: range } });
     }
 
-    if (filters?.product) {
+    if (filters?.products?.length) {
+      filterClauses.push(
+        filters.products.length === 1
+          ? { term: { product: filters.products[0] } }
+          : { terms: { product: filters.products } },
+      );
+    } else if (filters?.product) {
       filterClauses.push({ term: { product: filters.product } });
     }
 

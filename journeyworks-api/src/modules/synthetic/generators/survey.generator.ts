@@ -18,6 +18,12 @@ import {
   NpsCategory,
 } from '../../surveys/surveys.repository';
 import { SyntheticCase, SyntheticEvent } from '../synthetic-data.types';
+import {
+  findProductBySlug,
+  PRODUCTS_BY_CATEGORY,
+  KNOWN_PRODUCTS,
+} from '../data/products';
+import { randomChoice } from '../utils/random.util';
 
 /**
  * Journey stage progression with typical sentiment patterns
@@ -298,12 +304,48 @@ const CHANNEL_MODIFIERS: Record<string, number> = {
 };
 
 /**
- * Response rate multiplier - increase to get more survey responses
- * Default patterns have ~20-35% response rate, multiplier increases this
- * 1.0 = normal, 2.0 = double response rate, 3.0 = triple, etc.
+ * Response rate multiplier - controls survey response volume
+ * Default patterns have ~20-35% response rate
+ * 2.5 = elevated rates (~50-87%), ensuring enough responded surveys for meaningful aggregations
  * Capped at 1.0 (100%) probability
  */
-const RESPONSE_RATE_MULTIPLIER = 3.0;
+const RESPONSE_RATE_MULTIPLIER = 2.5;
+
+/**
+ * Map product catalogue categories to PRODUCT_PATTERNS keys.
+ * The product catalogue uses plural category names (e.g. 'mortgages'),
+ * while PRODUCT_PATTERNS uses singular keys (e.g. 'mortgage').
+ */
+const CATEGORY_TO_PATTERN: Record<string, string> = {
+  'current-accounts': 'current-account',
+  savings: 'savings-account',
+  mortgages: 'mortgage',
+  cards: 'credit-card',
+  loans: 'personal-loan',
+  insurance: 'insurance',
+  digital: 'current-account', // digital products follow current-account patterns
+  international: 'current-account', // international products follow current-account patterns
+};
+
+/**
+ * Resolve a product slug to its NPS journey pattern.
+ * Uses the product catalogue to find the product's category,
+ * then maps that category to the correct PRODUCT_PATTERNS key.
+ */
+function resolveProductPattern(productSlug: string): JourneyPattern {
+  const product = findProductBySlug(productSlug);
+  if (product) {
+    const patternKey = CATEGORY_TO_PATTERN[product.category];
+    if (patternKey && PRODUCT_PATTERNS[patternKey]) {
+      return PRODUCT_PATTERNS[patternKey];
+    }
+  }
+  // Try direct match as fallback (e.g. 'personal-loan' exists in both)
+  if (PRODUCT_PATTERNS[productSlug]) {
+    return PRODUCT_PATTERNS[productSlug];
+  }
+  return DEFAULT_PATTERN;
+}
 
 @Injectable()
 export class SurveyGenerator {
@@ -317,7 +359,7 @@ export class SurveyGenerator {
     const surveys: SurveyDocument[] = [];
     // Use product from case (derived from communications) for data consistency
     const product = caseData.product || this.selectRandomProduct();
-    const pattern = PRODUCT_PATTERNS[product] || DEFAULT_PATTERN;
+    const pattern = resolveProductPattern(product);
     // Default channel based on category - can vary by complaint type
     const channel = this.inferChannel(caseData.category);
     const channelModifier = CHANNEL_MODIFIERS[channel] || 0;
@@ -421,29 +463,114 @@ export class SurveyGenerator {
    * - Fewer good performers (credit-card) to show benchmark
    */
   private selectRandomProduct(): string {
-    const weightedProducts = [
+    // Weight by category to create realistic distribution
+    const categoryWeights: Array<{ category: string; weight: number }> = [
       // Poor performers - 40%
-      { product: 'mortgage', weight: 20 },
-      { product: 'personal-loan', weight: 15 },
-      { product: 'insurance', weight: 5 },
+      { category: 'mortgages', weight: 20 },
+      { category: 'loans', weight: 15 },
+      { category: 'insurance', weight: 5 },
       // Moderate performers - 40%
-      { product: 'current-account', weight: 25 },
-      { product: 'savings-account', weight: 15 },
+      { category: 'current-accounts', weight: 25 },
+      { category: 'savings', weight: 15 },
       // Good performers - 20%
-      { product: 'credit-card', weight: 20 },
+      { category: 'cards', weight: 20 },
     ];
 
-    const totalWeight = weightedProducts.reduce((sum, p) => sum + p.weight, 0);
+    const totalWeight = categoryWeights.reduce((sum, p) => sum + p.weight, 0);
     let random = Math.random() * totalWeight;
 
-    for (const item of weightedProducts) {
+    let selectedCategory = 'current-accounts';
+    for (const item of categoryWeights) {
       random -= item.weight;
       if (random <= 0) {
-        return item.product;
+        selectedCategory = item.category;
+        break;
       }
     }
 
-    return 'current-account'; // Fallback
+    // Pick a random product from the selected category
+    const products =
+      PRODUCTS_BY_CATEGORY[
+        selectedCategory as keyof typeof PRODUCTS_BY_CATEGORY
+      ];
+    if (products && products.length > 0) {
+      return products[Math.floor(Math.random() * products.length)].slug;
+    }
+
+    return KNOWN_PRODUCTS[Math.floor(Math.random() * KNOWN_PRODUCTS.length)]
+      .slug;
+  }
+
+  /**
+   * Generate standalone surveys spread across the full date range.
+   * These are not tied to specific cases — they represent periodic NPS
+   * surveys sent to customers (e.g. relationship NPS, transactional NPS).
+   * This ensures survey coverage across the entire timeline, including recent dates.
+   */
+  generateStandalone(
+    count: number,
+    dateRange: { start: Date; end: Date },
+  ): SurveyDocument[] {
+    const surveys: SurveyDocument[] = [];
+    const stages: JourneyStage[] = [
+      'initial-contact',
+      'triage',
+      'investigation',
+      'resolution',
+      'post-resolution',
+    ];
+
+    for (let i = 0; i < count; i++) {
+      const product = this.selectRandomProduct();
+      const pattern = resolveProductPattern(product);
+      const stage = randomChoice(stages);
+      const stagePattern = pattern.stages[stage];
+      const baseResponseRate = pattern.responseRates[stage];
+      const responseRate = Math.min(
+        1.0,
+        baseResponseRate * RESPONSE_RATE_MULTIPLIER,
+      );
+      const responded = Math.random() < responseRate;
+
+      // Use a stronger recency bias than the default randomDate (pow 0.3
+      // instead of 0.5) so that more surveys land in the recent date window
+      // that the UI defaults to (last 30 days).
+      const range = dateRange.end.getTime() - dateRange.start.getTime();
+      const biased = Math.pow(Math.random(), 0.3);
+      const surveyDate = new Date(dateRange.start.getTime() + biased * range);
+      const channel = randomChoice(['email', 'phone', 'chat']);
+      const channelModifier = CHANNEL_MODIFIERS[channel] || 0;
+
+      let score =
+        Math.floor(Math.random() * (stagePattern.max - stagePattern.min + 1)) +
+        stagePattern.min;
+      score = Math.max(0, Math.min(10, Math.round(score + channelModifier)));
+
+      const npsCategory = this.scoreToCategory(score);
+      const verbatim =
+        responded && Math.random() < 0.4
+          ? this.getVerbatim(npsCategory, stage)
+          : undefined;
+
+      surveys.push({
+        id: uuidv4(),
+        customerId: undefined as any, // standalone — not tied to a specific customer
+        caseId: undefined,
+        communicationId: undefined,
+        journeyStage: stage,
+        score,
+        npsCategory,
+        responded,
+        channel,
+        product,
+        surveyDate: surveyDate.toISOString(),
+        caseCreatedAt: undefined as any,
+        verbatim,
+        eventCorrelation: undefined,
+      });
+    }
+
+    return surveys;
   }
 
   /**

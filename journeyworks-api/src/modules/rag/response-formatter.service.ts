@@ -11,6 +11,9 @@ import {
   PromptTemplateService,
 } from '../../infrastructure/llm';
 
+/** LLM call timeout in milliseconds */
+const LLM_TIMEOUT_MS = 60_000;
+
 // =============================================================================
 // Response Types
 // =============================================================================
@@ -156,7 +159,7 @@ export class ResponseFormatterService {
         'system:customerIntelligence',
       );
 
-      const response = await this.llmClient.prompt(prompt, systemPrompt, {
+      const response = await this.promptWithTimeout(prompt, systemPrompt, {
         rateLimitKey: 'llm:format-response',
       });
 
@@ -192,7 +195,7 @@ export class ResponseFormatterService {
         'system:customerIntelligence',
       );
 
-      const response = await this.llmClient.prompt(prompt, systemPrompt, {
+      const response = await this.promptWithTimeout(prompt, systemPrompt, {
         rateLimitKey: 'llm:insight-card',
       });
 
@@ -232,7 +235,7 @@ export class ResponseFormatterService {
         'system:customerIntelligence',
       );
 
-      const response = await this.llmClient.prompt(prompt, systemPrompt, {
+      const response = await this.promptWithTimeout(prompt, systemPrompt, {
         rateLimitKey: 'llm:trend-analysis',
       });
 
@@ -276,11 +279,12 @@ export class ResponseFormatterService {
     response: string,
   ): StructuredResearchResponse {
     try {
-      // Handle case where response might have markdown code blocks
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : response;
+      // Try brace-matching first, then markdown fences, then raw
+      const braceStart = response.indexOf('{');
+      const jsonStr =
+        braceStart >= 0 ? this.extractJsonObject(response, braceStart) : null;
 
-      const parsed = JSON.parse(jsonStr);
+      const parsed = jsonStr ? JSON.parse(jsonStr) : JSON.parse(response);
 
       return {
         executiveSummary:
@@ -344,9 +348,10 @@ export class ResponseFormatterService {
 
   private parseInsightCard(response: string): InsightCard {
     try {
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : response;
-      return JSON.parse(jsonStr);
+      const braceStart = response.indexOf('{');
+      const jsonStr =
+        braceStart >= 0 ? this.extractJsonObject(response, braceStart) : null;
+      return JSON.parse(jsonStr || response);
     } catch {
       return this.createFallbackInsightCard(response.substring(0, 100));
     }
@@ -357,9 +362,10 @@ export class ResponseFormatterService {
     dataPoints: Array<{ date: string; value: number }>,
   ): TrendAnalysis {
     try {
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : response;
-      return JSON.parse(jsonStr);
+      const braceStart = response.indexOf('{');
+      const jsonStr =
+        braceStart >= 0 ? this.extractJsonObject(response, braceStart) : null;
+      return JSON.parse(jsonStr || response);
     } catch {
       return this.createFallbackTrendAnalysis(dataPoints);
     }
@@ -461,5 +467,42 @@ export class ResponseFormatterService {
     if (diffDays <= 7) return 'weekly';
     if (diffDays <= 31) return 'monthly';
     return 'quarterly';
+  }
+
+  /**
+   * Wrap LLM prompt call with a timeout to prevent indefinite hangs
+   */
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const result = await Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM prompt timed out')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
+  }
+
+  /**
+   * Extract a JSON object from a string using brace-matching
+   */
+  private extractJsonObject(text: string, startIndex: number): string | null {
+    let depth = 0;
+    for (let i = startIndex; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.substring(startIndex, i + 1);
+        }
+      }
+    }
+    return null;
   }
 }

@@ -19,7 +19,6 @@ import {
   ReasoningStep,
   AgentAction,
   AgentState,
-  ToolParameters,
 } from './research.types';
 
 /** Agent configuration constants */
@@ -27,13 +26,17 @@ const AGENT_CONFIG = {
   /** Default maximum iterations for the agent loop */
   DEFAULT_MAX_ITERATIONS: 10,
   /** Maximum characters for observation truncation */
-  MAX_OBSERVATION_LENGTH: 2000,
+  MAX_OBSERVATION_LENGTH: 4000,
   /** Minimum characters for follow-up question */
   MIN_FOLLOWUP_LENGTH: 10,
+  /** Timeout for LLM calls in milliseconds (60 seconds) */
+  LLM_TIMEOUT_MS: 60_000,
   /** Maximum number of follow-up questions */
   MAX_FOLLOWUP_COUNT: 3,
   /** Maximum characters for final answer summary in follow-up generation */
   MAX_SUMMARY_LENGTH: 500,
+  /** Minimum iterations before allowing Final Answer without tool calls (safety valve) */
+  MIN_TOOL_FORCE_ITERATIONS: 5,
 } as const;
 
 /** Confidence calculation weights */
@@ -134,6 +137,7 @@ export class AgentExecutor {
       } catch (error) {
         this.logger.error(`Agent iteration failed: ${error.message}`);
         state.error = error.message;
+        state.isDone = true;
         break;
       }
     }
@@ -156,6 +160,7 @@ export class AgentExecutor {
         state.finalAnswer || 'I was unable to find a satisfactory answer.',
       confidence: this.calculateConfidence(state),
       sources: this.deduplicateSources(state.sources),
+      charts: this.extractChartsFromActions(state),
       reasoning: state.steps,
       actions: state.actions,
       followUpQuestions,
@@ -165,6 +170,272 @@ export class AgentExecutor {
         toolCalls: state.actions.length,
         model: this.modelName,
       },
+    };
+  }
+
+  // Theme colors from chart.config.ts
+  private static readonly CATEGORICAL_COLORS = [
+    '#1494C6', // DATA_VIS.blue[3]
+    '#F14E73', // DATA_VIS.pink[3]
+    '#ED500D', // DATA_VIS.orange[3]
+    '#4DA90F', // DATA_VIS.green[3]
+    '#266076', // DATA_VIS.blue[1]
+    '#C03954', // DATA_VIS.pink[2]
+  ];
+
+  private static readonly RAG_COLORS = {
+    green: '#00847F',
+    amber: '#FFBB33',
+    red: '#A8000B',
+  };
+
+  /**
+   * Extract chart data from successful tool actions
+   * Only generates charts when relevant tools provide aggregation data
+   */
+  private extractChartsFromActions(state: AgentState): any[] {
+    const charts: any[] = [];
+
+    this.logger.debug(`Extracting charts from ${state.actions.length} actions`);
+
+    for (const action of state.actions) {
+      this.logger.debug(
+        `Chart check - Tool: ${action.tool}, Success: ${action.success}, Output keys: ${action.output ? Object.keys(action.output).join(', ') : 'null'}`,
+      );
+      if (!action.success || !action.output) continue;
+
+      const output = action.output;
+      this.logger.debug(
+        `Processing tool: ${action.tool}, output keys: ${Object.keys(output).join(', ')}`,
+      );
+
+      // Category breakdown → Bar chart
+      if (
+        action.tool === 'get_category_breakdown' &&
+        output.byCategory?.length
+      ) {
+        this.logger.debug(
+          `Building bar chart from get_category_breakdown: ${output.byCategory.length} categories`,
+        );
+        charts.push(
+          this.buildBarChart(
+            'Categories Breakdown',
+            output.byCategory.map((item: any) => ({
+              label: item.category,
+              value: item.count,
+            })),
+          ),
+        );
+      }
+
+      // query_data tool returns aggregations in a different format
+      if (action.tool === 'query_data' && output.aggregations) {
+        const aggs = output.aggregations;
+        // Handle terms aggregations (e.g., by_category, by_channel)
+        for (const [aggName, aggData] of Object.entries(aggs)) {
+          if (
+            Array.isArray(aggData) &&
+            aggData.length > 0 &&
+            'key' in aggData[0]
+          ) {
+            this.logger.debug(
+              `Building bar chart from query_data aggregation: ${aggName}`,
+            );
+            charts.push(
+              this.buildBarChart(
+                this.formatAggTitle(aggName),
+                aggData.slice(0, 10).map((item: any) => ({
+                  label: item.key,
+                  value: item.doc_count || item.count || item.value,
+                })),
+              ),
+            );
+          }
+        }
+      }
+
+      // CDD cases analysis → Bar chart for reasons, Pie for status
+      if (action.tool === 'analyze_cdd_cases') {
+        this.logger.debug(
+          `analyze_cdd_cases - byReason: ${output.byReason?.length ?? 0}, byStatus: ${output.byStatus?.length ?? 0}`,
+        );
+        if (output.byReason?.length) {
+          const chartData = output.byReason.map((item: any) => ({
+            label: item.reason,
+            value: item.count,
+          }));
+          charts.push(this.buildBarChart('Cases by Reason', chartData));
+        }
+        if (output.byStatus?.length) {
+          charts.push(
+            this.buildStatusPieChart(
+              'Case Status Distribution',
+              output.byStatus.map((item: any) => ({
+                label: item.status,
+                value: item.count,
+              })),
+            ),
+          );
+        }
+      }
+
+      // SLA compliance → Pie chart
+      if (
+        action.tool === 'analyze_sla_compliance' &&
+        output.breachedCount !== undefined
+      ) {
+        charts.push(
+          this.buildPieChart('SLA Compliance', [
+            {
+              label: 'Compliant',
+              value: output.compliantCount || 0,
+              color: AgentExecutor.RAG_COLORS.green,
+            },
+            {
+              label: 'Breached',
+              value: output.breachedCount || 0,
+              color: AgentExecutor.RAG_COLORS.red,
+            },
+          ]),
+        );
+      }
+
+      // Sentiment analysis → Pie chart
+      if (action.tool === 'analyze_sentiment' && output.sentimentBreakdown) {
+        const breakdown = output.sentimentBreakdown;
+        charts.push(
+          this.buildPieChart('Sentiment Distribution', [
+            {
+              label: 'Positive',
+              value: breakdown.positive || 0,
+              color: AgentExecutor.RAG_COLORS.green,
+            },
+            {
+              label: 'Neutral',
+              value: breakdown.neutral || 0,
+              color: AgentExecutor.RAG_COLORS.amber,
+            },
+            {
+              label: 'Negative',
+              value: breakdown.negative || 0,
+              color: AgentExecutor.RAG_COLORS.red,
+            },
+          ]),
+        );
+      }
+
+      // Daily volumes → Time-series chart
+      if (action.tool === 'get_daily_volumes' && output.daily?.length) {
+        charts.push(
+          this.buildTimeSeriesChart('Daily Volume Trend', output.daily),
+        );
+      }
+
+      // Trend analysis with daily data
+      if (action.tool === 'analyze_trends' && output.dailyVolume?.length) {
+        charts.push(
+          this.buildTimeSeriesChart('Volume Trend', output.dailyVolume),
+        );
+      }
+    }
+
+    // Limit to 3 charts max to avoid overwhelming the UI
+    if (charts.length > 3) {
+      this.logger.warn(
+        `Built ${charts.length} charts but limiting to 3 — ${charts.length - 3} chart(s) dropped`,
+      );
+    }
+    this.logger.debug(`Returning ${Math.min(charts.length, 3)} charts`);
+    return charts.slice(0, 3);
+  }
+
+  /**
+   * Format aggregation name to readable title
+   */
+  private formatAggTitle(aggName: string): string {
+    // Convert snake_case or by_X to readable format
+    return aggName
+      .replace(/^by_/, '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /**
+   * Build a bar chart from aggregation data
+   */
+  private buildBarChart(
+    title: string,
+    data: Array<{ label: string; value: number }>,
+  ): any {
+    return {
+      type: 'bar',
+      title,
+      data: data.slice(0, 6).map((item, index) => ({
+        label: item.label,
+        value: item.value,
+        color:
+          AgentExecutor.CATEGORICAL_COLORS[
+            index % AgentExecutor.CATEGORICAL_COLORS.length
+          ],
+      })),
+    };
+  }
+
+  /**
+   * Build a pie chart with explicit colors
+   */
+  private buildPieChart(
+    title: string,
+    data: Array<{ label: string; value: number; color: string }>,
+  ): any {
+    return {
+      type: 'pie',
+      title,
+      data: data.filter((d) => d.value > 0), // Remove zero-value segments
+    };
+  }
+
+  /**
+   * Build a pie chart for status-type data (uses categorical colors)
+   */
+  private buildStatusPieChart(
+    title: string,
+    data: Array<{ label: string; value: number }>,
+  ): any {
+    return {
+      type: 'pie',
+      title,
+      data: data
+        .filter((d) => d.value > 0)
+        .map((item, index) => ({
+          label: item.label,
+          value: item.value,
+          color:
+            AgentExecutor.CATEGORICAL_COLORS[
+              index % AgentExecutor.CATEGORICAL_COLORS.length
+            ],
+        })),
+    };
+  }
+
+  /**
+   * Build a time-series chart from daily data
+   */
+  private buildTimeSeriesChart(
+    title: string,
+    dailyData: Array<{ date: string; count: number }>,
+  ): any {
+    return {
+      type: 'time-series',
+      title,
+      data: dailyData.map((d) => ({
+        label: new Date(d.date).toLocaleDateString('en-GB', {
+          month: 'short',
+          day: 'numeric',
+        }),
+        value: d.count,
+        color: AgentExecutor.CATEGORICAL_COLORS[0],
+      })),
     };
   }
 
@@ -178,8 +449,8 @@ export class AgentExecutor {
     // Build the prompt with scratchpad
     const prompt = this.buildPrompt(request, state);
 
-    // Get the agent's response
-    const response = await this.llmClient.prompt(
+    // Get the agent's response (with timeout to prevent hanging)
+    const response = await this.promptWithTimeout(
       prompt,
       this.promptTemplate.getTemplate('system:researcher'),
       { rateLimitKey: 'llm:agent' },
@@ -198,46 +469,127 @@ export class AgentExecutor {
 
     // Check if the agent is done
     if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
-      state.isDone = true;
-      state.finalAnswer = parsed.finalAnswer || parsed.actionInput;
+      // Prevent premature Final Answer - require at least one tool call
+      // Allow Final Answer after MIN_TOOL_FORCE_ITERATIONS to prevent infinite loops
+      if (
+        state.actions.length === 0 &&
+        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS
+      ) {
+        this.logger.warn(
+          `Iteration ${state.iteration}: Agent attempted Final Answer without calling any tools - forcing tool use`,
+        );
+
+        // Suggest a concrete tool based on the query to guide the agent
+        const suggestedTool = this.suggestToolForQuery(request.query);
+
+        // Add a step with system feedback so the agent knows to use tools
+        step.thought = `${parsed.thought}\n\n[System: REJECTED - You MUST call at least one tool before providing a Final Answer. Do NOT fabricate data. ${suggestedTool}]`;
+        step.action = undefined;
+        step.observation = `SYSTEM OVERRIDE: Final Answer rejected because no tools have been called yet (iteration ${state.iteration}). You MUST output an Action with a tool call on your next response. Do not provide a Final Answer until you have called at least one tool and received real data. Example format:\nThought: I need to retrieve real data\nAction: {"tool": "analyze_cdd_cases", "input": {}}`;
+        state.steps.push(step);
+        // Continue to next iteration - agent will see system feedback in scratchpad
+        return;
+      } else {
+        if (state.actions.length === 0) {
+          this.logger.warn(
+            `Iteration ${state.iteration}: Allowing Final Answer without tool calls (safety valve after ${AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS} iterations)`,
+          );
+        }
+        state.isDone = true;
+        state.finalAnswer = parsed.finalAnswer || parsed.actionInput;
+        state.steps.push(step);
+        return;
+      }
+    }
+
+    // Guard: if no action was parsed, the LLM response didn't follow the ReAct format.
+    // Inject feedback to redirect the agent back to tool use.
+    if (!parsed.action) {
+      this.logger.warn(
+        `Iteration ${state.iteration}: Agent response contained no parseable Action - redirecting to tool use`,
+      );
+      const suggestedTool = this.suggestToolForQuery(request.query);
+      step.observation = `SYSTEM: Your response did not contain a valid Action. You must respond in the exact format:\nThought: [your reasoning]\nAction: {"tool": "tool_name", "input": {"param": "value"}}\n\n${suggestedTool}`;
       state.steps.push(step);
       return;
     }
 
     // Execute the action
-    if (parsed.action) {
-      const actionStart = Date.now();
-      let output: any;
-      let success = true;
-      let error: string | undefined;
+    const actionStart = Date.now();
+    let output: any;
+    let success = true;
+    let error: string | undefined;
 
-      try {
-        const result = await this.tools.executeTool(
-          parsed.action,
-          parsed.actionInput,
-        );
-        output = result.output;
-        state.sources.push(...result.sources);
-      } catch (e) {
-        success = false;
-        error = e.message;
-        output = { error: e.message };
-      }
-
-      const action: AgentAction = {
-        tool: parsed.action,
-        input: parsed.actionInput,
-        output,
-        duration: Date.now() - actionStart,
-        success,
-        error,
-      };
-
-      state.actions.push(action);
-      step.observation = this.formatObservation(output);
+    try {
+      const result = await this.tools.executeTool(
+        parsed.action,
+        parsed.actionInput,
+      );
+      output = result.output;
+      state.sources.push(...result.sources);
+    } catch (e) {
+      success = false;
+      error = e.message;
+      output = { error: e.message };
     }
 
+    const action: AgentAction = {
+      tool: parsed.action,
+      input: parsed.actionInput,
+      output,
+      duration: Date.now() - actionStart,
+      success,
+      error,
+    };
+
+    state.actions.push(action);
+    step.observation = this.formatObservation(output);
+
     state.steps.push(step);
+  }
+
+  /**
+   * Suggest a specific tool based on query keywords to help the agent
+   * pick the right tool when it keeps trying to skip tool calls.
+   */
+  private suggestToolForQuery(query: string): string {
+    const q = query.toLowerCase();
+
+    if (
+      q.includes('cdd') ||
+      q.includes('due diligence') ||
+      q.includes('case status')
+    ) {
+      return 'Try calling: Action: {"tool": "analyze_cdd_cases", "input": {}}';
+    }
+    if (
+      q.includes('category') ||
+      q.includes('breakdown') ||
+      q.includes('complaint')
+    ) {
+      return 'Try calling: Action: {"tool": "get_category_breakdown", "input": {}}';
+    }
+    if (q.includes('sentiment')) {
+      return 'Try calling: Action: {"tool": "analyze_sentiment", "input": {}}';
+    }
+    if (q.includes('volume') || q.includes('daily') || q.includes('trend')) {
+      return 'Try calling: Action: {"tool": "get_daily_volumes", "input": {}}';
+    }
+    if (q.includes('sla') || q.includes('compliance') || q.includes('breach')) {
+      return 'Try calling: Action: {"tool": "analyze_sla_compliance", "input": {}}';
+    }
+    if (q.includes('resolution') || q.includes('time')) {
+      return 'Try calling: Action: {"tool": "analyze_resolution_times", "input": {}}';
+    }
+    if (q.includes('risk')) {
+      return 'Try calling: Action: {"tool": "assess_risk", "input": {}}';
+    }
+    // Default suggestion
+    return (
+      'Try calling: Action: {"tool": "query_data", "input": {"query": "' +
+      query.replace(/"/g, "'") +
+      '"}}'
+    );
   }
 
   /**
@@ -275,8 +627,8 @@ export class AgentExecutor {
       .map((step) => {
         let text = `Thought: ${step.thought}`;
         if (step.action) {
-          text += `\nAction: ${step.action}`;
-          text += `\nAction Input: ${JSON.stringify(step.actionInput)}`;
+          // Use JSON Action format to match the prompt template instructions
+          text += `\nAction: ${JSON.stringify({ tool: step.action, input: step.actionInput || {} })}`;
         }
         if (step.observation) {
           text += `\nObservation: ${step.observation}`;
@@ -314,22 +666,28 @@ export class AgentExecutor {
       };
     }
 
-    // Try JSON format first: Action: {"tool": "name", "input": {...}}
-    const jsonActionMatch = response.match(
-      /Action:\s*(\{[\s\S]*?\})(?=\s*(?:Thought:|Observation:|$))/i,
-    );
-    if (jsonActionMatch) {
-      try {
-        const actionJson = JSON.parse(jsonActionMatch[1].trim());
-        if (actionJson.tool) {
-          return {
-            thought,
-            action: actionJson.tool,
-            actionInput: actionJson.input || {},
-          };
+    // Try JSON format: Action: {"tool": "name", "input": {...}}
+    // Use brace-matching to correctly handle nested objects
+    const jsonStart = response.search(/Action:\s*\{/i);
+    if (jsonStart !== -1) {
+      const braceStart = response.indexOf('{', jsonStart);
+      const jsonStr = this.extractJsonObject(response, braceStart);
+      if (jsonStr) {
+        try {
+          const actionJson = JSON.parse(jsonStr);
+          if (actionJson.tool) {
+            return {
+              thought,
+              action: actionJson.tool,
+              actionInput: actionJson.input || {},
+            };
+          }
+        } catch {
+          this.logger.debug(
+            `Failed to parse JSON action: ${jsonStr.substring(0, 100)}`,
+          );
+          // Fall through to plain format
         }
-      } catch {
-        // Fall through to plain format
       }
     }
 
@@ -358,6 +716,49 @@ export class AgentExecutor {
   }
 
   /**
+   * Extract a complete JSON object from a string starting at the given brace position.
+   * Handles nested braces correctly, unlike regex-based approaches.
+   */
+  private extractJsonObject(str: string, startIndex: number): string | null {
+    if (str[startIndex] !== '{') return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = startIndex; i < str.length; i++) {
+      const ch = str[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (ch === '{') depth++;
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return str.substring(startIndex, i + 1);
+        }
+      }
+    }
+
+    return null; // Unbalanced braces
+  }
+
+  /**
    * Format observation from tool output
    */
   private formatObservation(output: any): string {
@@ -381,9 +782,14 @@ export class AgentExecutor {
     request: ResearchRequest,
     state: AgentState,
   ): Promise<string> {
-    // Collect all observations
+    // Collect all observations, filtering out injected system messages
     const observations = state.steps
-      .filter((s) => s.observation)
+      .filter(
+        (s) =>
+          s.observation &&
+          !s.observation.startsWith('SYSTEM OVERRIDE:') &&
+          !s.observation.startsWith('SYSTEM:'),
+      )
       .map((s) => `Tool: ${s.action}\nResult: ${s.observation}`)
       .join('\n\n---\n\n');
 
@@ -396,7 +802,7 @@ ${observations}
 
 Provide a clear, concise answer that synthesizes the findings. If the information is incomplete, acknowledge what is known and what couldn't be determined.`;
 
-    return this.llmClient.prompt(prompt, undefined, {
+    return this.promptWithTimeout(prompt, undefined, {
       rateLimitKey: 'llm:agent',
     });
   }
@@ -474,7 +880,8 @@ Provide a clear, concise answer that synthesizes the findings. If the informatio
     request: ResearchRequest,
     state: AgentState,
   ): Promise<string[]> {
-    if (state.actions.length === 0) {
+    // Skip follow-ups if no tools were called, an error occurred, or there's no meaningful answer
+    if (state.actions.length === 0 || state.error || !state.finalAnswer) {
       return [];
     }
 
@@ -487,7 +894,7 @@ Answer Summary: ${state.finalAnswer?.substring(0, AGENT_CONFIG.MAX_SUMMARY_LENGT
 Return only the questions, one per line.`;
 
     try {
-      const response = await this.llmClient.prompt(prompt, undefined, {
+      const response = await this.promptWithTimeout(prompt, undefined, {
         rateLimitKey: 'llm:agent',
       });
       return response
@@ -498,5 +905,27 @@ Return only the questions, one per line.`;
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Prompt the LLM with a timeout to prevent indefinite hangs.
+   * Wraps llmClient.prompt() with Promise.race.
+   */
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error('LLM call timed out')),
+        AGENT_CONFIG.LLM_TIMEOUT_MS,
+      );
+    });
+
+    return Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      timeoutPromise,
+    ]);
   }
 }

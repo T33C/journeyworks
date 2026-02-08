@@ -78,6 +78,22 @@ export interface AnalysisContext {
   selectedBubble?: SentimentBubble; // Full bubble data for contextual insights
 }
 
+// Chart data for research insight visualization
+export interface InsightChartDataPoint {
+  label: string;
+  value: number;
+  color?: string;
+  date?: Date; // For time-series
+}
+
+export interface InsightChart {
+  type: 'bar' | 'pie' | 'time-series';
+  title: string;
+  data: InsightChartDataPoint[];
+  xLabel?: string;
+  yLabel?: string;
+}
+
 // AI Research Panel content
 export interface ResearchInsight {
   summary: string;
@@ -92,6 +108,7 @@ export interface ResearchInsight {
     question: string;
     answer: string;
   };
+  charts?: InsightChart[]; // Optional chart data for visualization
 }
 
 export interface EvidenceItem {
@@ -116,13 +133,15 @@ export interface FilterState {
   surveysOnly: boolean; // Only show bubbles with survey data
 }
 
-// Product types
+// Product types (match product catalogue categories)
 export type ProductType =
+  | 'current-accounts'
+  | 'savings'
+  | 'mortgages'
   | 'cards'
   | 'loans'
-  | 'savings'
-  | 'current-account'
-  | 'mortgage'
   | 'insurance'
+  | 'digital'
+  | 'international'
   | 'all';
 export type ChannelType = 'complaints' | 'calls' | 'email' | 'social' | 'all';

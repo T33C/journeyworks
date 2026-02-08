@@ -82,6 +82,14 @@
                   [innerHTML]="message.content | markdown"
                 ></div>
 
+                @if (message.charts?.length) {
+                  <div class="message-charts">
+                    @for (chart of message.charts; track chart.title) {
+                      <app-insight-chart-card [chart]="chart" />
+                    }
+                  </div>
+                }
+
                 @if (message.sources?.length) {
                   <div class="message-sources">
                     <span class="sources-label">Sources:</span>

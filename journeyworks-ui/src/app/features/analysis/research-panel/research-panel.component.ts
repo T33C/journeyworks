@@ -32,6 +32,7 @@ import {
   EvidenceItem,
   AnalysisContext,
 } from '../../../core/models/analysis.model';
+import { InsightChartCardComponent } from './insight-chart-card.component';
 
 interface ChatMessage {
   role: 'user' | 'ai';
@@ -56,6 +57,7 @@ interface ChatMessage {
     MatProgressSpinnerModule,
     MatTooltipModule,
     MarkdownPipe,
+    InsightChartCardComponent,
   ],
   templateUrl: './research-panel.component.html',
   styleUrl: './research-panel.component.scss',

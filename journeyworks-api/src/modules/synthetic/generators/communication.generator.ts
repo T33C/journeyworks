@@ -12,6 +12,14 @@ import {
   SyntheticAIClassification,
   SyntheticCommunicationMessage,
 } from '../synthetic-data.types';
+import {
+  randomChoice,
+  weightedChoice,
+  randomSubset,
+  randomDate,
+  getSentimentScore,
+} from '../utils/random.util';
+import { PRODUCT_NAMES, PRODUCT_SLUGS, KNOWN_PRODUCTS } from '../data/products';
 
 // Communication templates by channel and sentiment - Retail Banking UK
 const EMAIL_TEMPLATES = {
@@ -70,7 +78,7 @@ Account: ****{account_suffix}`,
       subject: 'Complaint: Unauthorised charges',
       template: `To Customer Services,
 
-I have noticed GBP{fee_amount} in charges on my latest statement that I never agreed to. This includes monthly fees and overdraft charges.
+I have noticed £{fee_amount} in charges on my latest statement that I never agreed to. This includes monthly fees and overdraft charges.
 
 This is the {count} time I have had to chase up incorrect charges. It is not good enough.
 
@@ -159,7 +167,7 @@ const PHONE_TEMPLATES = {
   ],
   negative: [
     'Escalation call - customer unable to access funds for {days} days due to security block. Very distressed. Urgent review needed.',
-    'Complaint call - customer charged GBP{fee_amount} in overdraft fees but claims no notification. Demanding refund. {count} previous complaints on file. Duration: {duration} mins.',
+    'Complaint call - customer charged £{fee_amount} in overdraft fees but claims no notification. Demanding refund. {count} previous complaints on file. Duration: {duration} mins.',
     'Customer called about failed {action}. This is {count}rd call on same issue. Getting increasingly frustrated. Threatened to involve Financial Ombudsman.',
   ],
   neutral: [
@@ -193,23 +201,86 @@ const CHAT_TEMPLATES = {
   ],
 };
 
-// Retail banking products and services
-const PRODUCTS = [
-  'current account',
-  'savings account',
-  'ISA',
-  'fixed rate saver',
-  'credit card',
-  'debit card',
-  'overdraft',
-  'personal loan',
-  'mortgage',
-  'home insurance',
-  'travel insurance',
-  'mobile banking app',
-  'online banking',
-  'joint account',
-];
+const LETTER_TEMPLATES = {
+  positive: [
+    {
+      subject: 'Letter of appreciation',
+      template: `Dear Sir/Madam,
+
+I am writing to express my thanks for the outstanding service I received from your {region} branch regarding my {product}.
+
+The member of staff who assisted me was professional, patient and went above and beyond to resolve my {issue}. This level of service is exactly what I expect from my bank.
+
+Yours faithfully,
+{name}`,
+    },
+  ],
+  negative: [
+    {
+      subject: 'Formal complaint',
+      template: `Dear Customer Services Manager,
+
+I wish to make a formal complaint regarding the handling of my {product} at your {region} branch.
+
+Despite raising this issue on {count} separate occasions over the past {days} days, I have received no satisfactory resolution. I was assured the matter would be dealt with promptly, yet £{fee_amount} in charges remain on my account.
+
+I expect a written response within 8 weeks as required under FCA guidelines, failing which I shall refer this matter to the Financial Ombudsman Service.
+
+Yours faithfully,
+{name}`,
+    },
+  ],
+  neutral: [
+    {
+      subject: 'Account correspondence',
+      template: `Dear Sir/Madam,
+
+Please find enclosed the documentation you requested for my {product} application. I have included proof of address and identification as specified.
+
+Could you kindly confirm receipt and advise on the expected processing time?
+
+Yours faithfully,
+{name}`,
+    },
+  ],
+  mixed: [
+    {
+      subject: 'Feedback on recent service',
+      template: `Dear {manager},
+
+I am writing regarding my recent experience with your {product} service. Whilst I appreciate the eventual resolution of my {issue}, the {days}-day wait was unacceptable for a customer of {years} years standing.
+
+I trust this feedback will be taken on board.
+
+Yours sincerely,
+{name}`,
+    },
+  ],
+};
+
+const SOCIAL_TEMPLATES = {
+  positive: [
+    'Just had a great experience sorting out my {action} with @JourneyWorksBank. Proper helpful! 👍',
+    'Shout out to @JourneyWorksBank for resolving my {issue} so quickly. This is how banking should be! ⭐',
+    '@JourneyWorksBank the new app update is brilliant. {action} is so much easier now!',
+  ],
+  negative: [
+    '@JourneyWorksBank why is my {action} STILL not sorted after {days} days?? Absolutely shocking service 😡',
+    'Anyone else had issues with @JourneyWorksBank {product}? Been trying to resolve my {issue} for weeks #frustrated',
+    '@JourneyWorksBank charged me £{fee_amount} with no warning. How is that acceptable? #bankfail',
+  ],
+  neutral: [
+    'Does anyone bank with @JourneyWorksBank? Thinking of switching. How is their {product}?',
+    '@JourneyWorksBank what are your branch opening hours in {region}?',
+    'Need to do a {action} with @JourneyWorksBank tomorrow. Anyone know if I can do it online?',
+  ],
+  mixed: [
+    '@JourneyWorksBank love the mobile app but the {action} process needs work. Took {duration} mins to complete.',
+  ],
+};
+
+// Retail banking products — imported from shared catalogue
+const PRODUCTS = PRODUCT_NAMES;
 
 const ACTIONS = [
   'direct debit',
@@ -331,16 +402,8 @@ const AI_CATEGORIES = {
   mixed: ['call-handling', 'fees-charges', 'cdd-remediation'],
 };
 
-const AI_PRODUCTS = [
-  'credit-card',
-  'current-account',
-  'savings-account',
-  'mortgage',
-  'personal-loan',
-  'mobile-app',
-  'online-banking',
-  'insurance',
-];
+// AI classification product slugs — imported from shared catalogue
+const AI_PRODUCTS = PRODUCT_SLUGS;
 
 const ISSUE_TYPES = {
   'account-opening': [
@@ -472,7 +535,7 @@ export class CommunicationGenerator {
   ): SyntheticCommunication {
     const templates = this.getTemplates(channel);
     const templateList = templates[sentiment] || templates.neutral;
-    const template = this.randomChoice(templateList);
+    const template = randomChoice(templateList);
 
     const content = this.fillTemplate(
       typeof template === 'string' ? template : template.template,
@@ -484,7 +547,7 @@ export class CommunicationGenerator {
         ? this.fillTemplate(template.subject, customer)
         : undefined;
 
-    const intentConfig = this.randomChoice(INTENTS[sentiment]);
+    const intentConfig = randomChoice(INTENTS[sentiment]);
     const tones = EMOTIONAL_TONES[sentiment];
 
     const entities = this.extractEntities(content, customer);
@@ -513,12 +576,12 @@ export class CommunicationGenerator {
     // Determine chatMode for chat channel
     let chatMode: 'chatbot' | 'human-agent' | undefined;
     let escalatedFrom: 'chatbot' | 'email' | 'chat' | undefined;
-    
+
     if (channel === 'chat') {
       // For chat, determine if it's chatbot or human agent
       // Negative sentiment and escalated status more likely to be human agent
       if (status === 'escalated' || sentiment === 'negative') {
-        chatMode = this.weightedChoice([
+        chatMode = weightedChoice([
           ['human-agent', 0.7],
           ['chatbot', 0.3],
         ]) as 'chatbot' | 'human-agent';
@@ -527,14 +590,14 @@ export class CommunicationGenerator {
           escalatedFrom = 'chatbot';
         }
       } else {
-        chatMode = this.weightedChoice([
+        chatMode = weightedChoice([
           ['chatbot', 0.6],
           ['human-agent', 0.4],
         ]) as 'chatbot' | 'human-agent';
       }
     } else if (channel === 'phone' && status === 'escalated') {
       // Phone escalations might come from chat or email
-      escalatedFrom = this.weightedChoice([
+      escalatedFrom = weightedChoice([
         ['chatbot', 0.4],
         ['chat', 0.3],
         ['email', 0.3],
@@ -546,7 +609,7 @@ export class CommunicationGenerator {
       channel,
       chatMode,
       escalatedFrom,
-      direction: this.weightedChoice([
+      direction: weightedChoice([
         ['inbound', 0.7],
         ['outbound', 0.3],
       ]) as 'inbound' | 'outbound',
@@ -561,9 +624,9 @@ export class CommunicationGenerator {
       priority,
       sentiment: {
         label: sentiment,
-        score: this.getSentimentScore(sentiment),
+        score: getSentimentScore(sentiment),
         confidence: 0.8 + Math.random() * 0.19,
-        emotionalTones: this.randomSubset(tones, 1, 3),
+        emotionalTones: randomSubset(tones, 1, 3),
       },
       intent: {
         primary: intentConfig.primary,
@@ -591,14 +654,14 @@ export class CommunicationGenerator {
     sentiment: string,
   ): 'open' | 'in_progress' | 'resolved' | 'escalated' {
     if (sentiment === 'negative') {
-      return this.weightedChoice([
+      return weightedChoice([
         ['open', 0.3],
         ['in_progress', 0.4],
         ['escalated', 0.2],
         ['resolved', 0.1],
       ]) as 'open' | 'in_progress' | 'resolved' | 'escalated';
     }
-    return this.weightedChoice([
+    return weightedChoice([
       ['open', 0.2],
       ['in_progress', 0.2],
       ['resolved', 0.6],
@@ -616,13 +679,13 @@ export class CommunicationGenerator {
 
     if (sentiment === 'negative') {
       if (isHighValue) {
-        return this.weightedChoice([
+        return weightedChoice([
           ['urgent', 0.4],
           ['high', 0.4],
           ['medium', 0.2],
         ]) as 'low' | 'medium' | 'high' | 'urgent';
       }
-      return this.weightedChoice([
+      return weightedChoice([
         ['urgent', 0.1],
         ['high', 0.3],
         ['medium', 0.4],
@@ -631,14 +694,14 @@ export class CommunicationGenerator {
     }
 
     if (isHighValue) {
-      return this.weightedChoice([
+      return weightedChoice([
         ['high', 0.2],
         ['medium', 0.5],
         ['low', 0.3],
       ]) as 'low' | 'medium' | 'high' | 'urgent';
     }
 
-    return this.weightedChoice([
+    return weightedChoice([
       ['medium', 0.3],
       ['low', 0.7],
     ]) as 'low' | 'medium' | 'high' | 'urgent';
@@ -652,10 +715,8 @@ export class CommunicationGenerator {
     content: string,
   ): SyntheticAIClassification {
     const categoryOptions = AI_CATEGORIES[sentiment] || AI_CATEGORIES.neutral;
-    const category = this.randomChoice(
-      categoryOptions,
-    ) as keyof typeof ISSUE_TYPES;
-    const product = this.randomChoice(AI_PRODUCTS);
+    const category = randomChoice(categoryOptions) as keyof typeof ISSUE_TYPES;
+    const product = randomChoice(AI_PRODUCTS);
 
     const issueTypes = ISSUE_TYPES[category] || ['General enquiry'];
     const rootCauses = ROOT_CAUSES[category] || ['Standard process'];
@@ -671,13 +732,13 @@ export class CommunicationGenerator {
     ) {
       urgency = 'critical';
     } else if (sentiment === 'negative') {
-      urgency = this.weightedChoice([
+      urgency = weightedChoice([
         ['high', 0.6],
         ['critical', 0.2],
         ['medium', 0.2],
       ]) as 'low' | 'medium' | 'high' | 'critical';
     } else {
-      urgency = this.weightedChoice([
+      urgency = weightedChoice([
         ['low', 0.5],
         ['medium', 0.4],
         ['high', 0.1],
@@ -703,10 +764,10 @@ export class CommunicationGenerator {
       category: category as SyntheticAIClassification['category'],
       confidence: 0.75 + Math.random() * 0.24,
       product: product as SyntheticAIClassification['product'],
-      issueType: this.randomChoice(issueTypes),
+      issueType: randomChoice(issueTypes),
       urgency,
-      rootCause: this.randomChoice(rootCauses),
-      suggestedAction: this.randomChoice(suggestedActions),
+      rootCause: randomChoice(rootCauses),
+      suggestedAction: randomChoice(suggestedActions),
       regulatoryFlags,
     };
   }
@@ -732,7 +793,7 @@ export class CommunicationGenerator {
       sender: 'customer',
       channel,
       content: originalContent,
-      sentiment: this.getSentimentScore(sentiment),
+      sentiment: getSentimentScore(sentiment),
     });
 
     // Generate back-and-forth
@@ -755,9 +816,7 @@ export class CommunicationGenerator {
         sender: isAgent ? 'agent' : 'customer',
         channel,
         content: messageContent,
-        sentiment: isAgent
-          ? 0.5
-          : this.getSentimentScore(sentiment) * (1 - i * 0.1), // Agent neutral, customer sentiment improves
+        sentiment: isAgent ? 0.5 : getSentimentScore(sentiment) * (1 - i * 0.1), // Agent neutral, customer sentiment improves
       });
     }
 
@@ -805,14 +864,12 @@ export class CommunicationGenerator {
       ],
     };
 
-    const ack = this.randomChoice(
+    const ack = randomChoice(
       acknowledgements[sentiment] || acknowledgements.neutral,
     );
-    const closing = this.randomChoice(
-      isFinal ? closings.final : closings.ongoing,
-    );
+    const closing = randomChoice(isFinal ? closings.final : closings.ongoing);
 
-    return `${this.randomChoice(greetings)} ${ack} ${closing}`;
+    return `${randomChoice(greetings)} ${ack} ${closing}`;
   }
 
   /**
@@ -842,7 +899,7 @@ export class CommunicationGenerator {
       ],
     };
 
-    return this.randomChoice(followups[sentiment] || followups.neutral);
+    return randomChoice(followups[sentiment] || followups.neutral);
   }
 
   generateForCustomer(
@@ -856,15 +913,15 @@ export class CommunicationGenerator {
     const communications: SyntheticCommunication[] = [];
 
     for (let i = 0; i < count; i++) {
-      const channel = this.weightedChoice(
+      const channel = weightedChoice(
         Object.entries(channelDistribution).map(([k, v]) => [k, v]),
       ) as 'email' | 'phone' | 'chat' | 'letter' | 'social';
 
-      const sentiment = this.weightedChoice(
+      const sentiment = weightedChoice(
         Object.entries(sentimentDistribution).map(([k, v]) => [k, v]),
       ) as 'positive' | 'negative' | 'neutral' | 'mixed';
 
-      const timestamp = this.randomDate(dateRange.start, dateRange.end);
+      const timestamp = randomDate(dateRange.start, dateRange.end);
 
       communications.push(
         this.generate(customer, channel, sentiment, timestamp, caseId),
@@ -882,13 +939,15 @@ export class CommunicationGenerator {
   private getTemplates(channel: string): Record<string, any[]> {
     switch (channel) {
       case 'email':
-      case 'letter':
         return EMAIL_TEMPLATES;
+      case 'letter':
+        return LETTER_TEMPLATES;
       case 'phone':
         return PHONE_TEMPLATES;
       case 'chat':
-      case 'social':
         return CHAT_TEMPLATES;
+      case 'social':
+        return SOCIAL_TEMPLATES;
       default:
         return EMAIL_TEMPLATES;
     }
@@ -899,11 +958,11 @@ export class CommunicationGenerator {
       '{name}': customer.name,
       '{manager}': customer.relationshipManager,
       '{bank}': 'JourneyWorks Bank',
-      '{product}': this.randomChoice(PRODUCTS),
-      '{action}': this.randomChoice(ACTIONS),
-      '{issue}': this.randomChoice(ISSUES),
-      '{third_party}': this.randomChoice(THIRD_PARTIES),
-      '{reason}': this.randomChoice(REASONS),
+      '{product}': randomChoice(PRODUCTS),
+      '{action}': randomChoice(ACTIONS),
+      '{issue}': randomChoice(ISSUES),
+      '{third_party}': randomChoice(THIRD_PARTIES),
+      '{reason}': randomChoice(REASONS),
       '{days}': String(Math.floor(2 + Math.random() * 12)),
       '{months}': String(Math.floor(1 + Math.random() * 6)),
       '{years}': String(Math.floor(2 + Math.random() * 15)),
@@ -912,8 +971,9 @@ export class CommunicationGenerator {
       '{amount}': this.formatCurrency(50 + Math.random() * 500),
       '{duration}': String(Math.floor(5 + Math.random() * 25)),
       '{distance}': String(Math.floor(5 + Math.random() * 20)),
+      '{region}': customer.region,
       '{phone}': '+44 7' + this.randomDigits(9),
-      '{address}': this.randomChoice(UK_ADDRESSES),
+      '{address}': randomChoice(UK_ADDRESSES),
       '{old_address}': '99 Previous Street, Old Town, OT1 2AB',
       '{account_suffix}': this.randomDigits(4),
     };
@@ -950,11 +1010,12 @@ export class CommunicationGenerator {
       confidence: 0.95,
     });
 
-    for (const product of PRODUCTS) {
-      if (content.toLowerCase().includes(product.toLowerCase())) {
+    for (const product of KNOWN_PRODUCTS) {
+      const terms = [product.name, ...product.aliases];
+      if (terms.some((t) => content.toLowerCase().includes(t.toLowerCase()))) {
         entities.push({
           type: 'product',
-          value: product,
+          value: product.name,
           confidence: 0.85 + Math.random() * 0.14,
         });
         break;
@@ -1019,23 +1080,10 @@ export class CommunicationGenerator {
     }
 
     if (Math.random() > 0.85) {
-      tags.push(this.randomChoice(TAGS.filter((t) => !tags.includes(t))));
+      tags.push(randomChoice(TAGS.filter((t) => !tags.includes(t))));
     }
 
     return tags;
-  }
-
-  private getSentimentScore(sentiment: string): number {
-    switch (sentiment) {
-      case 'positive':
-        return 0.5 + Math.random() * 0.5;
-      case 'negative':
-        return -0.5 - Math.random() * 0.5;
-      case 'mixed':
-        return -0.2 + Math.random() * 0.4;
-      default:
-        return -0.1 + Math.random() * 0.2;
-    }
   }
 
   private formatCurrency(amount: number): string {
@@ -1045,37 +1093,5 @@ export class CommunicationGenerator {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  }
-
-  private randomChoice<T>(array: T[]): T {
-    return array[Math.floor(Math.random() * array.length)];
-  }
-
-  private randomSubset<T>(array: T[], min: number, max: number): T[] {
-    const count = Math.floor(min + Math.random() * (max - min + 1));
-    const shuffled = [...array].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
-  }
-
-  private weightedChoice(options: Array<[string, number]>): string {
-    const total = options.reduce((sum, [, weight]) => sum + weight, 0);
-    const random = Math.random() * total;
-    let cumulative = 0;
-
-    for (const [value, weight] of options) {
-      cumulative += weight;
-      if (random < cumulative) {
-        return value;
-      }
-    }
-
-    return options[options.length - 1][0];
-  }
-
-  private randomDate(start: Date, end: Date): Date {
-    const diff = end.getTime() - start.getTime();
-    // Use square root to bias towards more recent dates
-    const biasedRandom = Math.pow(Math.random(), 0.5);
-    return new Date(start.getTime() + biasedRandom * diff);
   }
 }

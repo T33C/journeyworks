@@ -4,7 +4,7 @@
  * @description
  * Provides domain-specific terminology mappings for translating natural
  * language queries into Elasticsearch DSL. This glossary helps the LLM
- * understand investment banking customer intelligence vocabulary.
+ * understand retail banking customer intelligence vocabulary.
  *
  * @rationale
  * Users express themselves in natural language that doesn't map directly
@@ -297,53 +297,113 @@ export const DOMAIN_SYNONYMS: Record<string, string[]> = {
     'overdrawn',
     'negative balance',
     'insufficient funds',
-    'nsf',
+    'arranged overdraft',
+    'unarranged overdraft',
   ],
-  interest: ['interest', 'apr', 'apy', 'rate', 'yield', 'return'],
+  interest: ['interest', 'apr', 'aer', 'rate', 'yield', 'return', 'base rate'],
 
   // Account Types
-  account: ['account', 'accounts', 'portfolio', 'holding', 'position'],
-  savings: ['savings', 'deposit', 'money market', 'high yield'],
-  checking: [
-    'checking',
+  account: ['account', 'accounts', 'bank account'],
+  savings: [
+    'savings',
+    'saver',
+    'deposit',
+    'online bonus saver',
+    'flexible saver',
+    'fixed rate saver',
+    'regular saver',
+    'easy access',
+  ],
+  current_account: [
     'current account',
-    'transaction account',
-    'everyday account',
+    'bank account',
+    'advance account',
+    'premier account',
+    'graduate account',
+    'student account',
+    'joint account',
   ],
-  investment: [
-    'investment',
-    'brokerage',
-    'trading',
-    'securities',
-    'stocks',
-    'bonds',
+  isa: [
+    'isa',
+    'cash isa',
+    'lifetime isa',
+    'lisa',
+    'individual savings account',
+    'tax-free',
   ],
-  retirement: ['retirement', 'ira', '401k', 'pension', 'superannuation'],
 
   // Products
   card: [
     'card',
     'credit card',
     'debit card',
-    'payment card',
-    'visa',
-    'mastercard',
+    'bank card',
+    'visa debit',
+    'balance transfer card',
+    'purchase card',
+    'reward card',
+    'cashback card',
+    'contactless',
+  ],
+  mortgage: [
+    'mortgage',
+    'fixed rate mortgage',
+    'tracker mortgage',
+    'first time buyer',
+    'buy to let',
+    'remortgage',
+    'green mortgage',
+    'home loan',
   ],
   loan: [
     'loan',
+    'personal loan',
+    'car finance',
     'lending',
-    'credit',
     'borrowing',
-    'mortgage',
-    'line of credit',
+    'unsecured loan',
   ],
-  transfer: ['transfer', 'wire', 'send', 'payment', 'remittance', 'ach'],
+  insurance: [
+    'insurance',
+    'home insurance',
+    'travel insurance',
+    'life insurance',
+    'buildings insurance',
+    'contents insurance',
+    'cover',
+  ],
+  transfer: [
+    'transfer',
+    'bank transfer',
+    'send money',
+    'payment',
+    'direct debit',
+    'standing order',
+    'faster payment',
+  ],
+  digital: [
+    'app',
+    'mobile app',
+    'mobile banking',
+    'online banking',
+    'internet banking',
+    'connected money',
+    'open banking',
+  ],
+  international: [
+    'global money',
+    'multi-currency',
+    'international transfer',
+    'foreign exchange',
+    'travel money',
+  ],
 
   // Issues
   fraud: [
     'fraud',
     'fraudulent',
     'unauthorized',
+    'unauthorised',
     'stolen',
     'scam',
     'phishing',
@@ -391,33 +451,6 @@ export const DOMAIN_SYNONYMS: Record<string, string[]> = {
     'recently joined',
   ],
 };
-
-// =============================================================================
-// TIME EXPRESSIONS
-// =============================================================================
-
-/**
- * Maps relative time expressions to date ranges
- */
-export const TIME_EXPRESSIONS: Record<string, { unit: string; value: number }> =
-  {
-    today: { unit: 'day', value: 0 },
-    yesterday: { unit: 'day', value: 1 },
-    'this week': { unit: 'week', value: 0 },
-    'last week': { unit: 'week', value: 1 },
-    'this month': { unit: 'month', value: 0 },
-    'last month': { unit: 'month', value: 1 },
-    'this quarter': { unit: 'quarter', value: 0 },
-    'last quarter': { unit: 'quarter', value: 1 },
-    'this year': { unit: 'year', value: 0 },
-    'last year': { unit: 'year', value: 1 },
-    'past week': { unit: 'week', value: 1 },
-    'past month': { unit: 'month', value: 1 },
-    'past 30 days': { unit: 'day', value: 30 },
-    'past 90 days': { unit: 'day', value: 90 },
-    recently: { unit: 'day', value: 7 },
-    recent: { unit: 'day', value: 7 },
-  };
 
 // =============================================================================
 // FIELD MAPPINGS
@@ -504,10 +537,24 @@ Map to priority field (keyword):
   // Domain synonyms section
   sections.push(`## Domain Synonyms (expand in searches)
 - fee/charges: ${DOMAIN_SYNONYMS.fee.join(', ')}
+- overdraft: ${DOMAIN_SYNONYMS.overdraft.join(', ')}
 - fraud: ${DOMAIN_SYNONYMS.fraud.join(', ')}
-- card: ${DOMAIN_SYNONYMS.card.join(', ')}
+- card: ${DOMAIN_SYNONYMS.card.slice(0, 8).join(', ')}...
+- mortgage: ${DOMAIN_SYNONYMS.mortgage.slice(0, 6).join(', ')}...
 - transfer: ${DOMAIN_SYNONYMS.transfer.join(', ')}
 - churn: ${DOMAIN_SYNONYMS.churn.join(', ')}`);
+
+  // Known products section
+  sections.push(`## Known Products (HSBC-style retail banking)
+When users mention these products, map to aiClassification.product field:
+- Current Accounts: Advance Account, Premier Account, Bank Account, Graduate Account, Student Account, Joint Account
+- Savings: Online Bonus Saver, Flexible Saver, Fixed Rate Saver, Regular Saver, Cash ISA, Lifetime ISA
+- Mortgages: Fixed Rate Mortgage, Tracker Mortgage, First Time Buyer Mortgage, Buy to Let Mortgage, Green Mortgage, Remortgage
+- Cards: Balance Transfer Credit Card, Purchase Credit Card, Reward Credit Card, Debit Card
+- Loans: Personal Loan, Car Finance, Overdraft
+- Insurance: Home Insurance, Travel Insurance, Life Insurance
+- Digital: Mobile Banking App, Online Banking, Connected Money
+- International: Global Money Account`);
 
   // Field mappings section
   sections.push(`## Field Mappings
@@ -527,9 +574,10 @@ User says → Use field:
 export function formatCompactGlossary(): string {
   return `GLOSSARY:
 Sentiment: positive(happy,pleased,satisfied) | negative(angry,upset,frustrated,complaint) | neutral | mixed
-Channel: email | phone(call,voice) | chat | letter | social(twitter,facebook)
+Channel: email | phone(call,voice) | chat | letter | social(twitter,linkedin)
 Priority: critical(urgent,asap) | high(important) | medium | low
-Synonyms: fee→charge,cost,rate | fraud→unauthorized,scam | card→credit,debit | churn→leaving,cancelled`;
+Synonyms: fee→charge,cost,rate | fraud→unauthorized,scam | card→credit,debit,contactless | mortgage→fixed rate,tracker,remortgage | churn→leaving,cancelled
+Products: Advance Account, Premier Account, Online Bonus Saver, Cash ISA, Fixed Rate Mortgage, Balance Transfer Card, Personal Loan, Mobile Banking App`;
 }
 
 /**

@@ -18,7 +18,6 @@ export {
   PRIORITY_MAPPINGS,
   INTENT_MAPPINGS,
   DOMAIN_SYNONYMS,
-  TIME_EXPRESSIONS,
   FIELD_MAPPINGS,
   formatGlossaryForPrompt,
   formatCompactGlossary,

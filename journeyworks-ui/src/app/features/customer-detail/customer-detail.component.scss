@@ -1,3 +1,5 @@
+@use "styles/variables" as *;
+
 .customer-detail {
   padding: 24px;
 }
@@ -10,7 +12,7 @@
   font-size: 14px;
 
   a {
-    color: #1976d2;
+    color: $brand-secondary;
     text-decoration: none;
 
     &:hover {
@@ -22,11 +24,11 @@
     font-size: 18px;
     width: 18px;
     height: 18px;
-    color: #999;
+    color: $grey-5;
   }
 
   span:last-child {
-    color: #666;
+    color: $grey-6;
   }
 }
 
@@ -43,7 +45,7 @@
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: #e3f2fd;
+    background: $bg-info;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -53,7 +55,7 @@
       font-size: 40px;
       width: 40px;
       height: 40px;
-      color: #1976d2;
+      color: $brand-secondary;
     }
   }
 
@@ -82,36 +84,36 @@
     }
 
     .tier-standard {
-      background: #e0e0e0;
-      color: #616161;
+      background: $grey-3;
+      color: $grey-7;
     }
     .tier-premium {
-      background: #fff3e0;
-      color: #f57c00;
+      background: $bg-warning;
+      color: $rag-amber;
     }
     .tier-enterprise {
-      background: #e8eaf6;
-      color: #3f51b5;
+      background: $bg-info;
+      color: $brand-secondary;
     }
 
     .risk-low {
-      background: #e8f5e9;
-      color: #388e3c;
+      background: $bg-success;
+      color: $rag-green;
     }
     .risk-medium {
-      background: #fff3e0;
-      color: #f57c00;
+      background: $bg-warning;
+      color: $rag-amber;
     }
     .risk-high {
-      background: #ffebee;
-      color: #d32f2f;
+      background: $bg-error;
+      color: $rag-red;
     }
 
     .customer-contact {
       display: flex;
       gap: 24px;
       font-size: 14px;
-      color: #666;
+      color: $grey-6;
 
       span {
         display: flex;
@@ -134,7 +136,7 @@
     .stat {
       text-align: center;
       padding: 12px 24px;
-      background: #fafafa;
+      background: $grey-1;
       border-radius: 8px;
 
       .stat-value {
@@ -147,33 +149,33 @@
       .stat-label {
         display: block;
         font-size: 12px;
-        color: #666;
+        color: $grey-6;
         margin-top: 4px;
       }
 
       &.health-stat {
         &.health-excellent {
-          background: #e8f5e9;
+          background: $bg-success;
           .stat-value {
-            color: #388e3c;
+            color: $rag-green;
           }
         }
         &.health-good {
-          background: #e3f2fd;
+          background: $bg-info;
           .stat-value {
-            color: #1976d2;
+            color: $brand-secondary;
           }
         }
         &.health-warning {
-          background: #fff3e0;
+          background: $bg-warning;
           .stat-value {
-            color: #f57c00;
+            color: $rag-amber;
           }
         }
         &.health-critical {
-          background: #ffebee;
+          background: $bg-error;
           .stat-value {
-            color: #d32f2f;
+            color: $rag-red;
           }
         }
       }
@@ -221,27 +223,27 @@
       }
 
       &.health-excellent {
-        background: #e8f5e9;
+        background: $bg-success;
         .score-value {
-          color: #388e3c;
+          color: $rag-green;
         }
       }
       &.health-good {
-        background: #e3f2fd;
+        background: $bg-info;
         .score-value {
-          color: #1976d2;
+          color: $brand-secondary;
         }
       }
       &.health-warning {
-        background: #fff3e0;
+        background: $bg-warning;
         .score-value {
-          color: #f57c00;
+          color: $rag-amber;
         }
       }
       &.health-critical {
-        background: #ffebee;
+        background: $bg-error;
         .score-value {
-          color: #d32f2f;
+          color: $rag-red;
         }
       }
     }
@@ -259,13 +261,13 @@
       }
 
       &.trend-improving {
-        color: #388e3c;
+        color: $rag-green;
       }
       &.trend-stable {
-        color: #9e9e9e;
+        color: $grey-5;
       }
       &.trend-declining {
-        color: #d32f2f;
+        color: $rag-red;
       }
     }
   }
@@ -278,7 +280,7 @@
       margin: 0 0 12px;
       font-size: 14px;
       font-weight: 500;
-      color: #666;
+      color: $grey-6;
     }
 
     ul {
@@ -305,19 +307,19 @@
   }
 
   .risk-factors li mat-icon {
-    color: #f57c00;
+    color: $rag-amber;
   }
 
   .recommendations li mat-icon {
-    color: #1976d2;
+    color: $brand-secondary;
   }
 
   .last-updated {
     font-size: 12px;
-    color: #999;
+    color: $grey-5;
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid $grey-2;
   }
 }
 
@@ -339,7 +341,7 @@
   }
 
   .subject-link {
-    color: #1976d2;
+    color: $brand-secondary;
     text-decoration: none;
 
     &:hover {
@@ -355,13 +357,13 @@
   justify-content: center;
   min-height: 300px;
   text-align: center;
-  color: #666;
+  color: $grey-6;
 
   mat-icon {
     font-size: 64px;
     width: 64px;
     height: 64px;
-    color: #f44336;
+    color: $rag-red;
     margin-bottom: 16px;
   }
 

@@ -10,15 +10,17 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  LlmClientService,
-  PromptTemplateService,
-  LlmContentBlock,
-} from '../../infrastructure/llm';
+import { LlmClientService, LlmContentBlock } from '../../infrastructure/llm';
 import { RagChunk, ChunkingConfig } from './rag.types';
 
 /** Default model for contextualization - Haiku is 25x cheaper than Sonnet */
 const DEFAULT_CONTEXTUALIZATION_MODEL = 'claude-3-5-haiku-latest';
+
+/** LLM call timeout in milliseconds */
+const LLM_TIMEOUT_MS = 60_000;
+
+/** Max concurrent chunk contextualization calls */
+const CHUNK_CONCURRENCY = 5;
 
 @Injectable()
 export class ContextualChunker {
@@ -30,7 +32,6 @@ export class ContextualChunker {
   constructor(
     private readonly configService: ConfigService,
     private readonly llmClient: LlmClientService,
-    private readonly promptTemplate: PromptTemplateService,
   ) {
     this.config = {
       chunkSize: this.configService.get<number>('rag.chunkSize') || 512,
@@ -97,8 +98,6 @@ export class ContextualChunker {
     fullDocument: string,
     documentSummary: string,
   ): Promise<RagChunk[]> {
-    const contextualizedChunks: RagChunk[] = [];
-
     // Build the cached system content with the full document
     // This gets cached after the first API call
     const systemBlocks: LlmContentBlock[] = [
@@ -124,31 +123,43 @@ Respond with ONLY the contextual prefix, no other text.`,
       },
     ];
 
-    for (const chunk of chunks) {
-      try {
-        // Generate contextual prefix using LLM with cached document
-        const contextPrefix = await this.generateContextPrefixWithCache(
-          chunk.content,
-          chunk.metadata,
-          systemBlocks,
-        );
+    // Process chunks in batches for parallelism while respecting rate limits
+    const contextualizedChunks: RagChunk[] = [];
 
-        contextualizedChunks.push({
-          ...chunk,
-          contextPrefix,
-          contextualizedContent: `${contextPrefix}\n\n${chunk.content}`,
-        });
-      } catch (error) {
-        // If contextualization fails, use a simple prefix
-        this.logger.warn(
-          `Failed to contextualize chunk ${chunk.id}: ${error.message}`,
-        );
-        const simplePrefix = this.generateSimplePrefix(chunk.metadata);
-        contextualizedChunks.push({
-          ...chunk,
-          contextPrefix: simplePrefix,
-          contextualizedContent: `${simplePrefix}\n\n${chunk.content}`,
-        });
+    for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+      const batch = chunks.slice(i, i + CHUNK_CONCURRENCY);
+
+      const results = await Promise.allSettled(
+        batch.map((chunk) =>
+          this.generateContextPrefixWithCache(
+            chunk.content,
+            chunk.metadata,
+            systemBlocks,
+          ).then((contextPrefix) => ({
+            ...chunk,
+            contextPrefix,
+            contextualizedContent: `${contextPrefix}\n\n${chunk.content}`,
+          })),
+        ),
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        if (result.status === 'fulfilled') {
+          contextualizedChunks.push(result.value);
+        } else {
+          // If contextualization fails, use a simple prefix
+          const chunk = batch[j];
+          this.logger.warn(
+            `Failed to contextualize chunk ${chunk.id}: ${result.reason?.message}`,
+          );
+          const simplePrefix = this.generateSimplePrefix(chunk.metadata);
+          contextualizedChunks.push({
+            ...chunk,
+            contextPrefix: simplePrefix,
+            contextualizedContent: `${simplePrefix}\n\n${chunk.content}`,
+          });
+        }
       }
     }
 
@@ -175,51 +186,27 @@ Metadata:
 - Customer: ${metadata.customerName || 'Unknown'}
 - Date: ${metadata.timestamp || 'Unknown'}`;
 
-    const response = await this.llmClient.complete(
-      {
-        messages: [{ role: 'user', content: userMessage }],
-        systemBlocks,
-        model: this.contextualizationModel, // Use Haiku for cost efficiency
-        maxTokens: 150,
-        temperature: 0.1,
-      },
-      { rateLimitKey: 'llm:contextualization' },
-    );
+    const response = await Promise.race([
+      this.llmClient.complete(
+        {
+          messages: [{ role: 'user', content: userMessage }],
+          systemBlocks,
+          model: this.contextualizationModel, // Use Haiku for cost efficiency
+          maxTokens: 150,
+          temperature: 0.1,
+        },
+        { rateLimitKey: 'llm:contextualization' },
+      ),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM complete timed out')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
 
     // Extract just the prefix (should be 2-3 sentences)
     const prefix = response.content.trim();
-
-    // Limit prefix length
-    if (prefix.length > 300) {
-      return prefix.substring(0, 297) + '...';
-    }
-
-    return prefix;
-  }
-
-  /**
-   * Generate contextual prefix using LLM (legacy method without caching)
-   */
-  private async generateContextPrefix(
-    chunkContent: string,
-    fullDocument: string,
-    documentSummary: string,
-    metadata: RagChunk['metadata'],
-  ): Promise<string> {
-    const prompt = this.promptTemplate.renderNamed('rag:contextual', {
-      chunk: chunkContent,
-      documentSummary: documentSummary || 'No summary available',
-      documentType: metadata.source,
-      date: metadata.timestamp || 'Unknown',
-      customer: metadata.customerName || 'Unknown',
-    });
-
-    const response = await this.llmClient.prompt(prompt, undefined, {
-      rateLimitKey: 'llm:contextualization',
-    });
-
-    // Extract just the prefix (should be 2-3 sentences)
-    const prefix = response.trim();
 
     // Limit prefix length
     if (prefix.length > 300) {

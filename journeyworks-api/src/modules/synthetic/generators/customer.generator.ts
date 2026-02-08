@@ -7,6 +7,12 @@
 import { Injectable } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { SyntheticCustomer } from '../synthetic-data.types';
+import {
+  randomChoice,
+  weightedChoice,
+  randomDateUniform,
+  randomDate,
+} from '../utils/random.util';
 
 // Retail banking customer data - UK-focused individual customers
 const FIRST_NAMES = [
@@ -153,52 +159,48 @@ const REGIONS = [
 @Injectable()
 export class CustomerGenerator {
   private usedEmails = new Set<string>();
+  private usedIds = new Set<string>();
 
   /**
    * Generate a single retail customer
    */
   generate(): SyntheticCustomer {
-    const firstName = this.randomChoice(FIRST_NAMES);
-    const lastName = this.randomChoice(LAST_NAMES);
+    const firstName = randomChoice(FIRST_NAMES);
+    const lastName = randomChoice(LAST_NAMES);
     const name = `${firstName} ${lastName}`;
     const email = this.generateEmail(firstName, lastName);
-    
-    // Retail banking tiers
-    const tierChoice = this.weightedChoice([
-      ['premium', 0.15],
-      ['standard', 0.60],
-      ['basic', 0.20],
-      ['student', 0.05],
-    ]);
+
+    // Retail banking tiers — use canonical tier names directly
+    const tier = weightedChoice([
+      ['platinum', 0.15],
+      ['gold', 0.25],
+      ['silver', 0.4],
+      ['bronze', 0.2],
+    ]) as SyntheticCustomer['tier'];
 
     // Balance ranges for retail
     const balanceRanges: Record<string, [number, number]> = {
-      premium: [25000, 150000],
-      standard: [2000, 30000],
-      basic: [100, 3000],
-      student: [50, 2000],
+      platinum: [25000, 150000],
+      gold: [10000, 50000],
+      silver: [2000, 15000],
+      bronze: [50, 3000],
     };
 
-    // Map to type system
-    const tierMapping: Record<string, 'platinum' | 'gold' | 'silver' | 'bronze'> = {
-      premium: 'platinum',
-      standard: 'silver',
-      basic: 'bronze',
-      student: 'bronze',
-    };
-    const mappedTier = tierMapping[tierChoice] || 'silver';
-
-    const [minBalance, maxBalance] = balanceRanges[tierChoice] || [1000, 10000];
+    const [minBalance, maxBalance] = balanceRanges[tier] || [1000, 10000];
     const portfolioValue = Math.floor(
       Math.random() * (maxBalance - minBalance) + minBalance,
     );
 
-    const joinedDate = this.randomDate(
+    const joinedDate = randomDateUniform(
       new Date('2010-01-01'),
       new Date('2024-06-01'),
     );
 
-    const lastContactDate = this.randomDate(new Date('2025-01-01'), new Date());
+    // Last contact date: most customers recent, but some dormant (up to 2 years ago)
+    const lastContactDate = randomDate(
+      new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000),
+      new Date(),
+    );
 
     return {
       id: `CUST-${this.generateCustomerId()}`,
@@ -206,19 +208,19 @@ export class CustomerGenerator {
       email,
       phone: this.generateUKPhone(),
       company: '',
-      tier: mappedTier,
-      relationshipManager: this.randomChoice(ACCOUNT_MANAGERS),
-      accountType: this.randomChoice(ACCOUNT_TYPES),
+      tier,
+      relationshipManager: randomChoice(ACCOUNT_MANAGERS),
+      accountType: randomChoice(ACCOUNT_TYPES),
       portfolioValue,
-      riskProfile: this.weightedChoice([
+      riskProfile: weightedChoice([
         ['conservative', 0.5],
         ['moderate', 0.4],
         ['aggressive', 0.1],
       ]) as 'conservative' | 'moderate' | 'aggressive',
-      region: this.randomChoice(REGIONS),
+      region: randomChoice(REGIONS),
       joinedDate: joinedDate.toISOString(),
       lastContactDate: lastContactDate.toISOString(),
-      communicationPreference: this.weightedChoice([
+      communicationPreference: weightedChoice([
         ['email', 0.4],
         ['phone', 0.3],
         ['both', 0.3],
@@ -235,7 +237,14 @@ export class CustomerGenerator {
   }
 
   private generateCustomerId(): string {
-    return String(10000 + Math.floor(Math.random() * 90000));
+    let id: string;
+    let attempts = 0;
+    do {
+      id = String(10000 + Math.floor(Math.random() * 90000));
+      attempts++;
+    } while (this.usedIds.has(id) && attempts < 10);
+    this.usedIds.add(id);
+    return id;
   }
 
   private generateEmail(firstName: string, lastName: string): string {
@@ -253,8 +262,8 @@ export class CustomerGenerator {
     let attempts = 0;
 
     do {
-      const domain = this.randomChoice(domains);
-      const separator = this.randomChoice(['.', '_', '']);
+      const domain = randomChoice(domains);
+      const separator = randomChoice(['.', '_', '']);
       const suffix = attempts > 0 ? Math.floor(Math.random() * 999) : '';
       const cleanLastName = lastName.replace(/'/g, '');
       email = `${firstName.toLowerCase()}${separator}${cleanLastName.toLowerCase()}${suffix}@${domain}`;
@@ -267,31 +276,10 @@ export class CustomerGenerator {
 
   private generateUKPhone(): string {
     const formats = ['+44 7### ### ###', '+44 7### ######', '07### ######'];
-    let phone = this.randomChoice(formats);
+    let phone = randomChoice(formats);
     while (phone.includes('#')) {
       phone = phone.replace('#', String(Math.floor(Math.random() * 10)));
     }
     return phone;
-  }
-
-  private randomChoice<T>(array: T[]): T {
-    return array[Math.floor(Math.random() * array.length)];
-  }
-
-  private weightedChoice(options: Array<[string, number]>): string {
-    const random = Math.random();
-    let cumulative = 0;
-    for (const [value, weight] of options) {
-      cumulative += weight;
-      if (random < cumulative) {
-        return value;
-      }
-    }
-    return options[options.length - 1][0];
-  }
-
-  private randomDate(start: Date, end: Date): Date {
-    const diff = end.getTime() - start.getTime();
-    return new Date(start.getTime() + Math.random() * diff);
   }
 }

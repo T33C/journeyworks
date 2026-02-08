@@ -1028,8 +1028,10 @@ export class AnalysisDataService {
     filters?: Partial<FilterState>,
   ): Observable<JourneyStage[]> {
     if (this.useApi) {
-      // Merge context into filters - context timeWindow/product override global filters
-      const effectiveFilters = this.mergeContextIntoFilters(context, filters);
+      // For journey stages, we want the full date range (not a single-day
+      // bubble window) so there is enough survey data to populate the chart.
+      // We keep the product from context so the journey is product-specific.
+      const effectiveFilters = this.mergeContextForJourney(context, filters);
       return this.apiService.getJourneyStages(effectiveFilters).pipe(
         // Apply context-aware modifications on top of API data
         map((stages) => this.applyContextToStages(stages, context)),
@@ -1065,6 +1067,30 @@ export class AnalysisDataService {
     // If context has a channel, use it instead of global channel filter
     if (context?.channel) {
       merged.channel = context.channel;
+    }
+
+    return merged;
+  }
+
+  /**
+   * Build filters for journey stages API.
+   * Unlike other charts, journey stages keep the global date range so the
+   * survey scope matches what the user sees in the timeline. When a bubble
+   * is clicked the context carries a single-day time window, but we ignore
+   * it and keep the wider global range from filters. We do pick up the
+   * bubble's product so the journey chart is product-specific.
+   */
+  private mergeContextForJourney(
+    context?: AnalysisContext,
+    filters?: Partial<FilterState>,
+  ): Partial<FilterState> {
+    const merged: Partial<FilterState> = { ...filters };
+
+    // Use product from context (clicked bubble / event) but keep global
+    // date range from the dashboard filters — do NOT narrow to the 1-day
+    // bubble window and do NOT drop the date range entirely.
+    if (context?.product && context.product !== 'all') {
+      merged.product = context.product;
     }
 
     return merged;

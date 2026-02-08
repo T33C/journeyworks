@@ -1,4 +1,5 @@
 /* JourneyWorks Global Styles */
+/* Corporate theme based on official brand guidelines */
 
 @use "@angular/material" as mat;
 @use "styles/variables" as *;
@@ -8,12 +9,16 @@
 @include mat.core();
 
 // Define a light theme using M3 color system
+// Using neutral/grey-based palette to align with corporate guidelines
+// (Brand red should be used sparingly, not as primary Material theme)
 $journeyworks-theme: mat.define-theme(
   (
     color: (
       theme-type: light,
-      primary: mat.$blue-palette,
-      tertiary: mat.$violet-palette,
+      primary: mat.$cyan-palette,
+      // Aligned with corporate blue (#305A85)
+      tertiary: mat.$azure-palette,
+      // Supporting blue tones
     ),
     density: (
       scale: 0,
@@ -32,6 +37,7 @@ body {
   margin: 0;
   font-family: $font-family;
   background: $bg-page;
+  color: $text-primary;
 }
 
 /* Scrollbar styling */
@@ -167,4 +173,25 @@ h6 {
 /* Empty state */
 .empty-state {
   @include empty-state;
+}
+
+/* ===== SWITCH CONTROLS ===== */
+/* Blue background for Material slide toggles */
+.mat-mdc-slide-toggle {
+  // Selected (checked) state - corporate blue
+  --mdc-switch-selected-track-color: #{$brand-secondary};
+  --mdc-switch-selected-hover-track-color: #{$brand-secondary-dark};
+  --mdc-switch-selected-focus-track-color: #{$brand-secondary};
+  --mdc-switch-selected-pressed-track-color: #{$brand-secondary-dark};
+  --mdc-switch-selected-handle-color: #fff;
+  --mdc-switch-selected-hover-handle-color: #fff;
+  --mdc-switch-selected-focus-handle-color: #fff;
+  --mdc-switch-selected-pressed-handle-color: #fff;
+  --mdc-switch-selected-icon-color: #{$brand-secondary};
+
+  // Unselected state - grey
+  --mdc-switch-unselected-track-color: #{$grey-4};
+  --mdc-switch-unselected-hover-track-color: #{$grey-5};
+  --mdc-switch-unselected-focus-track-color: #{$grey-4};
+  --mdc-switch-unselected-pressed-track-color: #{$grey-5};
 }

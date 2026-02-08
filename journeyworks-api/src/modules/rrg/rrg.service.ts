@@ -19,6 +19,7 @@ import {
   mapChannel,
   mapPriority,
 } from '../../infrastructure/llm/prompts/rrg/glossary';
+import { DateRangeParser } from '../../shared/utils/date-range.util';
 import { RedisCacheService } from '../../infrastructure/redis';
 import { CommunicationsRepository } from '../communications/communications.repository';
 import { QueryBuilder } from './query-builder.service';
@@ -153,6 +154,16 @@ export class RrgService {
       );
     }
 
+    // Guard: only communications index supports execution currently
+    if (request.execute && index !== 'communications') {
+      throw new RrgValidationError(
+        `Query execution is not yet supported for the '${index}' index. ` +
+          `Set execute: false to get the generated DSL without executing.`,
+        'INDEX_NOT_EXECUTABLE',
+        { index },
+      );
+    }
+
     // 1. Parse the natural language query into structured intent
     const intent = await this.parseQuery(request);
 
@@ -200,6 +211,11 @@ export class RrgService {
       context: request.context || '',
       index: request.index || 'communications',
       timezone: request.timezone || RRG_CONFIG.DEFAULT_TIMEZONE,
+      previousQueries: request.previousQueries
+        ? request.previousQueries
+            .slice(-RRG_CONFIG.MAX_PREVIOUS_QUERIES)
+            .map((q) => q.nl)
+        : [],
     });
     const hash = crypto
       .createHash('sha256')
@@ -318,7 +334,7 @@ export class RrgService {
         : 'None',
     });
 
-    const response = await this.llmClient.prompt(
+    const response = await this.promptWithTimeout(
       prompt,
       this.promptTemplate.getTemplate('system:rrg'),
       { rateLimitKey: 'llm:rrg' },
@@ -338,11 +354,14 @@ export class RrgService {
    */
   private parseLlmResponse(response: string, timezone?: string): ParsedIntent {
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return this.normalizeIntent(parsed, timezone);
+      // Extract JSON using brace-matching to handle multi-object LLM output safely
+      const braceStart = response.indexOf('{');
+      if (braceStart !== -1) {
+        const jsonStr = this.extractJsonObject(response, braceStart);
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
+          return this.normalizeIntent(parsed, timezone);
+        }
       }
     } catch (error) {
       this.logger.warn(
@@ -529,23 +548,30 @@ export class RrgService {
   }
 
   /**
-   * Normalize time range with timezone support
+   * Normalize time range with timezone support.
+   * Delegates date parsing to the shared DateRangeParser utility.
    * @param raw - Raw time range from LLM
-   * @param timezone - User's timezone (e.g., 'America/New_York')
+   * @param timezone - User's timezone (e.g., 'America/New_York') — logged for future use
    */
   private normalizeTimeRange(raw: any, timezone?: string): TimeRange {
     const range: TimeRange = {};
 
+    if (timezone) {
+      this.logger.debug(
+        `Time range parsing with timezone context: ${timezone}`,
+      );
+    }
+
     if (raw.from) {
-      range.from = this.parseDate(raw.from, timezone);
+      range.from = DateRangeParser.parseDate(raw.from);
     }
     if (raw.to) {
-      range.to = this.parseDate(raw.to, timezone);
+      range.to = DateRangeParser.parseDate(raw.to);
     }
     if (raw.relative) {
       range.relative = raw.relative;
-      // Convert relative to absolute
-      const parsed = this.parseRelativeTime(raw.relative, timezone);
+      // Convert relative to absolute using shared parser
+      const parsed = DateRangeParser.parseRelative(raw.relative);
       if (parsed) {
         range.from = parsed.from;
         range.to = parsed.to;
@@ -553,127 +579,6 @@ export class RrgService {
     }
 
     return range;
-  }
-
-  /**
-   * Parse a date string with optional timezone context
-   * @param value - Date string to parse
-   * @param timezone - User's timezone for context (currently logs for future use)
-   */
-  private parseDate(value: string, timezone?: string): string {
-    if (!value) return '';
-
-    // If already ISO format, return as-is
-    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
-      return value;
-    }
-
-    // Try to parse
-    // Note: For full timezone support, consider using date-fns-tz or luxon
-    const date = new Date(value);
-    if (!isNaN(date.getTime())) {
-      // If timezone is provided, log for future enhancement
-      if (timezone) {
-        this.logger.debug(
-          `Parsing date '${value}' in timezone context: ${timezone}`,
-        );
-      }
-      return date.toISOString();
-    }
-
-    return value;
-  }
-
-  /**
-   * Parse relative time expressions with timezone awareness
-   * @param relative - Relative time expression (e.g., "last 7 days")
-   * @param timezone - User's timezone for accurate "today" calculations
-   */
-  private parseRelativeTime(
-    relative: string,
-    timezone?: string,
-  ): { from: string; to: string } | null {
-    // Use timezone-aware "now" if timezone is provided
-    // For full support, consider using date-fns-tz: zonedTimeToUtc, utcToZonedTime
-    const now = new Date();
-
-    // Log timezone for future enhancement when timezone-aware date library is added
-    if (timezone) {
-      this.logger.debug(
-        `Parsing relative time '${relative}' with timezone: ${timezone}`,
-      );
-    }
-
-    const lowerRelative = relative.toLowerCase();
-
-    const match = lowerRelative.match(/last\s+(\d+)\s+(day|week|month|year)s?/);
-    if (match) {
-      const amount = parseInt(match[1], 10);
-      const unit = match[2];
-
-      const from = new Date(now);
-      switch (unit) {
-        case 'day':
-          from.setDate(from.getDate() - amount);
-          break;
-        case 'week':
-          from.setDate(from.getDate() - amount * 7);
-          break;
-        case 'month':
-          from.setMonth(from.getMonth() - amount);
-          break;
-        case 'year':
-          from.setFullYear(from.getFullYear() - amount);
-          break;
-      }
-
-      return {
-        from: from.toISOString(),
-        to: now.toISOString(),
-      };
-    }
-
-    // Handle specific relative terms
-    if (lowerRelative.includes('today')) {
-      const from = new Date(now);
-      from.setHours(0, 0, 0, 0);
-      return {
-        from: from.toISOString(),
-        to: now.toISOString(),
-      };
-    }
-
-    if (lowerRelative.includes('yesterday')) {
-      const from = new Date(now);
-      from.setDate(from.getDate() - 1);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(from);
-      to.setHours(23, 59, 59, 999);
-      return {
-        from: from.toISOString(),
-        to: to.toISOString(),
-      };
-    }
-
-    if (lowerRelative.includes('this week')) {
-      const from = new Date(now);
-      from.setDate(from.getDate() - from.getDay());
-      from.setHours(0, 0, 0, 0);
-      return {
-        from: from.toISOString(),
-        to: now.toISOString(),
-      };
-    }
-
-    if (lowerRelative.includes('this month')) {
-      const from = new Date(now.getFullYear(), now.getMonth(), 1);
-      return {
-        from: from.toISOString(),
-        to: now.toISOString(),
-      };
-    }
-
-    return null;
   }
 
   /**
@@ -698,15 +603,31 @@ export class RrgService {
     documents: any[];
     aggregations?: Record<string, any>;
   }> {
-    // For now, only support communications index
-    if (index !== 'communications') {
-      throw new Error(`Index ${index} not yet supported for query execution`);
+    // Decompose the full DSL envelope into query clause + options
+    // QueryBuilder.build() puts size, query, aggs, sort, _source at top level of dsl.query
+    const envelope = dsl.query || {};
+    const esQuery = envelope.query || { match_all: {} };
+    const hasAggs = envelope.aggs && Object.keys(envelope.aggs).length > 0;
+
+    // For queries with aggregations, use the aggregate method
+    if (hasAggs) {
+      const results = await this.communicationsRepo.aggregate(
+        esQuery,
+        envelope.aggs,
+      );
+      return {
+        total: results.total,
+        documents: results.hits.map((h) => h.source),
+        aggregations: results.aggregations,
+      };
     }
 
-    // Use the search method from repository
-    const results = await this.communicationsRepo.searchIndex(
-      dsl.query || { match_all: {} },
-    );
+    // For regular searches, pass query + options separately
+    const results = await this.communicationsRepo.searchIndex(esQuery, {
+      size: envelope.size || RRG_CONFIG.DEFAULT_RESULT_SIZE,
+      sort: envelope.sort,
+      source: envelope._source,
+    });
 
     return {
       total: results.total,
@@ -756,7 +677,7 @@ ${results.aggregations ? `- Aggregations: ${JSON.stringify(results.aggregations,
 Provide a concise, natural language summary of what was found.`;
 
     try {
-      return await this.llmClient.prompt(prompt, undefined, {
+      return await this.promptWithTimeout(prompt, undefined, {
         rateLimitKey: 'llm:rrg',
       });
     } catch (error) {
@@ -780,7 +701,7 @@ Provide a concise, natural language summary of what was found.`;
       feedback,
     });
 
-    const response = await this.llmClient.prompt(
+    const response = await this.promptWithTimeout(
       prompt,
       this.promptTemplate.getTemplate('system:rrg'),
       { rateLimitKey: 'llm:rrg' },
@@ -789,7 +710,12 @@ Provide a concise, natural language summary of what was found.`;
     const intent = this.parseLlmResponse(response);
     const index = originalRequest.index || 'communications';
 
-    return this.queryBuilder.build(intent, index);
+    const dsl = this.queryBuilder.build(intent, index);
+
+    // Validate refined DSL for safety (same as main query path)
+    this.validateDsl(dsl.query);
+
+    return dsl;
   }
 
   /**
@@ -821,5 +747,42 @@ Provide a concise, natural language summary of what was found.`;
     };
 
     return examples[index] || examples.communications;
+  }
+
+  /**
+   * Extract a JSON object from a string by matching braces,
+   * avoiding the greedy-regex problem with multi-object LLM output.
+   */
+  private extractJsonObject(text: string, startIndex: number): string | null {
+    let depth = 0;
+    for (let i = startIndex; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') depth--;
+      if (depth === 0) {
+        return text.substring(startIndex, i + 1);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Wrap an LLM call with a timeout to prevent indefinite hangs.
+   */
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const LLM_TIMEOUT_MS = 60_000;
+    const result = await Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM call timed out after 60s')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
   }
 }

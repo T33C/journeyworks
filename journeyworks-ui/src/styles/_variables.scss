@@ -1,70 +1,112 @@
 /**
  * JourneyWorks UI - Global Theme Variables
  * 
- * All colors, spacing, and design tokens should be defined here.
- * Update these values to apply corporate branding across the entire application.
+ * Corporate theme based on official brand guidelines.
+ * All colors, spacing, and design tokens are defined here.
+ * 
+ * IMPORTANT: Red should be used sparingly - we're not just a 'red brand'.
+ * Use the grey palette for most UI elements, RAG palette for status/severity.
  */
 
 // =============================================================================
-// BRAND COLORS - Update these for corporate theming
+// CORE BRAND PALETTE
 // =============================================================================
 
-// Primary brand colors
-$brand-primary: #5c6bc0; // Indigo - main brand color
-$brand-primary-light: #8e99a4;
-$brand-primary-dark: #3f51b5;
-$brand-accent: #7c4dff; // Purple accent
+// Primary brand colours (use sparingly)
+$brand-primary: #db0011; // HSBC Red (Pantone 1795C)
+$brand-white: #ffffff; // White
+$brand-black: #000000; // Black
 
-// Secondary brand colors
-$brand-secondary: #1976d2; // Blue - links, interactive elements
-$brand-secondary-light: #42a5f5;
-$brand-secondary-dark: #1565c0;
+// Complementary Red palette (for accent use only)
+$brand-red-1: #e31e22; // Pantone 2033C - Lighter red
+$brand-red-2: #ba1110; // Pantone 7627C - Medium red
+$brand-red-3: #730014; // Pantone 3523C - Dark red
+
+// Legacy mappings for backward compatibility
+$brand-primary-light: $brand-red-1;
+$brand-primary-dark: $brand-red-3;
+$brand-accent: $brand-primary;
+
+// Secondary brand colors (for links, interactive elements)
+$brand-secondary: #305a85; // Blue (from RAG palette)
+$brand-secondary-light: #347893;
+$brand-secondary-dark: #266076;
 
 // =============================================================================
-// SEMANTIC COLORS - Status & Sentiment
+// COMPLEMENTARY GREY PALETTE
 // =============================================================================
 
-// Sentiment colors
-$sentiment-positive: #4caf50; // Green
-$sentiment-positive-dark: #388e3c;
-$sentiment-positive-light: #66bb6a;
-$sentiment-positive-bg: #e8f5e9;
+$grey-1: #f3f3f3; // Lightest grey (page backgrounds)
+$grey-2: #ededed; // Light grey (card backgrounds)
+$grey-3: #d7d8d6; // Medium-light grey (borders)
+$grey-4: #b7b7b7; // Medium grey (placeholder text)
+$grey-5: #9b9b9b; // Neutral grey (muted text)
+$grey-6: #767676; // Medium-dark grey (secondary text - accessibility safe)
+$grey-7: #545454; // Dark grey (primary text)
+$grey-8: #333333; // Darkest grey (headings, titles)
 
-$sentiment-neutral: #9e9e9e; // Grey
-$sentiment-neutral-dark: #757575;
-$sentiment-neutral-light: #bdbdbd;
-$sentiment-neutral-bg: #fafafa;
+// =============================================================================
+// RAG PALETTE (Status & Severity)
+// =============================================================================
+// Use for status indicators, NOT for general branding
+// These colours ensure clear, meaningful communication
 
-$sentiment-negative: #f44336; // Red
-$sentiment-negative-dark: #d32f2f;
-$sentiment-negative-light: #ef5350;
-$sentiment-negative-bg: #ffebee;
+$rag-red: #a8000b; // Strong negative, errors
+$rag-amber: #ffbb33; // Warning, alerts
+$rag-green: #00847f; // Positive, success
+$rag-blue: #305a85; // Informational
 
-$sentiment-mixed: #ff9800; // Orange
-$sentiment-mixed-dark: #f57c00;
-$sentiment-mixed-light: #ffb74d;
-$sentiment-mixed-bg: #fff3e0;
+// =============================================================================
+// SEMANTIC COLORS - Sentiment
+// =============================================================================
 
-// Status colors
-$status-open: $brand-secondary;
-$status-open-bg: #e3f2fd;
+// Sentiment colors (aligned with RAG palette)
+$sentiment-positive: $rag-green;
+$sentiment-positive-dark: #006560;
+$sentiment-positive-light: #4da99f;
+$sentiment-positive-bg: #e6f3f2;
 
-$status-in-progress: #f57c00; // Orange
-$status-in-progress-bg: #fff3e0;
+$sentiment-neutral: $grey-5;
+$sentiment-neutral-dark: $grey-6;
+$sentiment-neutral-light: $grey-4;
+$sentiment-neutral-bg: $grey-1;
 
-$status-resolved: $sentiment-positive-dark;
+$sentiment-negative: $rag-red;
+$sentiment-negative-dark: $brand-red-3;
+$sentiment-negative-light: #d13d47;
+$sentiment-negative-bg: #fceaeb;
+
+$sentiment-mixed: $rag-amber;
+$sentiment-mixed-dark: #e5a82e;
+$sentiment-mixed-light: #ffd166;
+$sentiment-mixed-bg: #fff8e6;
+
+// =============================================================================
+// SEMANTIC COLORS - Status
+// =============================================================================
+
+$status-open: $rag-blue;
+$status-open-bg: #e8eef3;
+
+$status-in-progress: $rag-amber;
+$status-in-progress-bg: #fff8e6;
+
+$status-resolved: $rag-green;
 $status-resolved-bg: $sentiment-positive-bg;
 
-$status-escalated: $sentiment-negative-dark;
+$status-escalated: $rag-red;
 $status-escalated-bg: $sentiment-negative-bg;
 
-$status-closed: $sentiment-negative-dark; // Red for closed/error states
+$status-closed: $grey-6;
 
-// Priority colors
-$priority-low: $sentiment-positive;
-$priority-medium: $sentiment-mixed;
-$priority-high: $sentiment-negative;
-$priority-urgent: #9c27b0; // Purple
+// =============================================================================
+// SEMANTIC COLORS - Priority
+// =============================================================================
+
+$priority-low: $rag-green;
+$priority-medium: $rag-amber;
+$priority-high: $rag-red;
+$priority-urgent: $brand-red-3;
 
 // Urgency colors (for AI classification)
 $urgency-low: $priority-low;
@@ -73,142 +115,175 @@ $urgency-high: $priority-high;
 $urgency-critical: $priority-urgent;
 
 // =============================================================================
-// QUADRANT CHART COLORS
+// QUADRANT CHART COLORS (using RAG palette)
 // =============================================================================
 
-$quadrant-critical: #e53935;
-$quadrant-critical-bg: #ffebee;
+$quadrant-critical: $rag-red;
+$quadrant-critical-bg: $sentiment-negative-bg;
 
-$quadrant-watch: #ff8f00;
-$quadrant-watch-bg: #fff8e1;
+$quadrant-watch: $rag-amber;
+$quadrant-watch-bg: $sentiment-mixed-bg;
 
-$quadrant-strength: #43a047;
-$quadrant-strength-bg: #e8f5e9;
+$quadrant-strength: $rag-green;
+$quadrant-strength-bg: $sentiment-positive-bg;
 
-$quadrant-noise: #9e9e9e;
-$quadrant-noise-bg: #fafafa;
+$quadrant-noise: $grey-5;
+$quadrant-noise-bg: $grey-1;
+
+// =============================================================================
+// DATA VISUALISATION PALETTE
+// =============================================================================
+// Use for charts and graphs - NOT the core brand palette
+
+// Blue series
+$data-blue-1: #266076; // Darkest blue
+$data-blue-2: #347893; // Dark blue
+$data-blue-3: #1494c6; // Primary blue
+$data-blue-4: #509ebc; // Light blue
+
+// Purple series
+$data-purple-1: #7c4386; // Dark purple
+$data-purple-2: #7c4386; // Medium purple
+$data-purple-3: #a752cf; // Primary purple
+$data-purple-4: #b184c7; // Light purple
+
+// Pink series
+$data-pink-1: #933d4f; // Dark pink
+$data-pink-2: #c03954; // Medium pink
+$data-pink-3: #f14e73; // Primary pink
+$data-pink-4: #e76e84; // Light pink
+
+// Orange series
+$data-orange-1: #9b4822; // Dark orange
+$data-orange-2: #c64d24; // Medium orange
+$data-orange-3: #ed500d; // Primary orange
+$data-orange-4: #ec7046; // Light orange
+
+// Green series
+$data-green-1: #356512; // Darkest green
+$data-green-2: #518827; // Dark green
+$data-green-3: #4da90f; // Primary green
+$data-green-4: #74a157; // Light green
 
 // =============================================================================
 // CHART COLORS - D3 Visualizations
 // =============================================================================
 
-$chart-axis: #666;
-$chart-grid: #ccc;
-$chart-grid-light: #f0f0f0;
+$chart-axis: $grey-6;
+$chart-grid: $grey-3;
+$chart-grid-light: $grey-1;
 $chart-positive: $sentiment-positive-light;
 $chart-negative: $sentiment-negative-light;
-$chart-accent: $brand-primary;
-$chart-highlight: #ffeb3b; // Yellow for selections
+$chart-accent: $data-blue-3;
+$chart-highlight: $rag-amber; // Amber for selections (accessible)
 
 // Gradient stops for sentiment
-$chart-gradient-negative: #f44336;
-$chart-gradient-neutral: #ffc107;
-$chart-gradient-positive: #4caf50;
+$chart-gradient-negative: $rag-red;
+$chart-gradient-neutral: $rag-amber;
+$chart-gradient-positive: $rag-green;
 
-// Social sentiment band
-$chart-social-band: #9c27b0;
+// Social sentiment band (use pink for contrast with RAG)
+$chart-social-band: $data-pink-3;
 
 // NPS colors
-$nps-positive: #2e7d32;
-$nps-negative: #c62828;
-$nps-accent-positive: #303f9f;
-$nps-accent-negative: #6a1b9a;
+$nps-positive: $rag-green;
+$nps-negative: $rag-red;
+$nps-accent-positive: $data-blue-1;
+$nps-accent-negative: $brand-red-3; // Corporate dark red
 
 // =============================================================================
 // UI COLORS - Backgrounds & Borders
 // =============================================================================
 
-// Backgrounds
-$bg-page: #f5f5f5;
-$bg-card: #ffffff;
-$bg-surface: #fafafa;
-$bg-sidebar: #1e1e2f;
-$bg-header: linear-gradient(
-  135deg,
-  $brand-primary 0%,
-  $brand-primary-dark 100%
-);
-$bg-header-active: linear-gradient(
-  135deg,
-  $brand-primary 0%,
-  $brand-accent 100%
-);
+// Backgrounds (using grey palette)
+$bg-page: $grey-1;
+$bg-card: $brand-white;
+$bg-surface: $grey-2;
+$bg-sidebar: $grey-8;
+$bg-header: linear-gradient(135deg, $grey-8 0%, $brand-primary 100%);
+$bg-header-active: linear-gradient(135deg, $grey-7 0%, $brand-white 100%);
 
-// Borders
-$border-light: #e0e0e0;
-$border-default: #ccc;
-$border-dark: #999;
+// Semantic background colours (for status states)
+$bg-success: $sentiment-positive-bg; // #E6F3F2
+$bg-warning: $sentiment-mixed-bg; // #FFF8E6
+$bg-error: $sentiment-negative-bg; // #FCEAEB
+$bg-info: #e8eef3; // Blue-tinted neutral
 
-// Text colors
-$text-primary: #333;
-$text-secondary: #666;
-$text-muted: #999;
-$text-hint: #999; // Alias for hint text
-$text-disabled: #bdbdbd;
-$text-inverse: #ffffff;
+// Borders (using grey palette)
+$border-light: $grey-2;
+$border-default: $grey-3;
+$border-dark: $grey-5;
+
+// Text colors (using grey palette for accessibility)
+$text-primary: $grey-8; // Main text
+$text-secondary: $grey-6; // Secondary text (accessibility safe at 4.5:1)
+$text-muted: $grey-5; // Muted/placeholder text
+$text-hint: $grey-5; // Alias for hint text
+$text-disabled: $grey-4;
+$text-inverse: $brand-white;
 
 // =============================================================================
 // AI / CHAT COLORS
 // =============================================================================
 
-// AI brand colors
-$ai-primary: $brand-accent; // Purple for AI elements
-$ai-primary-dark: #651fff;
-$ai-primary-light: #b388ff;
+// AI brand colors (using corporate red palette for brand alignment)
+$ai-primary: $brand-secondary; // #305A85 - Corporate blue
+$ai-primary-dark: $brand-secondary-dark; // #266076 - Dark blue
+$ai-primary-light: $brand-secondary-light; // #347893 - Light blue
 
-// AI message backgrounds
-$ai-message-bg-start: #f3e5f5; // Base color for gradient start
-$ai-message-bg-end: #ede7f6; // Base color for gradient end
+// AI message backgrounds (subtle blue tint)
+$ai-message-bg-start: #f5f8fb; // Very light blue tint
+$ai-message-bg-end: #edf2f7; // Slightly darker blue tint
 $ai-message-bg: linear-gradient(
   135deg,
   $ai-message-bg-start 0%,
   $ai-message-bg-end 100%
 );
 $ai-message-border: $ai-primary;
-$ai-avatar-bg: #e1bee7;
-$ai-avatar-color: $ai-primary;
+$ai-avatar-bg: #e8eef3; // Light blue bg (matches $status-open-bg)
+$ai-avatar-color: $brand-secondary-dark;
 
 // User message colors
-$user-message-bg: #e3f2fd;
+$user-message-bg: $status-open-bg;
 $user-message-border: $brand-secondary;
-$user-avatar-bg: #bbdefb;
+$user-avatar-bg: #c5d9e8; // Light blue
 $user-avatar-color: $brand-secondary-dark;
 
 // Chat UI colors
-$chat-suggestion-bg: #e8eaf6;
-$chat-suggestion-hover: #c5cae9;
-$chat-suggestion-text: #3949ab;
-$chat-input-border: #c5cae9;
-$chat-input-focus: $ai-primary;
+$chat-suggestion-bg: $grey-1;
+$chat-suggestion-hover: $grey-2;
+$chat-suggestion-text: $brand-secondary;
+$chat-input-border: $grey-3;
+$chat-input-focus: $brand-secondary;
 $chat-send-btn-bg: linear-gradient(
   135deg,
-  $ai-primary 0%,
-  $ai-primary-dark 100%
+  $brand-secondary 0%,
+  $brand-secondary-dark 100%
 );
-$chat-send-btn-shadow: rgba(124, 77, 255, 0.3);
+$chat-send-btn-shadow: rgba(48, 90, 133, 0.3);
 
 // Typing indicator
-$typing-dot-color: #9575cd;
+$typing-dot-color: $grey-5;
 
 // Panel header colors (for research/AI panels)
-$panel-header-icon: $ai-primary;
-$panel-header-title: #1a237e;
+$panel-header-icon: $brand-primary;
+$panel-header-title: $grey-8;
 
-// Confidence indicator colors
-$confidence-high: #2e7d32;
-$confidence-high-bg: #c8e6c9;
-$confidence-high-text: #2e7d32;
-$confidence-medium: #e65100;
-$confidence-medium-bg: #fff3e0;
-$confidence-medium-text: #e65100;
-$confidence-low: #c62828;
-$confidence-low-bg: #ffcdd2;
-$confidence-low-text: #c62828;
+// Confidence indicator colors (aligned with RAG)
+$confidence-high: $rag-green;
+$confidence-high-bg: $sentiment-positive-bg;
+$confidence-high-text: $rag-green;
+$confidence-medium: $rag-amber;
+$confidence-medium-bg: $sentiment-mixed-bg;
+$confidence-medium-text: #b8860b; // Dark goldenrod for text contrast
+$confidence-low: $rag-red;
+$confidence-low-bg: $sentiment-negative-bg;
+$confidence-low-text: $rag-red;
 
 // Evidence/source styling
-$evidence-border: $brand-primary;
-$evidence-bg: $bg-surface;
-$evidence-hover-bg: #f0f4ff;
+$evidence-border: $brand-secondary;
+$evidence-bg: $grey-1;
+$evidence-hover-bg: $grey-2;
 
 // =============================================================================
 // SPACING

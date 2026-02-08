@@ -1,12 +1,19 @@
 /**
  * Event Generator
  *
- * Generates synthetic timeline events for investment banking.
+ * Generates synthetic timeline events for retail banking.
  */
 
 import { Injectable } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { SyntheticEvent } from '../synthetic-data.types';
+import {
+  randomChoice,
+  weightedChoiceFromArrays,
+  randomSubset,
+  randomDate,
+} from '../utils/random.util';
+import { PRODUCT_SLUGS } from '../data/products';
 
 const EVENT_TYPES = [
   'outage',
@@ -32,9 +39,9 @@ const EVENT_TEMPLATES = {
       description: 'Payment processing system experiencing delays',
     },
     {
-      label: 'Trading Platform Issue',
+      label: 'Card Payment Processing Issue',
       description:
-        'Trading platform experiencing slow response times during peak hours',
+        'Card payment processing system experiencing delays and declined transactions',
     },
     {
       label: 'Authentication Service Disruption',
@@ -47,20 +54,20 @@ const EVENT_TEMPLATES = {
       description: 'Version 5.0 of mobile banking app with enhanced features',
     },
     {
-      label: 'Portfolio Analytics Tool Launch',
-      description: 'New AI-powered portfolio analytics dashboard',
+      label: 'Budgeting Tools Launch',
+      description: 'New in-app budgeting and spending insights feature',
     },
     {
       label: 'Instant Transfers Feature',
       description: 'Real-time fund transfers now available to all customers',
     },
     {
-      label: 'Robo-Advisor Service',
-      description: 'Automated investment advisory service for retail clients',
+      label: 'Savings Round-Up Feature',
+      description: 'Automatic round-up savings on everyday purchases',
     },
     {
-      label: 'ESG Investment Options',
-      description: 'New sustainable investment product offerings',
+      label: 'Green Mortgage Product',
+      description: 'New preferential rate mortgage for energy-efficient homes',
     },
   ],
   policy_change: [
@@ -74,8 +81,9 @@ const EVENT_TEMPLATES = {
       description: 'Enhanced customer verification procedures now in effect',
     },
     {
-      label: 'Trading Hours Extension',
-      description: 'Extended trading hours for certain markets',
+      label: 'Branch Hours Extension',
+      description:
+        'Extended opening hours for high-street branches including Saturday afternoons',
     },
     {
       label: 'Account Minimum Adjustment',
@@ -97,8 +105,9 @@ const EVENT_TEMPLATES = {
       description: 'Increased phishing attempts targeting customers',
     },
     {
-      label: 'Market Volatility Event',
-      description: 'Significant market movements affecting portfolios',
+      label: 'Interest Rate Change',
+      description:
+        'Bank of England base rate change affecting savings and mortgage rates',
     },
     {
       label: 'Regulatory Inquiry',
@@ -133,22 +142,23 @@ const EVENT_TEMPLATES = {
   ],
 };
 
-const PRODUCTS = [
-  'mobile-app',
-  'online-banking',
-  'credit-card',
-  'current-account',
-  'savings-account',
-  'mortgage',
-  'personal-loan',
-  'insurance',
-  'trading-platform',
-  'wealth-management',
-];
+// Product slugs from shared catalogue
+const PRODUCTS = PRODUCT_SLUGS;
 
 const CHANNELS = ['email', 'phone', 'chat', 'mobile', 'web', 'branch'];
 
-const REGIONS = ['north', 'south', 'east', 'west', 'central', 'international'];
+const REGIONS = [
+  'London',
+  'Manchester',
+  'Birmingham',
+  'Leeds',
+  'Glasgow',
+  'Liverpool',
+  'Bristol',
+  'Edinburgh',
+  'Cardiff',
+  'Newcastle',
+];
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 
@@ -160,29 +170,32 @@ export class EventGenerator {
    * Generate a single event
    */
   generate(dateRange: { start: Date; end: Date }): SyntheticEvent {
-    const type = this.randomChoice(EVENT_TYPES);
+    const type = randomChoice(EVENT_TYPES);
     const templates = EVENT_TEMPLATES[type];
-    const template = this.randomChoice(templates);
+    const template = randomChoice(templates);
 
-    const startDate = this.randomDate(dateRange.start, dateRange.end);
+    const startDate = randomDate(dateRange.start, dateRange.end);
     const duration = this.randomDuration(type);
     const endDate = new Date(startDate.getTime() + duration);
 
-    const severity = this.weightedChoice(SEVERITIES, [0.4, 0.35, 0.2, 0.05]);
+    const severity = weightedChoiceFromArrays(
+      SEVERITIES,
+      [0.4, 0.35, 0.2, 0.05],
+    );
     const status = this.determineStatus(startDate, endDate, new Date());
 
     const affectsMultipleProducts = Math.random() < 0.3;
     const products = affectsMultipleProducts
-      ? this.randomSubset(PRODUCTS, 2, 4)
-      : [this.randomChoice(PRODUCTS)];
+      ? randomSubset(PRODUCTS, 2, 4)
+      : [randomChoice(PRODUCTS)];
 
     const affectsMultipleChannels = Math.random() < 0.4;
     const channels = affectsMultipleChannels
-      ? this.randomSubset(CHANNELS, 2, 4)
-      : [this.randomChoice(CHANNELS)];
+      ? randomSubset(CHANNELS, 2, 4)
+      : [randomChoice(CHANNELS)];
 
     const affectedRegions =
-      Math.random() < 0.6 ? this.randomSubset(REGIONS, 1, 3) : REGIONS; // Affects all regions
+      Math.random() < 0.6 ? randomSubset(REGIONS, 1, 3) : REGIONS; // Affects all regions
 
     return {
       id: uuidv4(),
@@ -199,7 +212,7 @@ export class EventGenerator {
       status,
       correlatedCommunications: Math.floor(Math.random() * 500) + 10,
       sentimentDuringEvent: this.generateSentimentImpact(type, severity),
-      source: this.randomChoice(['manual', 'automated', 'external'] as const),
+      source: randomChoice(['manual', 'automated', 'external'] as const),
       createdAt: startDate.toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -213,33 +226,6 @@ export class EventGenerator {
     dateRange: { start: Date; end: Date },
   ): SyntheticEvent[] {
     return Array.from({ length: count }, () => this.generate(dateRange));
-  }
-
-  private randomChoice<T>(array: readonly T[]): T {
-    return array[Math.floor(Math.random() * array.length)];
-  }
-
-  private weightedChoice<T>(items: readonly T[], weights: number[]): T {
-    const total = weights.reduce((a, b) => a + b, 0);
-    let random = Math.random() * total;
-    for (let i = 0; i < items.length; i++) {
-      random -= weights[i];
-      if (random <= 0) return items[i];
-    }
-    return items[items.length - 1];
-  }
-
-  private randomSubset<T>(array: T[], min: number, max: number): T[] {
-    const count = Math.floor(Math.random() * (max - min + 1)) + min;
-    const shuffled = [...array].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.min(count, array.length));
-  }
-
-  private randomDate(start: Date, end: Date): Date {
-    const diff = end.getTime() - start.getTime();
-    // Use square root to bias towards more recent dates
-    const biasedRandom = Math.pow(Math.random(), 0.5);
-    return new Date(start.getTime() + biasedRandom * diff);
   }
 
   private randomDuration(type: string): number {

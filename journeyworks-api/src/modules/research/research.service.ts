@@ -541,6 +541,27 @@ export class ResearchService {
           answer:
             'Not yet - NPS dropped 38 points during the outage (from -20 to -58). While services were restored, only 18% of Detractors have converted to Passives after 2 weeks. 35% filed compensation requests, indicating significant trust damage.',
         },
+        charts: [
+          {
+            type: 'bar',
+            title: 'Complaints by Channel',
+            data: [
+              { label: 'Email', value: 423, color: '#1494C6' },
+              { label: 'Social', value: 312, color: '#F14E73' },
+              { label: 'Phone', value: 287, color: '#ED500D' },
+              { label: 'Web Form', value: 156, color: '#4DA90F' },
+            ],
+          },
+          {
+            type: 'pie',
+            title: 'NPS Distribution',
+            data: [
+              { label: 'Detractors', value: 74, color: '#A8000B' },
+              { label: 'Passives', value: 18, color: '#FFBB33' },
+              { label: 'Promoters', value: 8, color: '#00847F' },
+            ],
+          },
+        ],
       },
       'fee-changes': {
         summary:

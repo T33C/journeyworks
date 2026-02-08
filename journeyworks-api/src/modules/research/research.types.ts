@@ -46,6 +46,8 @@ export interface ResearchResponse {
   confidence: number;
   /** Sources used */
   sources: ResearchSource[];
+  /** Charts for data visualization */
+  charts?: InsightChart[];
   /** Thought process (reasoning steps) */
   reasoning: ReasoningStep[];
   /** Actions taken */
@@ -302,6 +304,27 @@ export interface InsightEvidence {
 }
 
 /**
+ * Chart data point for research insight visualization
+ */
+export interface InsightChartDataPoint {
+  label: string;
+  value: number;
+  color?: string;
+  date?: string; // ISO date string for time-series
+}
+
+/**
+ * Chart configuration for insight visualization
+ */
+export interface InsightChart {
+  type: 'bar' | 'pie' | 'time-series';
+  title: string;
+  data: InsightChartDataPoint[];
+  xLabel?: string;
+  yLabel?: string;
+}
+
+/**
  * Context-aware research insight response
  */
 export interface ResearchInsight {
@@ -326,6 +349,8 @@ export interface ResearchInsight {
     question: string;
     answer: string;
   };
+  /** Optional charts for data visualization */
+  charts?: InsightChart[];
 }
 
 /**

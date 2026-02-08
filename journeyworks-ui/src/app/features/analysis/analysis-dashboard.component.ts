@@ -80,12 +80,14 @@ import { ResearchPanelComponent } from './research-panel/research-panel.componen
               (selectionChange)="onProductChange($event.value)"
             >
               <mat-option value="all">All Products</mat-option>
-              <mat-option value="cards">Cards</mat-option>
+              <mat-option value="current-accounts">Current Accounts</mat-option>
               <mat-option value="savings">Savings</mat-option>
-              <mat-option value="current-account">Current Account</mat-option>
+              <mat-option value="mortgages">Mortgages</mat-option>
+              <mat-option value="cards">Cards</mat-option>
               <mat-option value="loans">Loans</mat-option>
-              <mat-option value="mortgage">Mortgage</mat-option>
               <mat-option value="insurance">Insurance</mat-option>
+              <mat-option value="digital">Digital</mat-option>
+              <mat-option value="international">International</mat-option>
             </mat-select>
           </mat-form-field>
         </div>
@@ -183,7 +185,7 @@ import { ResearchPanelComponent } from './research-panel/research-panel.componen
   styles: [
     `
       .dashboard-container {
-        height: 100vh;
+        height: 100%;
         display: flex;
         flex-direction: column;
         background: #f5f5f5;

@@ -156,6 +156,10 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
       filter.push({ terms: { tags: filters.tags } });
     }
 
+    if (filters?.product) {
+      filter.push({ term: { 'aiClassification.product': filters.product } });
+    }
+
     if (filters?.startDate || filters?.endDate) {
       const dateRange: any = {};
       if (filters.startDate) dateRange.gte = filters.startDate;

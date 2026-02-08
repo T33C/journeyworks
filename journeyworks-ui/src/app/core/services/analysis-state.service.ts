@@ -12,12 +12,16 @@ import {
   providedIn: 'root',
 })
 export class AnalysisStateService {
-  // Filter state - default to match real ES data range
+  // Filter state - default to last 30 days from today
   private _filters = signal<FilterState>({
     dateRange: '30d',
     dateRangeObj: {
-      start: new Date('2026-01-01'),
-      end: new Date('2026-02-01'),
+      start: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d;
+      })(),
+      end: new Date(),
     },
     products: ['all'],
     channels: ['all'],
@@ -36,11 +40,15 @@ export class AnalysisStateService {
   // Selected time window for brush selection
   private _selectedTimeWindow = signal<{ start: Date; end: Date } | null>(null);
 
+  // Brush date range from the mini chart navigator — other charts use this for filtering
+  private _brushDateRange = signal<{ start: Date; end: Date } | null>(null);
+
   // Public signals
   filters = this._filters.asReadonly();
   context = this._context.asReadonly();
   highlightedIds = this._highlightedIds.asReadonly();
   selectedTimeWindow = this._selectedTimeWindow.asReadonly();
+  brushDateRange = this._brushDateRange.asReadonly();
 
   // Check if item is highlighted
   isHighlighted = computed(() => {
@@ -54,6 +62,8 @@ export class AnalysisStateService {
     // Clear context when filters change
     this._context.set({});
     this._highlightedIds.set(new Set());
+    // Clear brush range when dropdown filters change so charts use the new filter dates
+    this._brushDateRange.set(null);
   }
 
   // Set context from chart interaction
@@ -85,6 +95,16 @@ export class AnalysisStateService {
   setTimeWindow(start: Date, end: Date) {
     this._selectedTimeWindow.set({ start, end });
     this.updateContext({ timeWindow: { start, end } });
+  }
+
+  // Set brush date range (from mini chart navigator)
+  setBrushDateRange(start: Date, end: Date) {
+    this._brushDateRange.set({ start, end });
+  }
+
+  // Clear brush date range
+  clearBrushDateRange() {
+    this._brushDateRange.set(null);
   }
 
   // Clear time window
@@ -173,5 +193,6 @@ export class AnalysisStateService {
     this._context.set({});
     this._highlightedIds.set(new Set());
     this._selectedTimeWindow.set(null);
+    this._brushDateRange.set(null);
   }
 }

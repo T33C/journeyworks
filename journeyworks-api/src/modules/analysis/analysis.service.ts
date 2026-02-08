@@ -4,7 +4,7 @@
  * Provides LLM-powered analysis capabilities for customer communications.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   LlmClientService,
@@ -25,12 +25,16 @@ import {
   CommunicationPatternAnalysis,
   DataCard,
   Insight,
-  Visualization,
   TimelineEvent,
   SentimentBubble,
   JourneyStage,
   QuadrantItem,
 } from './analysis.types';
+import {
+  findProductByTerm,
+  PRODUCTS_BY_CATEGORY,
+  ProductCategory,
+} from '../synthetic/data/products';
 
 /**
  * Configuration constants for analysis operations.
@@ -87,23 +91,12 @@ const ANALYSIS_CONFIG = {
   },
 } as const;
 
-// Product name mapping: UI names -> ES names
-const PRODUCT_NAME_MAP: Record<string, string> = {
-  cards: 'credit-card',
-  'credit-card': 'credit-card',
-  savings: 'savings-account',
-  'savings-account': 'savings-account',
-  current: 'current-account',
-  'current-account': 'current-account',
-  loans: 'personal-loan',
-  'personal-loan': 'personal-loan',
-  payments: 'online-banking',
-  'online-banking': 'online-banking',
-  mortgage: 'mortgage',
-  insurance: 'insurance',
-  app: 'mobile-app',
-  'mobile-app': 'mobile-app',
-};
+/** Elasticsearch index names */
+const ES_INDICES = {
+  COMMUNICATIONS: 'journeyworks_communications',
+  SOCIAL: 'journeyworks_social',
+  NPS_SURVEYS: 'journeyworks_nps_surveys',
+} as const;
 
 @Injectable()
 export class AnalysisService {
@@ -122,11 +115,41 @@ export class AnalysisService {
   ) {}
 
   /**
-   * Normalize product name from UI to ES format
+   * Normalize product filter from UI to ES slug(s) using the shared product catalogue.
+   * Handles both category-level filters (e.g. 'mortgages', 'cards') and
+   * individual product slugs (e.g. 'tracker-mortgage').
+   * Returns an array of matching product slugs, or undefined for 'all'.
    */
-  private normalizeProduct(product: string | undefined): string | undefined {
+  private normalizeProducts(product: string | undefined): string[] | undefined {
     if (!product || product === 'all') return undefined;
-    return PRODUCT_NAME_MAP[product.toLowerCase()] || product;
+
+    // Check if it's a product catalogue category (e.g. 'mortgages', 'cards', 'savings')
+    const categoryProducts = PRODUCTS_BY_CATEGORY[product as ProductCategory];
+    if (categoryProducts && categoryProducts.length > 0) {
+      return categoryProducts.map((p) => p.slug);
+    }
+
+    // Try to find as individual product term (name, slug, or alias)
+    const found = findProductByTerm(product);
+    if (found) return [found.slug];
+
+    // Fallback: return as-is (might be a raw slug)
+    return [product];
+  }
+
+  /**
+   * Build an ES filter clause for product field(s).
+   * Uses 'term' for single product, 'terms' for multiple (category filter).
+   */
+  private buildProductFilter(
+    field: string,
+    products: string[] | undefined,
+  ): any | undefined {
+    if (!products || products.length === 0) return undefined;
+    if (products.length === 1) {
+      return { term: { [field]: products[0] } };
+    }
+    return { terms: { [field]: products } };
   }
 
   /**
@@ -230,13 +253,19 @@ export class AnalysisService {
       },
     );
 
-    const llmAnalysis = await this.llmClient.prompt(
-      prompt,
-      this.promptTemplate.getTemplate('system:analyst'),
-      { rateLimitKey: 'llm:analysis' },
-    );
-
-    const insights = this.extractInsights(llmAnalysis);
+    let insights: Insight[] = [];
+    try {
+      const llmAnalysis = await this.promptWithTimeout(
+        prompt,
+        this.promptTemplate.getTemplate('system:analyst'),
+        { rateLimitKey: 'llm:analysis' },
+      );
+      insights = this.extractInsights(llmAnalysis);
+    } catch (error) {
+      this.logger.warn(
+        `LLM sentiment analysis failed, returning metrics only: ${(error as Error).message}`,
+      );
+    }
 
     return {
       type: 'sentiment',
@@ -302,13 +331,19 @@ export class AnalysisService {
         .join('\n---\n'),
     });
 
-    const llmAnalysis = await this.llmClient.prompt(
-      prompt,
-      this.promptTemplate.getTemplate('system:analyst'),
-      { rateLimitKey: 'llm:analysis' },
-    );
-
-    const insights = this.extractInsights(llmAnalysis);
+    let insights: Insight[] = [];
+    try {
+      const llmAnalysis = await this.promptWithTimeout(
+        prompt,
+        this.promptTemplate.getTemplate('system:analyst'),
+        { rateLimitKey: 'llm:analysis' },
+      );
+      insights = this.extractInsights(llmAnalysis);
+    } catch (error) {
+      this.logger.warn(
+        `LLM topic analysis failed, returning metrics only: ${(error as Error).message}`,
+      );
+    }
 
     return {
       type: 'topics',
@@ -440,7 +475,9 @@ export class AnalysisService {
     request: AnalysisRequest,
   ): Promise<AnalysisResult> {
     if (!request.targetId) {
-      throw new Error('Customer ID required for customer health analysis');
+      throw new BadRequestException(
+        'Customer ID required for customer health analysis',
+      );
     }
 
     const communications = await this.communicationsService.getByCustomer(
@@ -604,7 +641,7 @@ export class AnalysisService {
       ),
     });
 
-    const llmAnalysis = await this.llmClient.prompt(
+    const llmAnalysis = await this.promptWithTimeout(
       prompt,
       this.promptTemplate.getTemplate('system:analyst'),
       { rateLimitKey: 'llm:analysis' },
@@ -614,7 +651,12 @@ export class AnalysisService {
     let riskAssessment: RiskAssessment;
     let parsedFromFallback = false;
     try {
-      const parsed = JSON.parse(llmAnalysis);
+      const braceStart = llmAnalysis.indexOf('{');
+      const jsonStr =
+        braceStart !== -1
+          ? this.extractJsonObject(llmAnalysis, braceStart)
+          : null;
+      const parsed = jsonStr ? JSON.parse(jsonStr) : JSON.parse(llmAnalysis);
       riskAssessment = {
         riskLevel: parsed.riskLevel || 'medium',
         riskScore: parsed.riskScore || 50,
@@ -820,13 +862,19 @@ export class AnalysisService {
       ),
     });
 
-    const llmAnalysis = await this.llmClient.prompt(
-      prompt,
-      this.promptTemplate.getTemplate('system:analyst'),
-      { rateLimitKey: 'llm:analysis' },
-    );
-
-    const insights = this.extractInsights(llmAnalysis);
+    let insights: Insight[] = [];
+    try {
+      const llmAnalysis = await this.promptWithTimeout(
+        prompt,
+        this.promptTemplate.getTemplate('system:analyst'),
+        { rateLimitKey: 'llm:analysis' },
+      );
+      insights = this.extractInsights(llmAnalysis);
+    } catch (error) {
+      this.logger.warn(
+        `LLM issue detection failed, returning metrics only: ${(error as Error).message}`,
+      );
+    }
 
     return {
       type: 'issue-detection',
@@ -852,7 +900,9 @@ export class AnalysisService {
     request: AnalysisRequest,
   ): Promise<AnalysisResult> {
     if (!request.targetId) {
-      throw new Error('Customer ID required for relationship summary');
+      throw new BadRequestException(
+        'Customer ID required for relationship summary',
+      );
     }
 
     const communications = await this.communicationsService.getByCustomer(
@@ -889,11 +939,19 @@ export class AnalysisService {
       },
     );
 
-    const summary = await this.llmClient.prompt(
-      prompt,
-      this.promptTemplate.getTemplate('system:analyst'),
-      { rateLimitKey: 'llm:analysis' },
-    );
+    let summary: string;
+    try {
+      summary = await this.promptWithTimeout(
+        prompt,
+        this.promptTemplate.getTemplate('system:analyst'),
+        { rateLimitKey: 'llm:analysis' },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `LLM relationship summary failed: ${(error as Error).message}`,
+      );
+      summary = `Customer "${customerName}" has ${comms.length} communications on record.`;
+    }
 
     return {
       type: 'relationship-summary',
@@ -1001,6 +1059,7 @@ export class AnalysisService {
       customerId: request.targetId,
       startDate: request.timeRange?.from,
       endDate: request.timeRange?.to,
+      product: request.product,
       from: 0,
       size: limit,
     });
@@ -1028,7 +1087,13 @@ export class AnalysisService {
    */
   private extractInsights(llmResponse: string): Insight[] {
     try {
-      const parsed = JSON.parse(llmResponse);
+      // Use brace-matching to extract JSON from potentially prose-wrapped LLM output
+      const braceStart = llmResponse.indexOf('{');
+      const jsonStr =
+        braceStart !== -1
+          ? this.extractJsonObject(llmResponse, braceStart)
+          : null;
+      const parsed = jsonStr ? JSON.parse(jsonStr) : JSON.parse(llmResponse);
       if (Array.isArray(parsed.insights)) {
         return parsed.insights.map((i: any) => ({
           category: i.category || 'General',
@@ -1155,7 +1220,7 @@ export class AnalysisService {
     product?: string;
   }): Promise<TimelineEvent[]> {
     try {
-      const normalizedProduct = this.normalizeProduct(filter.product);
+      const normalizedProducts = this.normalizeProducts(filter.product);
 
       // Query real events from Elasticsearch
       const result = await this.eventsRepository.searchEvents(
@@ -1163,13 +1228,13 @@ export class AnalysisService {
         {
           startDateFrom: filter.startDate?.toISOString(),
           startDateTo: filter.endDate?.toISOString(),
-          product: normalizedProduct,
+          product: normalizedProducts?.[0], // Events use single product; pass first for partial match
         },
         { size: 100, sort: [{ startDate: 'asc' }] },
       );
 
       this.logger.debug(
-        `Found ${result.hits.length} events from ES (product: ${normalizedProduct || 'all'})`,
+        `Found ${result.hits.length} events from ES (product: ${normalizedProducts?.join(',') || 'all'})`,
       );
 
       // Map ES event types to TimelineEvent types
@@ -1217,7 +1282,7 @@ export class AnalysisService {
         return [];
       }
 
-      const normalizedProduct = this.normalizeProduct(filter.product);
+      const normalizedProducts = this.normalizeProducts(filter.product);
       const startDate = filter.startDate || new Date('2024-01-01');
       const endDate = filter.endDate || new Date();
 
@@ -1233,93 +1298,19 @@ export class AnalysisService {
         },
       ];
 
-      if (normalizedProduct) {
-        filters.push({
-          term: { 'aiClassification.product.keyword': normalizedProduct },
-        });
+      const productFilter = this.buildProductFilter(
+        'aiClassification.product.keyword',
+        normalizedProducts,
+      );
+      if (productFilter) {
+        filters.push(productFilter);
       }
 
       if (filter.channel) {
         filters.push({ term: { 'channel.keyword': filter.channel } });
       }
 
-      // Aggregate communications by day
-      const response = await client.search({
-        index: 'journeyworks_communications',
-        body: {
-          size: 0,
-          query: { bool: { filter: filters } },
-          aggs: {
-            by_day: {
-              date_histogram: {
-                field: 'timestamp',
-                calendar_interval: 'day',
-              },
-              aggs: {
-                avg_sentiment: { avg: { field: 'sentiment.score' } },
-                top_categories: {
-                  terms: {
-                    field: 'aiClassification.category.keyword',
-                    size: 5,
-                  },
-                },
-                top_product: {
-                  terms: { field: 'aiClassification.product.keyword', size: 1 },
-                },
-                channels: { terms: { field: 'channel.keyword', size: 3 } },
-              },
-            },
-          },
-        },
-      });
-
-      const buckets = (response.aggregations as any)?.by_day?.buckets || [];
-      this.logger.debug(`Found ${buckets.length} daily buckets from ES`);
-
-      // Also get social sentiment for the same period
-      const socialResponse = await client.search({
-        index: 'journeyworks_social',
-        body: {
-          size: 0,
-          query: {
-            bool: {
-              filter: [
-                {
-                  range: {
-                    timestamp: {
-                      gte: startDate.toISOString(),
-                      lte: endDate.toISOString(),
-                    },
-                  },
-                },
-              ],
-            },
-          },
-          aggs: {
-            by_day: {
-              date_histogram: {
-                field: 'timestamp',
-                calendar_interval: 'day',
-              },
-              aggs: {
-                avg_sentiment: { avg: { field: 'sentiment.score' } },
-              },
-            },
-          },
-        },
-      });
-
-      // Create a map of social sentiment by date
-      const socialBuckets =
-        (socialResponse.aggregations as any)?.by_day?.buckets || [];
-      const socialByDate: Record<string, number> = {};
-      for (const bucket of socialBuckets) {
-        const dateKey = bucket.key_as_string.split('T')[0];
-        socialByDate[dateKey] = bucket.avg_sentiment?.value ?? 0;
-      }
-
-      // Get survey counts by day AND product
-      // This ensures each bubble's surveyCount matches its product
+      // Build survey filters before queries so we can fire all in parallel
       const surveyFilters: any[] = [
         {
           range: {
@@ -1332,33 +1323,117 @@ export class AnalysisService {
         { term: { responded: true } },
       ];
 
-      if (normalizedProduct) {
-        surveyFilters.push({ term: { product: normalizedProduct } });
+      const surveyProductFilter = this.buildProductFilter(
+        'product',
+        normalizedProducts,
+      );
+      if (surveyProductFilter) {
+        surveyFilters.push(surveyProductFilter);
       }
 
-      const surveyResponse = await client.search({
-        index: 'journeyworks_nps_surveys',
-        body: {
-          size: 0,
-          query: { bool: { filter: surveyFilters } },
-          aggs: {
-            by_day: {
-              date_histogram: {
-                field: 'surveyDate',
-                calendar_interval: 'day',
+      // Fire all 3 ES queries in parallel
+      const [response, socialResponse, surveyResponse] = await Promise.all([
+        // Communications aggregation by day
+        client.search({
+          index: ES_INDICES.COMMUNICATIONS,
+          body: {
+            size: 0,
+            query: { bool: { filter: filters } },
+            aggs: {
+              by_day: {
+                date_histogram: {
+                  field: 'timestamp',
+                  calendar_interval: 'day',
+                },
+                aggs: {
+                  avg_sentiment: { avg: { field: 'sentiment.score' } },
+                  top_categories: {
+                    terms: {
+                      field: 'aiClassification.category.keyword',
+                      size: 5,
+                    },
+                  },
+                  top_product: {
+                    terms: {
+                      field: 'aiClassification.product.keyword',
+                      size: 1,
+                    },
+                  },
+                  channels: { terms: { field: 'channel.keyword', size: 3 } },
+                },
               },
-              aggs: {
-                by_product: {
-                  terms: {
-                    field: 'product',
-                    size: 20,
+            },
+          },
+        }),
+        // Social sentiment by day
+        client.search({
+          index: ES_INDICES.SOCIAL,
+          body: {
+            size: 0,
+            query: {
+              bool: {
+                filter: [
+                  {
+                    range: {
+                      timestamp: {
+                        gte: startDate.toISOString(),
+                        lte: endDate.toISOString(),
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            aggs: {
+              by_day: {
+                date_histogram: {
+                  field: 'timestamp',
+                  calendar_interval: 'day',
+                },
+                aggs: {
+                  avg_sentiment: { avg: { field: 'sentiment.score' } },
+                },
+              },
+            },
+          },
+        }),
+        // Survey counts by day and product
+        client.search({
+          index: ES_INDICES.NPS_SURVEYS,
+          body: {
+            size: 0,
+            query: { bool: { filter: surveyFilters } },
+            aggs: {
+              by_day: {
+                date_histogram: {
+                  field: 'surveyDate',
+                  calendar_interval: 'day',
+                },
+                aggs: {
+                  by_product: {
+                    terms: {
+                      field: 'product',
+                      size: 20,
+                    },
                   },
                 },
               },
             },
           },
-        },
-      });
+        }),
+      ]);
+
+      const buckets = (response.aggregations as any)?.by_day?.buckets || [];
+      this.logger.debug(`Found ${buckets.length} daily buckets from ES`);
+
+      // Create a map of social sentiment by date
+      const socialBuckets =
+        (socialResponse.aggregations as any)?.by_day?.buckets || [];
+      const socialByDate: Record<string, number> = {};
+      for (const bucket of socialBuckets) {
+        const dateKey = bucket.key_as_string.split('T')[0];
+        socialByDate[dateKey] = bucket.avg_sentiment?.value ?? 0;
+      }
 
       // Build a map of date+product -> surveyCount
       const surveyBuckets =
@@ -1384,18 +1459,22 @@ export class AnalysisService {
         const themes =
           bucket.top_categories?.buckets?.map((b: any) => b.key) || [];
         const product =
-          bucket.top_product?.buckets?.[0]?.key || normalizedProduct || 'all';
+          bucket.top_product?.buckets?.[0]?.key ||
+          (normalizedProducts?.length === 1
+            ? normalizedProducts[0]
+            : undefined) ||
+          'all';
         const channel =
           bucket.channels?.buckets?.[0]?.key || filter.channel || 'mixed';
         const socialSentiment = socialByDate[dateKey] ?? sentiment;
 
-        // Get survey count for this specific date+product combination
+        // Get survey count: try product-specific first, then daily total
         const surveyCount =
           surveysByDateProduct[`${dateKey}:${product}`] ??
-          (product === 'all' ? surveysByDateProduct[`${dateKey}:all`] : 0) ??
+          surveysByDateProduct[`${dateKey}:all`] ??
           0;
 
-        const npsData = this.sentimentToNPS(sentiment);
+        const npsData = this.sentimentToNPS(sentiment, dateKey);
 
         return {
           id: `bubble-${index}`,
@@ -1427,12 +1506,14 @@ export class AnalysisService {
   }): Promise<JourneyStage[]> {
     try {
       // Use the surveys service to get real aggregated data
-      const normalizedProduct = this.normalizeProduct(filter.product);
+      // Use normalizeProducts (same as bubbles) so the journey chart scope
+      // matches the survey counts shown on the timeline bubbles.
+      const normalizedProducts = this.normalizeProducts(filter.product);
 
       const surveyFilters = {
         startDate: filter.startDate,
         endDate: filter.endDate,
-        product: normalizedProduct,
+        products: normalizedProducts,
       };
 
       // Get journey stage aggregations from actual survey data
@@ -1517,6 +1598,7 @@ export class AnalysisService {
     startDate?: Date;
     endDate?: Date;
     product?: string;
+    channel?: string;
   }): Promise<QuadrantItem[]> {
     try {
       const client = this.esClient.getClient();
@@ -1525,7 +1607,7 @@ export class AnalysisService {
         return [];
       }
 
-      const normalizedProduct = this.normalizeProduct(filter.product);
+      const normalizedProducts = this.normalizeProducts(filter.product);
 
       // Build filters
       const filters: any[] = [];
@@ -1535,15 +1617,22 @@ export class AnalysisService {
         if (filter.endDate) range.lte = filter.endDate.toISOString();
         filters.push({ range: { timestamp: range } });
       }
-      if (normalizedProduct) {
-        filters.push({
-          term: { 'aiClassification.product.keyword': normalizedProduct },
-        });
+
+      const productFilter = this.buildProductFilter(
+        'aiClassification.product.keyword',
+        normalizedProducts,
+      );
+      if (productFilter) {
+        filters.push(productFilter);
+      }
+
+      if (filter.channel) {
+        filters.push({ term: { 'channel.keyword': filter.channel } });
       }
 
       // Aggregate by category
       const response = await client.search({
-        index: 'journeyworks_communications',
+        index: ES_INDICES.COMMUNICATIONS,
         body: {
           size: 0,
           query: filters.length
@@ -1591,7 +1680,11 @@ export class AnalysisService {
         const sentiment = bucket.avg_sentiment?.value ?? 0;
         const volume = bucket.doc_count;
         const product =
-          bucket.top_product?.buckets?.[0]?.key || normalizedProduct || 'all';
+          bucket.top_product?.buckets?.[0]?.key ||
+          (normalizedProducts?.length === 1
+            ? normalizedProducts[0]
+            : undefined) ||
+          'all';
 
         // Determine quadrant based on sentiment and volume
         let quadrant: 'critical' | 'watch' | 'strength' | 'noise';
@@ -1601,7 +1694,7 @@ export class AnalysisService {
           quadrant = volume > avgVolume * 0.5 ? 'strength' : 'noise';
         }
 
-        const npsData = this.sentimentToNPS(sentiment);
+        const npsData = this.sentimentToNPS(sentiment, category);
 
         return {
           id: `q-${index + 1}`,
@@ -1633,17 +1726,18 @@ export class AnalysisService {
   }
 
   /**
-   * Convert sentiment to NPS breakdown.
+   * Convert sentiment to NPS breakdown using deterministic hash-based variation.
    *
-   * @warning DEMO/MOCK DATA: This function uses random variation to simulate
-   * realistic NPS distribution for demonstration purposes. In production,
-   * this should be replaced with actual NPS survey data or a deterministic
-   * algorithm based on real customer feedback.
+   * @warning DEMO/MOCK DATA: This simulates realistic NPS distribution for
+   * demonstration purposes. In production, replace with actual NPS survey data.
    *
-   * The random component adds variation to make demo charts look realistic,
-   * but means repeated calls with the same sentiment may return different values.
+   * Uses a simple hash of the seed key for stable-per-key variation so
+   * identical API calls return consistent results (cacheable, testable).
    */
-  private sentimentToNPS(sentiment: number): {
+  private sentimentToNPS(
+    sentiment: number,
+    seedKey: string,
+  ): {
     npsScore: number;
     promoterPct: number;
     passivePct: number;
@@ -1651,44 +1745,28 @@ export class AnalysisService {
     /** Indicates this is simulated data, not actual NPS survey results */
     isSimulated: true;
   } {
-    // Base percentages vary by sentiment tier with random demo variation
+    // Simple string hash → 0..1 deterministic "random" based on seed
+    const hash = this.hashSeed(seedKey);
+    const r1 = ((hash * 9301 + 49297) % 233280) / 233280; // 0..1
+    const r2 = ((hash * 7919 + 10007) % 233280) / 233280; // 0..1
+
+    let detractorPct: number;
+    let passivePct: number;
+    let promoterPct: number;
+
     if (sentiment < -0.5) {
-      const detractorPct = 70 + Math.floor(Math.random() * 15);
-      const passivePct = 15 + Math.floor(Math.random() * 10);
-      const promoterPct = 100 - detractorPct - passivePct;
-      return {
-        npsScore: promoterPct - detractorPct,
-        promoterPct,
-        passivePct,
-        detractorPct,
-        isSimulated: true,
-      };
+      detractorPct = 70 + Math.floor(r1 * 15);
+      passivePct = 15 + Math.floor(r2 * 10);
     } else if (sentiment < -0.2) {
-      const detractorPct = 50 + Math.floor(Math.random() * 15);
-      const passivePct = 25 + Math.floor(Math.random() * 10);
-      const promoterPct = 100 - detractorPct - passivePct;
-      return {
-        npsScore: promoterPct - detractorPct,
-        promoterPct,
-        passivePct,
-        detractorPct,
-        isSimulated: true,
-      };
+      detractorPct = 50 + Math.floor(r1 * 15);
+      passivePct = 25 + Math.floor(r2 * 10);
     } else if (sentiment < 0.2) {
-      const detractorPct = 30 + Math.floor(Math.random() * 10);
-      const passivePct = 35 + Math.floor(Math.random() * 10);
-      const promoterPct = 100 - detractorPct - passivePct;
-      return {
-        npsScore: promoterPct - detractorPct,
-        promoterPct,
-        passivePct,
-        detractorPct,
-        isSimulated: true,
-      };
+      detractorPct = 30 + Math.floor(r1 * 10);
+      passivePct = 35 + Math.floor(r2 * 10);
     } else if (sentiment < 0.5) {
-      const promoterPct = 40 + Math.floor(Math.random() * 15);
-      const passivePct = 30 + Math.floor(Math.random() * 10);
-      const detractorPct = 100 - promoterPct - passivePct;
+      promoterPct = 40 + Math.floor(r1 * 15);
+      passivePct = 30 + Math.floor(r2 * 10);
+      detractorPct = 100 - promoterPct - passivePct;
       return {
         npsScore: promoterPct - detractorPct,
         promoterPct,
@@ -1697,9 +1775,9 @@ export class AnalysisService {
         isSimulated: true,
       };
     } else {
-      const promoterPct = 55 + Math.floor(Math.random() * 20);
-      const passivePct = 25 + Math.floor(Math.random() * 10);
-      const detractorPct = 100 - promoterPct - passivePct;
+      promoterPct = 55 + Math.floor(r1 * 20);
+      passivePct = 25 + Math.floor(r2 * 10);
+      detractorPct = 100 - promoterPct - passivePct;
       return {
         npsScore: promoterPct - detractorPct,
         promoterPct,
@@ -1708,112 +1786,64 @@ export class AnalysisService {
         isSimulated: true,
       };
     }
+
+    promoterPct = 100 - detractorPct - passivePct;
+    return {
+      npsScore: promoterPct - detractorPct,
+      promoterPct,
+      passivePct,
+      detractorPct,
+      isSimulated: true,
+    };
   }
 
   /**
-   * Generate realistic sentiment progression for journey stages.
-   * Creates varied outcomes based on product, time period, and data context.
-   * Some journeys show improvement, others show decline or stagnation.
+   * Simple deterministic hash of a string to a number.
+   * Used for stable pseudo-random variation in demo data.
    */
-  private getSentimentProgression(
-    product: string | undefined,
-    avgSentiment: number,
-    filter: { startDate?: Date; endDate?: Date; product?: string },
-  ): number[] {
-    // Define different journey outcome patterns
-    const patterns = {
-      // Good outcomes: sentiment improves through journey
-      improving: [-0.45, -0.35, -0.15, 0.05, 0.25],
-      gradualImprove: [-0.4, -0.32, -0.18, -0.05, 0.12],
-
-      // Poor outcomes: sentiment worsens or stays negative
-      declining: [-0.25, -0.35, -0.48, -0.55, -0.42],
-      frustration: [-0.3, -0.45, -0.55, -0.38, -0.25],
-      stagnant: [-0.42, -0.45, -0.4, -0.38, -0.35],
-      lateRecovery: [-0.5, -0.58, -0.52, -0.35, -0.15],
-
-      // Mixed outcomes: some improvement but still negative
-      partialRecovery: [-0.55, -0.48, -0.35, -0.22, -0.08],
-      volatileNegative: [-0.35, -0.52, -0.28, -0.45, -0.18],
-    };
-
-    // Product-specific patterns (some products have systemic issues)
-    const productPatterns: Record<string, keyof typeof patterns> = {
-      // Problem products - these show poor outcomes to highlight issues
-      mortgage: 'declining', // Complex process, frustrates customers
-      loans: 'frustration', // Long investigation, poor resolution
-      insurance: 'stagnant', // Slow, bureaucratic
-
-      // Better performing products
-      cards: 'improving', // Quick resolution typical
-      savings: 'gradualImprove', // Generally positive
-      'current-account': 'partialRecovery', // Mixed results
-    };
-
-    // Use date-based variation for demo variety
-    // This ensures different time periods show different outcomes
-    let dateHash = 0;
-    if (filter.startDate) {
-      dateHash = filter.startDate.getDate() + filter.startDate.getMonth() * 31;
+  private hashSeed(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash + char) | 0; // Convert to 32bit integer
     }
+    return Math.abs(hash);
+  }
 
-    // If specific product, use its pattern (with some variation)
-    if (product && productPatterns[product]) {
-      const basePattern = productPatterns[product];
-      // Add some date-based variation - 30% chance of different pattern
-      if (dateHash % 10 < 3) {
-        // Randomly pick a different pattern for variety
-        const altPatterns: (keyof typeof patterns)[] = [
-          'lateRecovery',
-          'volatileNegative',
-          'partialRecovery',
-        ];
-        const altPattern = altPatterns[dateHash % altPatterns.length];
-        return this.addVariation(patterns[altPattern], avgSentiment);
+  /**
+   * Extract a JSON object from a string by matching braces,
+   * avoiding the greedy-regex problem with multi-object LLM output.
+   */
+  private extractJsonObject(text: string, startIndex: number): string | null {
+    let depth = 0;
+    for (let i = startIndex; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') depth--;
+      if (depth === 0) {
+        return text.substring(startIndex, i + 1);
       }
-      return this.addVariation(patterns[basePattern], avgSentiment);
     }
-
-    // No product filter - use overall sentiment and date to pick pattern
-    // Bias toward negative outcomes for realism (40% good, 60% problematic)
-    let selectedPattern: keyof typeof patterns;
-    if (avgSentiment > 0.1) {
-      // Positive average sentiment - more likely good outcome
-      selectedPattern = dateHash % 3 === 0 ? 'improving' : 'gradualImprove';
-    } else if (avgSentiment < -0.3) {
-      // Very negative sentiment - likely poor outcome
-      const negativePatterns: (keyof typeof patterns)[] = [
-        'declining',
-        'frustration',
-        'stagnant',
-      ];
-      selectedPattern = negativePatterns[dateHash % negativePatterns.length];
-    } else {
-      // Mixed sentiment - varied outcomes
-      const mixedPatterns: (keyof typeof patterns)[] = [
-        'partialRecovery',
-        'lateRecovery',
-        'volatileNegative',
-        'stagnant',
-        'gradualImprove',
-      ];
-      selectedPattern = mixedPatterns[dateHash % mixedPatterns.length];
-    }
-
-    return this.addVariation(patterns[selectedPattern], avgSentiment);
+    return null;
   }
 
   /**
-   * Add small random variation to sentiment values for realism
+   * Wrap an LLM call with a timeout to prevent indefinite hangs.
    */
-  private addVariation(basePattern: number[], avgSentiment: number): number[] {
-    return basePattern.map((value) => {
-      // Add small random variation (+/- 0.05)
-      const variation = (Math.random() - 0.5) * 0.1;
-      // Slightly bias toward actual average sentiment
-      const bias = (avgSentiment - value) * 0.15;
-      // Clamp to valid sentiment range
-      return Math.max(-1, Math.min(1, value + variation + bias));
-    });
+  private async promptWithTimeout(
+    prompt: string,
+    systemPrompt?: string,
+    options?: { rateLimitKey?: string },
+  ): Promise<string> {
+    const LLM_TIMEOUT_MS = 60_000;
+    const result = await Promise.race([
+      this.llmClient.prompt(prompt, systemPrompt, options),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('LLM call timed out after 60s')),
+          LLM_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
   }
 }

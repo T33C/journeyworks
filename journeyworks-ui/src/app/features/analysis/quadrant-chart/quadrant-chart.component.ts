@@ -4,6 +4,7 @@ import {
   AfterViewInit,
   inject,
   signal,
+  computed,
   effect,
   ElementRef,
   ViewChild,
@@ -34,7 +35,7 @@ import {
           <mat-icon>grid_view</mat-icon>
           <h3>Volume vs Sentiment</h3>
         </div>
-        <span class="chart-subtitle">Click quadrant to filter</span>
+        <span class="chart-subtitle">{{ contextDescription() }}</span>
       </div>
       <div #chartContainer class="chart-area"></div>
     </div>
@@ -61,7 +62,7 @@ import {
         gap: 8px;
 
         mat-icon {
-          color: var(--brand-primary, #5c6bc0);
+          color: var(--brand-secondary, #305a85);
           font-size: 20px;
           width: 20px;
           height: 20px;
@@ -70,13 +71,13 @@ import {
           margin: 0;
           font-size: 14px;
           font-weight: 600;
-          color: var(--text-primary, #333);
+          color: var(--text-primary, #333333);
         }
       }
 
       .chart-subtitle {
         font-size: 11px;
-        color: var(--text-muted, #999);
+        color: var(--text-muted, #9b9b9b);
       }
 
       .chart-area {
@@ -94,11 +95,45 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
 
   items = signal<QuadrantItem[]>([]);
 
+  contextDescription = computed(() => {
+    const f = this.stateService.filters();
+    const parts: string[] = [];
+    if (f.channel && f.channel !== 'all') {
+      parts.push(f.channel.charAt(0).toUpperCase() + f.channel.slice(1));
+    }
+    if (f.product && f.product !== 'all') {
+      parts.push(
+        f.product
+          .split('-')
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' '),
+      );
+    }
+    if (f.dateRange && f.dateRange !== '30d') {
+      const labels: Record<string, string> = {
+        '7d': '7 days',
+        '30d': '30 days',
+        '90d': '90 days',
+        ytd: 'YTD',
+        all: 'All time',
+      };
+      parts.push(labels[f.dateRange] || f.dateRange);
+    }
+    return parts.length > 0
+      ? `${parts.join(' · ')} · Click quadrant to filter`
+      : 'Click quadrant to filter';
+  });
+
   constructor() {
-    // Re-fetch data when filters change
+    // Re-fetch data when filters or brush date range change
     effect(() => {
       const filters = this.stateService.filters();
-      this.loadData(filters);
+      const brushRange = this.stateService.brushDateRange();
+      // If the mini chart brush is active, override dateRangeObj with the brush range
+      const effectiveFilters = brushRange
+        ? { ...filters, dateRangeObj: brushRange }
+        : filters;
+      this.loadData(effectiveFilters);
     });
   }
 
@@ -136,9 +171,17 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Scales
-    const x = d3.scaleLinear().domain([-1, 0.6]).range([0, width]);
-    const y = d3.scaleLinear().domain([0, 300]).range([height, 0]);
+    // Scales — dynamic based on actual data
+    const sentimentExtent = d3.extent(items, (d) => d.sentiment) as [
+      number,
+      number,
+    ];
+    const volumeExtent = d3.extent(items, (d) => d.volume) as [number, number];
+    const xMin = Math.min(sentimentExtent[0] - 0.15, -1);
+    const xMax = Math.max(sentimentExtent[1] + 0.15, 0.6);
+    const yMax = Math.max((volumeExtent[1] || 300) * 1.2, 50);
+    const x = d3.scaleLinear().domain([xMin, xMax]).range([0, width]);
+    const y = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
 
     // Quadrant layout:
     // X-axis: left = negative sentiment, right = positive sentiment
@@ -149,13 +192,18 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
     // Bottom-left: Watch (low volume, negative sentiment)
     // Bottom-right: Noise (low volume, positive sentiment)
 
+    // Dynamic midline: use average volume as the volume threshold
+    const avgVolume =
+      items.reduce((sum, d) => sum + d.volume, 0) / items.length;
+    const volumeMidline = Math.max(avgVolume, yMax * 0.4);
+
     const correctedQuadrants = [
       // Top-left: Critical (negative sentiment, high volume)
       {
         x: 0,
         y: 0,
         w: x(0),
-        h: y(150),
+        h: y(volumeMidline),
         label: 'Critical',
         color: THEME.quadrant.critical.bg,
         textColor: THEME.quadrant.critical.fill,
@@ -166,7 +214,7 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
         x: x(0),
         y: 0,
         w: width - x(0),
-        h: y(150),
+        h: y(volumeMidline),
         label: 'Strength',
         color: THEME.quadrant.strength.bg,
         textColor: THEME.quadrant.strength.fill,
@@ -175,9 +223,9 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
       // Bottom-left: Watch (negative sentiment, low volume)
       {
         x: 0,
-        y: y(150),
+        y: y(volumeMidline),
         w: x(0),
-        h: height - y(150),
+        h: height - y(volumeMidline),
         label: 'Watch',
         color: THEME.quadrant.watch.bg,
         textColor: THEME.quadrant.watch.fill,
@@ -186,9 +234,9 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
       // Bottom-right: Noise (positive sentiment, low volume)
       {
         x: x(0),
-        y: y(150),
+        y: y(volumeMidline),
         w: width - x(0),
-        h: height - y(150),
+        h: height - y(volumeMidline),
         label: 'Noise',
         color: THEME.quadrant.noise.bg,
         textColor: THEME.quadrant.noise.fill,
@@ -236,8 +284,8 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
       .append('line')
       .attr('x1', 0)
       .attr('x2', width)
-      .attr('y1', y(150))
-      .attr('y2', y(150))
+      .attr('y1', y(volumeMidline))
+      .attr('y2', y(volumeMidline))
       .attr('stroke', THEME.chart.grid)
       .attr('stroke-width', 1);
 
@@ -310,17 +358,19 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
 
   private showTooltip(event: MouseEvent, item: QuadrantItem) {
     const quadrantFillColor = getQuadrantColor(item.quadrant);
-    d3.select('body')
+    const tooltip = d3
+      .select('body')
       .append('div')
       .attr('class', 'd3-tooltip')
       .style('position', 'absolute')
       .style('background', 'white')
-      .style('border', '1px solid #ddd')
+      .style('border', `1px solid ${THEME.grey[3]}`)
       .style('border-radius', '8px')
       .style('padding', '10px')
       .style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
       .style('font-size', '12px')
       .style('z-index', '1000')
+      .style('pointer-events', 'none')
       .html(
         `
         <strong>${item.label}</strong><br/>
@@ -333,13 +383,32 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
           <span style="color: ${THEME.sentiment.mixed};">Passives: ${item.passivePct}%</span> |
           <span style="color: ${THEME.sentiment.negative};">Detractors: ${item.detractorPct}%</span>
         </div>
-        <div style="margin-top: 4px; border-top: 1px solid #eee; padding-top: 4px;">
+        <div style="margin-top: 4px; border-top: 1px solid ${THEME.grey[2]}; padding-top: 4px;">
           Volume: <strong>${item.volume}</strong> surveys
         </div>
       `,
-      )
-      .style('left', event.pageX + 12 + 'px')
-      .style('top', event.pageY - 10 + 'px');
+      );
+
+    // Position with viewport bounds checking
+    const node = tooltip.node() as HTMLElement;
+    const tooltipHeight = node.offsetHeight;
+    const tooltipWidth = node.offsetWidth;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    let left = event.pageX + 12;
+    let top = event.pageY - 10;
+
+    // Flip above cursor if it would overflow the bottom
+    if (event.clientY + tooltipHeight + 12 > viewportHeight) {
+      top = event.pageY - tooltipHeight - 12;
+    }
+    // Prevent overflow on the right
+    if (left + tooltipWidth > viewportWidth) {
+      left = event.pageX - tooltipWidth - 12;
+    }
+
+    tooltip.style('left', left + 'px').style('top', top + 'px');
   }
 
   private hideTooltip() {

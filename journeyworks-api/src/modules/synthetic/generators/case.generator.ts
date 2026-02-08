@@ -1,7 +1,7 @@
 /**
  * Case Generator
  *
- * Generates synthetic case/complaint data for investment banking.
+ * Generates synthetic case/complaint data for retail banking.
  */
 
 import { Injectable } from '@nestjs/common';
@@ -11,6 +11,8 @@ import {
   SyntheticCustomer,
   SyntheticCommunication,
 } from '../synthetic-data.types';
+import { randomChoice, weightedChoice, randomDate } from '../utils/random.util';
+import { PRODUCT_NAMES, PRODUCT_SLUGS } from '../data/products';
 import {
   CASE_CATEGORIES_FROM_CSV,
   CASE_TITLES_BY_AREA,
@@ -70,7 +72,7 @@ export class CaseGenerator {
     const createdAt =
       commTimestamps.length > 0
         ? new Date(commTimestamps[0])
-        : this.randomDate(dateRange.start, dateRange.end);
+        : randomDate(dateRange.start, dateRange.end);
 
     const slaHours = this.getSlaHours(customer.tier);
     const slaDeadline = new Date(
@@ -78,7 +80,7 @@ export class CaseGenerator {
     );
 
     // Determine status
-    const status = this.weightedChoice([
+    const status = weightedChoice([
       ['open', 0.15],
       ['in_progress', 0.25],
       ['pending', 0.15],
@@ -87,14 +89,15 @@ export class CaseGenerator {
     ]) as SyntheticCase['status'];
 
     const isResolved = status === 'resolved' || status === 'closed';
-    // Use latest communication + some days as resolution time
+    // Resolution time: at least 1 hour after creation, up to 5 days after last communication
     const latestCommTime =
       commTimestamps.length > 0
         ? commTimestamps[commTimestamps.length - 1]
         : createdAt.getTime();
     const resolvedAt = isResolved
       ? new Date(
-          latestCommTime + Math.random() * 5 * 24 * 60 * 60 * 1000, // 0-5 days after last communication
+          Math.max(createdAt.getTime() + 60 * 60 * 1000, latestCommTime) +
+            Math.random() * 5 * 24 * 60 * 60 * 1000, // 0-5 days after latest of (creation+1h, last comm)
         )
       : undefined;
 
@@ -127,7 +130,7 @@ export class CaseGenerator {
       product,
       status,
       priority,
-      assignedTo: this.randomChoice(ASSIGNEES),
+      assignedTo: randomChoice(ASSIGNEES),
       createdAt: createdAt.toISOString(),
       updatedAt: (resolvedAt || createdAt).toISOString(),
       resolvedAt: resolvedAt?.toISOString(),
@@ -135,7 +138,7 @@ export class CaseGenerator {
       slaBreached,
       communicationIds: communications.map((c) => c.id),
       tags: this.generateTags(category, priority, customer.tier),
-      resolution: isResolved ? this.randomChoice(RESOLUTIONS) : undefined,
+      resolution: isResolved ? randomChoice(RESOLUTIONS) : undefined,
     };
   }
 
@@ -210,17 +213,9 @@ export class CaseGenerator {
       }
     }
 
-    // Fallback to a random product if none found in communications
+    // Fallback to a random product slug if none found in communications
     if (!mostCommonProduct) {
-      const defaultProducts = [
-        'mortgage',
-        'personal-loan',
-        'insurance',
-        'current-account',
-        'savings-account',
-        'credit-card',
-      ];
-      mostCommonProduct = this.randomChoice(defaultProducts);
+      mostCommonProduct = randomChoice(PRODUCT_SLUGS);
     }
 
     return mostCommonProduct;
@@ -289,25 +284,22 @@ export class CaseGenerator {
    * Generate case title
    */
   private generateTitle(category: string, customer: SyntheticCustomer): string {
-    const titles = CASE_TITLES_BY_AREA[category as AreaOfIssue] ||
+    const titles =
+      CASE_TITLES_BY_AREA[category as AreaOfIssue] ||
       CASE_TITLES_BY_AREA['Account Opening Process'];
-    let title = this.randomChoice(titles);
+    let title = randomChoice(titles);
 
     // Fill placeholders
     title = title
       .replace('{days}', String(Math.floor(2 + Math.random() * 10)))
+      .replace('{product}', randomChoice(PRODUCT_NAMES))
+      .replace('{amount}', `£${Math.floor(50 + Math.random() * 500)}`)
       .replace(
-        '{product}',
-        this.randomChoice([
-          'current account',
-          'savings account',
-          'credit card',
-          'mortgage',
-          'personal loan',
-        ]),
-      )
-      .replace('{amount}', String(Math.floor(50 + Math.random() * 500)))
-      .replace('{date}', this.formatDate(new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000)));
+        '{date}',
+        this.formatDate(
+          new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+        ),
+      );
 
     return title;
   }
@@ -322,7 +314,7 @@ export class CaseGenerator {
     const descriptions =
       CASE_DESCRIPTIONS_BY_AREA[category as AreaOfIssue] ||
       CASE_DESCRIPTIONS_BY_AREA['Account Opening Process'];
-    let description = this.randomChoice(descriptions);
+    let description = randomChoice(descriptions);
 
     // Fill placeholders
     description = description
@@ -334,16 +326,8 @@ export class CaseGenerator {
         ),
       )
       .replace('{days}', String(Math.floor(2 + Math.random() * 10)))
-      .replace('{amount}', String(Math.floor(50 + Math.random() * 500)))
-      .replace(
-        '{product}',
-        this.randomChoice([
-          'current account',
-          'savings account',
-          'credit card',
-          'mortgage',
-        ]),
-      );
+      .replace('{amount}', `£${Math.floor(50 + Math.random() * 500)}`)
+      .replace('{product}', randomChoice(PRODUCT_NAMES));
 
     return description;
   }
@@ -382,42 +366,5 @@ export class CaseGenerator {
    */
   private formatDate(date: Date): string {
     return date.toISOString().split('T')[0];
-  }
-
-  /**
-   * Random choice
-   */
-  private randomChoice<T>(array: T[]): T {
-    return array[Math.floor(Math.random() * array.length)];
-  }
-
-  /**
-   * Weighted choice
-   */
-  private weightedChoice(options: Array<[string, number]>): string {
-    const total = options.reduce((sum, [, weight]) => sum + weight, 0);
-    const random = Math.random() * total;
-    let cumulative = 0;
-
-    for (const [value, weight] of options) {
-      cumulative += weight;
-      if (random < cumulative) {
-        return value;
-      }
-    }
-
-    return options[options.length - 1][0];
-  }
-
-  /**
-   * Random date - biased towards recent dates using power distribution
-   * This ensures demo data has more activity in recent time periods
-   */
-  private randomDate(start: Date, end: Date): Date {
-    const diff = end.getTime() - start.getTime();
-    // Use square root to bias towards more recent dates
-    // Math.random()^0.5 produces values skewed towards 1 (recent)
-    const biasedRandom = Math.pow(Math.random(), 0.5);
-    return new Date(start.getTime() + biasedRandom * diff);
   }
 }

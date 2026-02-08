@@ -14,6 +14,8 @@ export interface AnalysisRequest {
   targetId?: string;
   /** Query text for analysis */
   query?: string;
+  /** Filter by product slug (e.g., 'advance-account', 'credit-card') */
+  product?: string;
   /** Time range for analysis */
   timeRange?: {
     from?: string;

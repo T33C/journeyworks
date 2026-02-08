@@ -140,15 +140,16 @@ export function formatNPS(score: number): string {
 
 // =============================================================================
 // COLOR UTILITIES FOR D3 CHARTS
+// Corporate theme colours - RAG palette for status/sentiment
 // =============================================================================
 
 /**
  * Get color for sentiment value (-1 to 1)
  */
 export function getSentimentColor(sentiment: number): string {
-  if (sentiment < -0.4) return '#ef5350'; // Negative
-  if (sentiment < 0) return '#ffb74d'; // Slightly negative
-  return '#66bb6a'; // Positive/neutral
+  if (sentiment < -0.4) return '#A8000B'; // Negative (RAG Red)
+  if (sentiment < 0) return '#FFBB33'; // Slightly negative (RAG Amber)
+  return '#00847F'; // Positive/neutral (RAG Green)
 }
 
 /**
@@ -157,15 +158,15 @@ export function getSentimentColor(sentiment: number): string {
 export function getQuadrantColor(quadrant: string): string {
   switch (quadrant) {
     case 'critical':
-      return '#e53935';
+      return '#A8000B'; // RAG Red
     case 'watch':
-      return '#ff8f00';
+      return '#FFBB33'; // RAG Amber
     case 'strength':
-      return '#43a047';
+      return '#00847F'; // RAG Green
     case 'noise':
-      return '#9e9e9e';
+      return '#9B9B9B'; // Grey 5
     default:
-      return '#5c6bc0';
+      return '#305A85'; // Blue (secondary)
   }
 }
 
@@ -175,14 +176,14 @@ export function getQuadrantColor(quadrant: string): string {
 export function getQuadrantBgColor(quadrant: string): string {
   switch (quadrant) {
     case 'critical':
-      return '#ffebee';
+      return '#FCEAEB'; // Light red
     case 'watch':
-      return '#fff8e1';
+      return '#FFF8E6'; // Light amber
     case 'strength':
-      return '#e8f5e9';
+      return '#E6F3F2'; // Light green
     case 'noise':
-      return '#fafafa';
+      return '#F3F3F3'; // Grey 1
     default:
-      return '#e8eaf6';
+      return '#E8EEF3'; // Light blue
   }
 }
