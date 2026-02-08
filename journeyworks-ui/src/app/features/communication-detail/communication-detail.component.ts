@@ -1,12 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
 
 import { CommunicationsService } from '../../core/services/communications.service';
@@ -23,12 +20,9 @@ import {
   imports: [
     CommonModule,
     RouterLink,
-    MatCardModule,
     MatButtonModule,
     MatIconModule,
-    MatChipsModule,
     MatProgressSpinnerModule,
-    MatDividerModule,
     MatMenuModule,
   ],
   templateUrl: './communication-detail.component.html',
@@ -110,7 +104,7 @@ James Morrison`,
       status: 'open',
       priority: 'high',
       sentiment: { score: -0.7, label: 'negative', confidence: 0.94 },
-      topics: ['mobile app', 'login issue', 'authentication', 'urgent'],
+      tags: ['mobile app', 'login issue', 'authentication', 'urgent'],
       caseId: 'CASE-2024-001234',
       assignedTo: 'Sarah Johnson',
       aiClassification: {
