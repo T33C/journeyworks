@@ -79,6 +79,7 @@ export class CustomersController {
     customerId: string;
     healthScore: number;
     trend: 'improving' | 'stable' | 'declining';
+    sentimentBreakdown: { positive: number; neutral: number; negative: number };
     riskFactors: string[];
     recommendations: string[];
   }> {

@@ -277,6 +277,16 @@ export class CustomerResponseDto {
   @ApiPropertyOptional()
   metadata?: Record<string, unknown>;
 
+  @ApiPropertyOptional({
+    description: 'Total communications count for this customer',
+  })
+  totalCommunications?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of open/in-progress cases for this customer',
+  })
+  openCases?: number;
+
   @ApiProperty()
   createdAt: string;
 

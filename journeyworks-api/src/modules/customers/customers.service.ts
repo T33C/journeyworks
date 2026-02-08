@@ -8,6 +8,8 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { RedisCacheService } from '../../infrastructure/redis';
 import { CustomerDocument, CustomersRepository } from './customers.repository';
+import { CommunicationsRepository } from '../communications/communications.repository';
+import { CasesRepository } from '../cases/cases.repository';
 import {
   CreateCustomerDto,
   UpdateCustomerDto,
@@ -27,6 +29,8 @@ export class CustomersService {
   constructor(
     private readonly repository: CustomersRepository,
     private readonly cache: RedisCacheService,
+    private readonly communicationsRepository: CommunicationsRepository,
+    private readonly casesRepository: CasesRepository,
   ) {}
 
   /**
@@ -79,6 +83,22 @@ export class CustomersService {
     }
 
     const response = this.toResponseDto(customer);
+
+    // Enrich with computed counts
+    try {
+      const [commsResult, cases] = await Promise.all([
+        this.communicationsRepository.getByCustomerId(id, { size: 0 }),
+        this.casesRepository.findByCustomerId(id),
+      ]);
+      response.totalCommunications = commsResult.total;
+      response.openCases = cases.filter(
+        (c) => c.status !== 'resolved' && c.status !== 'closed',
+      ).length;
+    } catch (err) {
+      this.logger.warn(
+        `Failed to enrich customer ${id} with counts: ${err.message}`,
+      );
+    }
 
     // Cache the result
     await this.cache.set(`${this.CACHE_PREFIX}${id}`, response, this.CACHE_TTL);
@@ -235,6 +255,7 @@ export class CustomersService {
     customerId: string;
     healthScore: number;
     trend: 'improving' | 'stable' | 'declining';
+    sentimentBreakdown: { positive: number; neutral: number; negative: number };
     riskFactors: string[];
     recommendations: string[];
   }> {
@@ -243,58 +264,197 @@ export class CustomersService {
       throw new NotFoundException(`Customer not found: ${id}`);
     }
 
-    // Generate health analysis based on customer data
-    // In production, this would integrate with the analysis service
-    const tierScores: Record<string, number> = {
-      premium: 85,
-      standard: 70,
-      basic: 55,
-      student: 60,
-    };
+    // Fetch all communications for this customer (up to 500)
+    const commsResult = await this.communicationsRepository.getByCustomerId(
+      id,
+      { size: 500 },
+    );
+    const comms = commsResult.hits.map((h) => h.source);
+    const totalComms = commsResult.total;
 
-    const baseScore = tierScores[customer.tier] || 65;
-    const randomVariation = Math.floor(Math.random() * 20) - 10;
-    const healthScore = Math.max(0, Math.min(100, baseScore + randomVariation));
+    // --- Sentiment analysis from real data ---
+    let positiveCount = 0;
+    let neutralCount = 0;
+    let negativeCount = 0;
+    let sentimentSum = 0;
+    let sentimentCount = 0;
 
-    // Determine trend based on recent activity
+    for (const comm of comms) {
+      if (comm.sentiment) {
+        sentimentCount++;
+        sentimentSum += comm.sentiment.score;
+        if (comm.sentiment.label === 'positive') positiveCount++;
+        else if (comm.sentiment.label === 'negative') negativeCount++;
+        else neutralCount++;
+      }
+    }
+
+    // --- Calculate health score (0-100) from multiple weighted factors ---
+
+    // Factor 1: Sentiment score (40% weight)
+    // sentiment.score ranges from -1 to +1, normalise to 0-100
+    const avgSentiment = sentimentCount > 0 ? sentimentSum / sentimentCount : 0;
+    const sentimentScore = Math.round(((avgSentiment + 1) / 2) * 100);
+
+    // Factor 2: Negative ratio (25% weight)
+    // Fewer negatives = higher score
+    const negativeRatio =
+      sentimentCount > 0 ? negativeCount / sentimentCount : 0;
+    const negativeScore = Math.round((1 - negativeRatio) * 100);
+
+    // Factor 3: Recency of contact (20% weight)
     const lastContact = new Date(customer.lastContactDate);
     const daysSinceContact = Math.floor(
       (Date.now() - lastContact.getTime()) / (1000 * 60 * 60 * 24),
     );
+    // 0 days = 100, 90+ days = 0
+    const recencyScore = Math.max(
+      0,
+      Math.round(100 - (daysSinceContact / 90) * 100),
+    );
+
+    // Factor 4: Engagement volume (15% weight)
+    // 20+ comms = 100, 0 comms = 20
+    const engagementScore = Math.min(
+      100,
+      Math.round(20 + (totalComms / 20) * 80),
+    );
+
+    const healthScore = Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          sentimentScore * 0.4 +
+            negativeScore * 0.25 +
+            recencyScore * 0.2 +
+            engagementScore * 0.15,
+        ),
+      ),
+    );
+
+    // --- Trend: compare recent 30 days vs previous 30 days ---
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
+
+    let recentSentimentSum = 0;
+    let recentSentimentCount = 0;
+    let olderSentimentSum = 0;
+    let olderSentimentCount = 0;
+
+    for (const comm of comms) {
+      if (!comm.sentiment) continue;
+      const ts = new Date(comm.timestamp).getTime();
+      if (ts >= thirtyDaysAgo) {
+        recentSentimentSum += comm.sentiment.score;
+        recentSentimentCount++;
+      } else if (ts >= sixtyDaysAgo) {
+        olderSentimentSum += comm.sentiment.score;
+        olderSentimentCount++;
+      }
+    }
 
     let trend: 'improving' | 'stable' | 'declining';
-    if (daysSinceContact < 14 && healthScore > 70) {
-      trend = 'improving';
-    } else if (daysSinceContact > 30 || healthScore < 50) {
+    if (recentSentimentCount >= 2 && olderSentimentCount >= 2) {
+      const recentAvg = recentSentimentSum / recentSentimentCount;
+      const olderAvg = olderSentimentSum / olderSentimentCount;
+      const delta = recentAvg - olderAvg;
+      if (delta > 0.15) {
+        trend = 'improving';
+      } else if (delta < -0.15) {
+        trend = 'declining';
+      } else {
+        trend = 'stable';
+      }
+    } else if (recentSentimentCount === 0 && daysSinceContact > 30) {
       trend = 'declining';
     } else {
       trend = 'stable';
     }
 
-    // Generate risk factors and recommendations based on customer profile
+    // --- Risk factors and recommendations based on real data ---
     const riskFactors: string[] = [];
     const recommendations: string[] = [];
 
-    if (daysSinceContact > 30) {
-      riskFactors.push('No recent contact in over 30 days');
-      recommendations.push('Schedule a check-in call to maintain engagement');
-    }
-
-    if (customer.tier === 'basic') {
-      riskFactors.push('Limited product engagement');
-      recommendations.push('Consider offering a product upgrade discussion');
-    }
-
-    if (customer.riskProfile === 'aggressive' && healthScore < 60) {
-      riskFactors.push('Aggressive risk profile with declining satisfaction');
+    // High negative sentiment ratio
+    if (negativeRatio > 0.5) {
+      riskFactors.push(
+        `High negative sentiment: ${Math.round(negativeRatio * 100)}% of communications are negative`,
+      );
       recommendations.push(
-        'Review portfolio performance and address any concerns',
+        'Urgent review of recent interactions needed — consider proactive outreach',
+      );
+    } else if (negativeRatio > 0.3) {
+      riskFactors.push(
+        `Elevated negative sentiment: ${Math.round(negativeRatio * 100)}% of communications are negative`,
+      );
+      recommendations.push(
+        'Monitor sentiment trend closely and address recurring issues',
       );
     }
 
+    // No recent contact
+    if (daysSinceContact > 60) {
+      riskFactors.push(
+        `No contact in ${daysSinceContact} days — customer may be disengaging`,
+      );
+      recommendations.push('Schedule an immediate check-in call to re-engage');
+    } else if (daysSinceContact > 30) {
+      riskFactors.push(`No recent contact in ${daysSinceContact} days`);
+      recommendations.push('Schedule a check-in call to maintain engagement');
+    }
+
+    // Open/unresolved cases
+    const openComms = comms.filter(
+      (c) => c.status === 'open' || c.status === 'in_progress',
+    );
+    if (openComms.length > 5) {
+      riskFactors.push(
+        `${openComms.length} open/in-progress communications — possible service backlog`,
+      );
+      recommendations.push(
+        'Prioritise resolution of outstanding items to improve satisfaction',
+      );
+    } else if (openComms.length > 0) {
+      recommendations.push(
+        `${openComms.length} open item(s) — ensure timely follow-up`,
+      );
+    }
+
+    // Urgent items
+    const urgentComms = comms.filter((c) => c.priority === 'urgent');
+    if (urgentComms.length > 0) {
+      riskFactors.push(`${urgentComms.length} urgent communication(s) flagged`);
+      recommendations.push(
+        'Ensure all urgent items have been acknowledged and are being actioned',
+      );
+    }
+
+    // Declining trend
+    if (trend === 'declining') {
+      riskFactors.push(
+        'Sentiment trend is declining compared to previous period',
+      );
+      recommendations.push(
+        'Investigate recent interactions for recurring complaints or unresolved issues',
+      );
+    }
+
+    // Low engagement
+    if (totalComms < 3) {
+      riskFactors.push(
+        'Very low communication volume — limited visibility into customer health',
+      );
+      recommendations.push(
+        'Proactively reach out to build the relationship and gather feedback',
+      );
+    }
+
+    // Positive signals
     if (healthScore > 75 && customer.tier !== 'premium') {
       recommendations.push(
-        'High engagement customer - consider premium tier offer',
+        'High engagement customer — consider premium tier offer',
       );
     }
 
@@ -310,6 +470,11 @@ export class CustomersService {
       customerId: id,
       healthScore,
       trend,
+      sentimentBreakdown: {
+        positive: positiveCount,
+        neutral: neutralCount,
+        negative: negativeCount,
+      },
       riskFactors,
       recommendations,
     };

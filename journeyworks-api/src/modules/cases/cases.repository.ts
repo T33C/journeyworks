@@ -118,7 +118,7 @@ export class CasesRepository extends BaseElasticsearchRepository<CaseDocument> {
    */
   async findByCustomerId(customerId: string): Promise<CaseDocument[]> {
     const result = await this.search(this.indexName, {
-      term: { customerId },
+      term: { 'customerId.keyword': customerId },
     });
     return result.hits.map((h) => h.source as CaseDocument);
   }
