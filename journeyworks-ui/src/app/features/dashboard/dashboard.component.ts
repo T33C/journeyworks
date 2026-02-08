@@ -160,7 +160,7 @@ export class DashboardComponent implements OnInit {
         status: 'open',
         priority: 'high',
         sentiment: { score: -0.6, label: 'negative', confidence: 0.92 },
-        topics: ['mobile app', 'login'],
+        tags: ['mobile app', 'login'],
       },
       {
         id: '2',
@@ -174,7 +174,7 @@ export class DashboardComponent implements OnInit {
         status: 'in_progress',
         priority: 'medium',
         sentiment: { score: 0.3, label: 'neutral', confidence: 0.85 },
-        topics: ['fees', 'credit card'],
+        tags: ['fees', 'credit card'],
       },
       {
         id: '3',
@@ -188,7 +188,7 @@ export class DashboardComponent implements OnInit {
         status: 'resolved',
         priority: 'low',
         sentiment: { score: 0.7, label: 'positive', confidence: 0.88 },
-        topics: ['direct debit', 'setup'],
+        tags: ['direct debit', 'setup'],
       },
     ];
   }
