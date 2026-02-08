@@ -84,6 +84,8 @@ export interface CommunicationSearchFilters {
   channels?: string[];
   direction?: string;
   sentiments?: string[];
+  statuses?: string[];
+  priorities?: string[];
   customerId?: string;
   caseId?: string;
   startDate?: string;
@@ -144,12 +146,20 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
       filter.push({ terms: { 'sentiment.label': filters.sentiments } });
     }
 
+    if (filters?.statuses?.length) {
+      filter.push({ terms: { status: filters.statuses } });
+    }
+
+    if (filters?.priorities?.length) {
+      filter.push({ terms: { priority: filters.priorities } });
+    }
+
     if (filters?.customerId) {
-      filter.push({ term: { customerId: filters.customerId } });
+      filter.push({ term: { 'customerId.keyword': filters.customerId } });
     }
 
     if (filters?.caseId) {
-      filter.push({ term: { caseId: filters.caseId } });
+      filter.push({ term: { 'caseId.keyword': filters.caseId } });
     }
 
     if (filters?.tags?.length) {
@@ -209,7 +219,9 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     }
 
     if (filters?.customerId) {
-      filterClauses.push({ term: { customerId: filters.customerId } });
+      filterClauses.push({
+        term: { 'customerId.keyword': filters.customerId },
+      });
     }
 
     if (filters?.startDate || filters?.endDate) {
@@ -250,7 +262,9 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     }
 
     if (filters?.customerId) {
-      filterClauses.push({ term: { customerId: filters.customerId } });
+      filterClauses.push({
+        term: { 'customerId.keyword': filters.customerId },
+      });
     }
 
     if (filters?.product) {
@@ -298,7 +312,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     options: SearchOptions = {},
   ): Promise<SearchResult<CommunicationDocument>> {
     return this.searchIndex(
-      { bool: { filter: [{ term: { customerId } }] } },
+      { bool: { filter: [{ term: { 'customerId.keyword': customerId } }] } },
       { ...options, sort: [{ timestamp: 'desc' }] },
     );
   }
@@ -311,7 +325,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     options: SearchOptions = {},
   ): Promise<SearchResult<CommunicationDocument>> {
     return this.searchIndex(
-      { bool: { filter: [{ term: { caseId } }] } },
+      { bool: { filter: [{ term: { 'caseId.keyword': caseId } }] } },
       { ...options, sort: [{ timestamp: 'asc' }] },
     );
   }
@@ -328,7 +342,9 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     const filterClauses: any[] = [];
 
     if (filters?.customerId) {
-      filterClauses.push({ term: { customerId: filters.customerId } });
+      filterClauses.push({
+        term: { 'customerId.keyword': filters.customerId },
+      });
     }
 
     if (filters?.startDate || filters?.endDate) {

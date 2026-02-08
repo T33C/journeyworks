@@ -196,6 +196,8 @@ export class CommunicationsService {
         channels: dto.channels,
         direction: dto.direction,
         sentiments: dto.sentiments,
+        statuses: dto.statuses,
+        priorities: dto.priorities,
         customerId: dto.customerId,
         caseId: dto.caseId,
         startDate: dto.startDate,

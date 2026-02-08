@@ -41,9 +41,8 @@ export enum SentimentLabel {
 }
 
 export enum CommunicationStatus {
-  NEW = 'new',
-  REVIEWED = 'reviewed',
-  ACTIONED = 'actioned',
+  OPEN = 'open',
+  IN_PROGRESS = 'in_progress',
   RESOLVED = 'resolved',
   ESCALATED = 'escalated',
 }
@@ -432,6 +431,26 @@ export class SearchCommunicationsDto {
   @IsString({ each: true })
   tags?: string[];
 
+  @ApiPropertyOptional({
+    enum: CommunicationStatus,
+    isArray: true,
+    description: 'Filter by status',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(CommunicationStatus, { each: true })
+  statuses?: CommunicationStatus[];
+
+  @ApiPropertyOptional({
+    enum: Priority,
+    isArray: true,
+    description: 'Filter by priority',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(Priority, { each: true })
+  priorities?: Priority[];
+
   @ApiPropertyOptional({ description: 'Filter by product slug' })
   @IsOptional()
   @IsString()
@@ -439,12 +458,14 @@ export class SearchCommunicationsDto {
 
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   from?: number;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   @Max(100)
