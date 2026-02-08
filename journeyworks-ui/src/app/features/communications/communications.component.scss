@@ -1,36 +1,45 @@
 @use "styles/variables" as *;
 
+// =============================================================================
+// PAGE LAYOUT
+// =============================================================================
+
 .communications-page {
-  padding: 24px;
+  padding: $spacing-lg;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: $spacing-lg;
 
   h1 {
     margin: 0;
     font-size: 28px;
     font-weight: 500;
+    color: $text-primary;
   }
 
   .subtitle {
-    margin: 4px 0 0;
+    margin: $spacing-xs 0 0;
     color: $text-secondary;
-    font-size: 14px;
+    font-size: $font-size-md;
   }
 }
 
+// =============================================================================
+// FILTERS
+// =============================================================================
+
 .filters-card {
-  margin-bottom: 24px;
+  margin-bottom: $spacing-lg;
 
   mat-card-content {
-    padding: 16px;
+    padding: $spacing-md;
   }
 
   .filters-form {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: $spacing-md;
     align-items: center;
 
     mat-form-field {
@@ -43,44 +52,124 @@
       flex: 2;
       max-width: 300px;
     }
+
+    button {
+      color: $text-secondary;
+      white-space: nowrap;
+    }
   }
 }
 
+// =============================================================================
+// TABLE
+// =============================================================================
+
 .table-card {
   .loading-container {
-    padding: 48px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: $spacing-xxl;
   }
 
   table {
     width: 100%;
   }
 
-  .customer-link,
-  .subject-link {
+  // Header row
+  th.mat-mdc-header-cell {
+    color: $grey-7;
+    font-weight: 600;
+    font-size: $font-size-sm;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid $grey-3;
+    padding: $spacing-sm $spacing-md;
+  }
+
+  // Body cells
+  td.mat-mdc-cell {
+    padding: $spacing-sm $spacing-md;
+    font-size: $font-size-md;
+    color: $text-primary;
+    border-bottom: 1px solid $grey-2;
+    vertical-align: middle;
+  }
+
+  // Hover row
+  tr.mat-mdc-row:hover {
+    background: $grey-1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Links
+  // ---------------------------------------------------------------------------
+
+  .customer-link {
     color: $brand-secondary;
+    text-decoration: none;
+    font-weight: 500;
+
+    &:hover {
+      text-decoration: underline;
+      color: $brand-secondary-dark;
+    }
+  }
+
+  .subject-link {
+    color: $text-primary;
     text-decoration: none;
 
     &:hover {
+      color: $brand-secondary;
       text-decoration: underline;
     }
   }
 
-  .topics {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
+  // ---------------------------------------------------------------------------
+  // Tag chips (corporate pill style)
+  // ---------------------------------------------------------------------------
 
-    mat-chip {
-      font-size: 10px;
-      min-height: 20px;
-      padding: 2px 8px;
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-xs;
+    margin-top: $spacing-xs;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: $border-radius-pill;
+    font-size: $font-size-xs;
+    font-weight: 500;
+    background: $bg-info;
+    color: $rag-blue;
+    line-height: 1.6;
+    white-space: nowrap;
+
+    &.tag-more {
+      background: $grey-2;
+      color: $text-secondary;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Channel cell
+  // ---------------------------------------------------------------------------
 
   .channel-cell {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: $spacing-xs;
+
+    mat-icon {
+      color: $grey-6;
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
 
     .direction-icon {
       font-size: 14px;
@@ -90,16 +179,47 @@
     }
   }
 
-  .sentiment-label {
+  // ---------------------------------------------------------------------------
+  // Sentiment badge (pill style with semantic colours)
+  // ---------------------------------------------------------------------------
+
+  .sentiment-badge {
+    display: inline-block;
+    padding: 2px $spacing-sm;
+    border-radius: $border-radius-pill;
+    font-size: $font-size-sm;
     font-weight: 500;
     text-transform: capitalize;
+    background: $sentiment-neutral-bg;
+    color: $sentiment-neutral-dark;
+
+    &.sentiment-positive {
+      background: $sentiment-positive-bg;
+      color: $sentiment-positive;
+    }
+
+    &.sentiment-negative {
+      background: $sentiment-negative-bg;
+      color: $sentiment-negative;
+    }
+
+    &.sentiment-mixed {
+      background: $sentiment-mixed-bg;
+      color: $sentiment-mixed-dark;
+    }
   }
 
-  .priority-indicator {
+  // ---------------------------------------------------------------------------
+  // Priority badge (pill style with RAG colours)
+  // ---------------------------------------------------------------------------
+
+  .priority-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 2px $spacing-sm;
+    border-radius: $border-radius-pill;
+    font-size: $font-size-sm;
+    font-weight: 500;
+    border-left: none;
 
     &.priority-low {
       background: $sentiment-positive-bg;
@@ -108,7 +228,7 @@
 
     &.priority-medium {
       background: $sentiment-mixed-bg;
-      color: $priority-medium;
+      color: darken($priority-medium, 15%);
     }
 
     &.priority-high {
@@ -117,8 +237,68 @@
     }
 
     &.priority-urgent {
-      background: #f5f0f7;
+      background: darken($sentiment-negative-bg, 4%);
       color: $priority-urgent;
+      font-weight: 600;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Status badge (pill style from global mixin, with component overrides)
+  // ---------------------------------------------------------------------------
+
+  .status-badge {
+    display: inline-block;
+    padding: 2px $spacing-sm;
+    border-radius: $border-radius-pill;
+    font-size: $font-size-sm;
+    font-weight: 500;
+    text-transform: capitalize;
+    background: $grey-2;
+    color: $grey-7;
+
+    &.status-open {
+      background: $status-open-bg;
+      color: $status-open;
+    }
+
+    &.status-in-progress {
+      background: $status-in-progress-bg;
+      color: darken($status-in-progress, 15%);
+    }
+
+    &.status-resolved {
+      background: $status-resolved-bg;
+      color: $status-resolved;
+    }
+
+    &.status-escalated {
+      background: $status-escalated-bg;
+      color: $status-escalated;
+    }
+
+    &.status-closed {
+      background: $grey-2;
+      color: $status-closed;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timestamp
+  // ---------------------------------------------------------------------------
+
+  .mat-column-timestamp {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    white-space: nowrap;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
+  .mat-column-actions {
+    width: 48px;
+    text-align: center;
   }
 }

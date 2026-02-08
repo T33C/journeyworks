@@ -10,7 +10,6 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatMenuModule } from '@angular/material/menu';
@@ -49,7 +48,6 @@ import {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    MatChipsModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
     MatMenuModule,
@@ -119,25 +117,24 @@ export class CommunicationsComponent implements OnInit {
     const filters = this.filterForm.value;
     const params: CommunicationSearchParams = {
       query: filters.query || undefined,
-      channel: filters.channel || undefined,
-      status: filters.status || undefined,
-      priority: filters.priority || undefined,
-      sentiment: filters.sentiment || undefined,
-      page: this.currentPage() + 1,
-      limit: this.pageSize(),
+      channels: filters.channel ? [filters.channel] : undefined,
+      statuses: filters.status ? [filters.status] : undefined,
+      priorities: filters.priority ? [filters.priority] : undefined,
+      sentiments: filters.sentiment ? [filters.sentiment] : undefined,
+      from: this.currentPage() * this.pageSize(),
+      size: this.pageSize(),
     };
 
     this.communicationsService.search(params).subscribe({
       next: (response) => {
-        this.communications.set(response.data);
+        this.communications.set(response.items);
         this.totalCount.set(response.total);
         this.loading.set(false);
       },
       error: (err) => {
         console.error('Failed to load communications', err);
-        // Set mock data for demo
-        this.communications.set(this.getMockCommunications());
-        this.totalCount.set(150);
+        this.communications.set([]);
+        this.totalCount.set(0);
         this.loading.set(false);
       },
     });
@@ -173,63 +170,5 @@ export class CommunicationsComponent implements OnInit {
         },
         error: (err) => console.error('Failed to update status', err),
       });
-  }
-
-  private getMockCommunications(): Communication[] {
-    const mockData: Communication[] = [];
-    // Retail customer names (individuals, not institutions)
-    const customers = [
-      { name: 'James Morrison', id: 'CUST-10234' },
-      { name: 'Emma Richardson', id: 'CUST-10567' },
-      { name: 'Robert Williams', id: 'CUST-10892' },
-      { name: 'Sarah Thompson', id: 'CUST-11023' },
-      { name: 'David Chen', id: 'CUST-11156' },
-      { name: 'Lisa Patel', id: 'CUST-11289' },
-      { name: "Michael O'Brien", id: 'CUST-11422' },
-      { name: 'Rachel Green', id: 'CUST-11555' },
-      { name: 'Thomas Wilson', id: 'CUST-11688' },
-      { name: 'Sophie Brown', id: 'CUST-11821' },
-    ];
-    // Retail banking subjects
-    const subjects = [
-      'Mobile app login issue',
-      'Card payment declined',
-      'Direct debit query',
-      'Overdraft fee dispute',
-      'Mortgage rate question',
-      'Savings account interest',
-      'Lost/stolen card report',
-      'Online banking password reset',
-      'Standing order setup',
-      'Statement request',
-      'Account switch enquiry',
-      'Credit card limit increase',
-      'Fraud alert notification',
-      'Branch appointment booking',
-      'ISA transfer request',
-    ];
-
-    for (let i = 0; i < 25; i++) {
-      const customer = customers[i % customers.length];
-      mockData.push({
-        id: `comm-${i}`,
-        customerId: customer.id,
-        customerName: customer.name,
-        channel: this.channels[i % 5] as any,
-        direction: i % 2 === 0 ? 'inbound' : 'outbound',
-        subject: subjects[i % subjects.length],
-        content: 'Sample communication content...',
-        timestamp: new Date(Date.now() - i * 3600000).toISOString(),
-        status: this.statuses[i % 4] as any,
-        priority: this.priorities[i % 4] as any,
-        sentiment: {
-          score: Math.random() * 2 - 1,
-          label: this.sentiments[i % 4] as any,
-          confidence: 0.8 + Math.random() * 0.2,
-        },
-        topics: ['topic1', 'topic2'],
-      });
-    }
-    return mockData;
   }
 }
