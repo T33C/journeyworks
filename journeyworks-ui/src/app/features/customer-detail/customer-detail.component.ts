@@ -127,6 +127,14 @@ export class CustomerDetailComponent implements OnInit {
     }
   }
 
+  getSentimentPercent(
+    breakdown: { positive: number; neutral: number; negative: number },
+    key: 'positive' | 'neutral' | 'negative',
+  ): number {
+    const total = breakdown.positive + breakdown.neutral + breakdown.negative;
+    return total > 0 ? Math.round((breakdown[key] / total) * 100) : 0;
+  }
+
   private getMockCustomer(id: string): Customer {
     return {
       id,

@@ -36,20 +36,23 @@
               </div>
               <div class="customer-contact">
                 <span><mat-icon>email</mat-icon> {{ cust.email }}</span>
-                @if (cust.accountManager) {
+                @if (cust.relationshipManager || cust.accountManager) {
                   <span
-                    ><mat-icon>person</mat-icon> {{ cust.accountManager }}</span
+                    ><mat-icon>person</mat-icon>
+                    {{ cust.relationshipManager || cust.accountManager }}</span
                   >
                 }
               </div>
             </div>
             <div class="customer-stats">
               <div class="stat">
-                <span class="stat-value">{{ cust.totalCommunications }}</span>
+                <span class="stat-value">{{
+                  cust.totalCommunications || 0
+                }}</span>
                 <span class="stat-label">Communications</span>
               </div>
               <div class="stat">
-                <span class="stat-value">{{ cust.openCases }}</span>
+                <span class="stat-value">{{ cust.openCases || 0 }}</span>
                 <span class="stat-label">Open Cases</span>
               </div>
               @if (cust.healthScore) {
@@ -80,18 +83,80 @@
               <div class="health-overview">
                 <div
                   class="health-score"
-                  [class]="getHealthScoreClass(report.healthScore)"
+                  [ngClass]="getHealthScoreClass(report.healthScore)"
                 >
                   <span class="score-value">{{ report.healthScore }}</span>
                   <span class="score-label">Health Score</span>
                 </div>
-                <div class="health-trend" [class]="getTrendClass(report.trend)">
+                <div
+                  class="health-trend"
+                  [ngClass]="getTrendClass(report.trend)"
+                >
                   <mat-icon>{{ getTrendIcon(report.trend) }}</mat-icon>
                   <span>{{ report.trend | titlecase }}</span>
                 </div>
               </div>
 
-              @if (report.riskFactors.length > 0) {
+              @if (report.sentimentBreakdown) {
+                <div class="sentiment-breakdown">
+                  <h4>Sentiment Breakdown</h4>
+                  <div class="sentiment-bars">
+                    <div class="sentiment-bar">
+                      <span class="sentiment-label positive">Positive</span>
+                      <div class="bar-track">
+                        <div
+                          class="bar-fill positive"
+                          [style.width.%]="
+                            getSentimentPercent(
+                              report.sentimentBreakdown,
+                              'positive'
+                            )
+                          "
+                        ></div>
+                      </div>
+                      <span class="sentiment-count">{{
+                        report.sentimentBreakdown.positive
+                      }}</span>
+                    </div>
+                    <div class="sentiment-bar">
+                      <span class="sentiment-label neutral">Neutral</span>
+                      <div class="bar-track">
+                        <div
+                          class="bar-fill neutral"
+                          [style.width.%]="
+                            getSentimentPercent(
+                              report.sentimentBreakdown,
+                              'neutral'
+                            )
+                          "
+                        ></div>
+                      </div>
+                      <span class="sentiment-count">{{
+                        report.sentimentBreakdown.neutral
+                      }}</span>
+                    </div>
+                    <div class="sentiment-bar">
+                      <span class="sentiment-label negative">Negative</span>
+                      <div class="bar-track">
+                        <div
+                          class="bar-fill negative"
+                          [style.width.%]="
+                            getSentimentPercent(
+                              report.sentimentBreakdown,
+                              'negative'
+                            )
+                          "
+                        ></div>
+                      </div>
+                      <span class="sentiment-count">{{
+                        report.sentimentBreakdown.negative
+                      }}</span>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              @if (report.riskFactors?.length) {
                 <div class="risk-factors">
                   <h4>Risk Factors</h4>
                   <ul>
@@ -105,7 +170,7 @@
                 </div>
               }
 
-              @if (report.recommendations.length > 0) {
+              @if (report.recommendations?.length) {
                 <div class="recommendations">
                   <h4>Recommendations</h4>
                   <ul>
@@ -119,9 +184,11 @@
                 </div>
               }
 
-              <div class="last-updated">
-                Last updated: {{ report.lastUpdated | date: "medium" }}
-              </div>
+              @if (report.lastUpdated) {
+                <div class="last-updated">
+                  Last updated: {{ report.lastUpdated | date: "medium" }}
+                </div>
+              }
             </mat-card-content>
           </mat-card>
         }
