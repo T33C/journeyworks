@@ -1,10 +1,12 @@
 import {
   Component,
   OnInit,
+  OnDestroy,
   inject,
   ViewChild,
   ElementRef,
   AfterViewChecked,
+  effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -14,16 +16,21 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 
 import { MarkdownPipe } from '../../shared/pipes/markdown.pipe';
 import {
   ResearchService,
   ResearchSource,
+  LiveReasoningStep,
 } from '../../core/services/research.service';
+import { SourceDetailDialogComponent } from './source-detail-dialog/source-detail-dialog.component';
 import { InsightChartCardComponent } from '../analysis/research-panel/insight-chart-card.component';
 
 @Component({
@@ -38,20 +45,24 @@ import { InsightChartCardComponent } from '../analysis/research-panel/insight-ch
     MatInputModule,
     MatFormFieldModule,
     MatProgressSpinnerModule,
+    MatProgressBarModule,
     MatChipsModule,
     MatExpansionModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatDialogModule,
     MarkdownPipe,
     InsightChartCardComponent,
   ],
   templateUrl: './research.component.html',
   styleUrl: './research.component.scss',
 })
-export class ResearchComponent implements OnInit, AfterViewChecked {
+export class ResearchComponent implements OnInit, OnDestroy, AfterViewChecked {
   // Inject the shared research service
   readonly researchService = inject(ResearchService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+  private readonly router = inject(Router);
 
   @ViewChild('messagesContainer') messagesContainer!: ElementRef;
   @ViewChild('queryInput') queryInput!: ElementRef;
@@ -67,6 +78,14 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
   readonly hasConversation = this.researchService.hasConversation;
   readonly currentContext = this.researchService.currentContext;
 
+  // Live streaming state
+  readonly liveReasoningSteps = this.researchService.liveReasoningSteps;
+  readonly currentToolCall = this.researchService.currentToolCall;
+  readonly currentThinkingState = this.researchService.currentThinkingState;
+  readonly isStreaming = this.researchService.isStreaming;
+  readonly streamStatus = this.researchService.streamStatus;
+  readonly wsConnected = this.researchService.wsConnected;
+
   // Local component state
   currentQuery = '';
   showReasoning = false;
@@ -74,11 +93,25 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
 
   private shouldScroll = false;
 
+  constructor() {
+    // Auto-scroll when new live reasoning steps arrive
+    effect(() => {
+      this.liveReasoningSteps();
+      this.shouldScroll = true;
+    });
+  }
+
   ngOnInit(): void {
     // Load suggestions if no conversation exists
     if (!this.hasConversation()) {
       this.loadInitialSuggestions();
     }
+    // Connect WebSocket eagerly for faster first interaction
+    this.researchService.connectWebSocket();
+  }
+
+  ngOnDestroy(): void {
+    // Don't disconnect - service is root-scoped and shared with dashboard
   }
 
   ngAfterViewChecked(): void {
@@ -98,40 +131,62 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
     this.researchService.addUserMessage(query);
     this.shouldScroll = true;
 
-    // Send to API using shared service
-    this.currentThinking = 'Analyzing your question...';
+    // Use WebSocket streaming if reasoning is visible, otherwise HTTP
+    if (this.showReasoning && this.wsConnected()) {
+      this.currentThinking = 'Starting research...';
+      this.researchService.sendMessageStreaming(query);
+    } else {
+      // Fall back to HTTP for non-streaming use
+      this.currentThinking = 'Analyzing your question...';
+      this.researchService.sendMessage(query).subscribe({
+        next: (response) => {
+          this.researchService.addAssistantMessage(
+            response.answer,
+            response.sources,
+            response.charts,
+          );
+          this.currentThinking = '';
+          this.shouldScroll = true;
+        },
+        error: (err) => {
+          console.error('Research query failed', err);
+          this.researchService.addAssistantMessage(this.getErrorMessage(err));
+          this.currentThinking = '';
+          this.shouldScroll = true;
 
-    this.researchService.sendMessage(query).subscribe({
-      next: (response) => {
-        // Add assistant message to shared state
-        this.researchService.addAssistantMessage(
-          response.answer,
-          response.sources,
-          response.charts,
-        );
-        this.currentThinking = '';
-        this.shouldScroll = true;
-      },
-      error: (err) => {
-        console.error('Research query failed', err);
+          this.snackBar.open(
+            'Research service unavailable. Please ensure the API is running.',
+            'Dismiss',
+            { duration: 5000 },
+          );
+        },
+      });
+    }
+  }
 
-        // Add error message to conversation
-        this.researchService.addAssistantMessage(this.getErrorMessage(err));
-        this.currentThinking = '';
-        this.shouldScroll = true;
-
-        this.snackBar.open(
-          'Research service unavailable. Please ensure the API is running.',
-          'Dismiss',
-          { duration: 5000 },
-        );
-      },
-    });
+  cancelResearch(): void {
+    this.researchService.cancelStreaming();
+    this.currentThinking = '';
   }
 
   useSuggestion(suggestion: string): void {
     this.currentQuery = suggestion;
     this.sendQuery();
+  }
+
+  openSourceDetail(source: ResearchSource): void {
+    const dialogRef = this.dialog.open(SourceDetailDialogComponent, {
+      data: { source },
+      width: '700px',
+      maxHeight: '85vh',
+      panelClass: 'source-detail-dialog-panel',
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.navigateTo) {
+        this.router.navigate(['/communications', result.navigateTo]);
+      }
+    });
   }
 
   clearConversation(): void {
@@ -140,6 +195,29 @@ export class ResearchComponent implements OnInit, AfterViewChecked {
 
   toggleReasoning(): void {
     this.showReasoning = !this.showReasoning;
+    // Connect WebSocket when reasoning is toggled on
+    if (this.showReasoning && !this.wsConnected()) {
+      this.researchService.connectWebSocket();
+    }
+  }
+
+  getStepIcon(step: LiveReasoningStep): string {
+    switch (step.status) {
+      case 'thinking':
+        return 'psychology';
+      case 'tool-running':
+        return 'build';
+      case 'complete':
+        return step.toolSuccess === false ? 'error' : 'check_circle';
+      case 'error':
+        return 'error';
+      default:
+        return 'radio_button_unchecked';
+    }
+  }
+
+  getStepStatusClass(step: LiveReasoningStep): string {
+    return `step-${step.status}`;
   }
 
   private loadInitialSuggestions(): void {

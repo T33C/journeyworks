@@ -440,6 +440,15 @@
       min-height: 26px;
       background: $bg-card !important;
       border: 1px solid $border-default;
+      cursor: pointer;
+      transition:
+        border-color 0.2s,
+        background-color 0.2s;
+
+      &:hover {
+        border-color: $ai-primary-light;
+        background: rgba($ai-primary, 0.06) !important;
+      }
 
       mat-icon {
         font-size: 14px;
@@ -568,6 +577,11 @@
   overflow-y: auto;
   animation: fadeSlideIn 0.3s ease-out;
 
+  .reasoning-header {
+    @include flex-between;
+    margin-bottom: $spacing-md;
+  }
+
   h3 {
     display: flex;
     align-items: center;
@@ -585,6 +599,219 @@
     }
   }
 
+  .ws-status {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    font-size: $font-size-xs;
+    font-weight: 500;
+    padding: $spacing-xs $spacing-sm;
+    border-radius: $border-radius-lg;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+
+    &.connected {
+      background: rgba(0, 132, 127, 0.1);
+      color: #00847f;
+    }
+
+    &.disconnected {
+      background: rgba(0, 0, 0, 0.05);
+      color: $text-hint;
+    }
+  }
+
+  // ---- Live Streaming Timeline ----
+
+  .thinking-progress {
+    margin-bottom: $spacing-md;
+    border-radius: $border-radius-sm;
+
+    ::ng-deep .mdc-linear-progress__bar-inner {
+      border-color: $ai-primary;
+    }
+  }
+
+  .live-reasoning-timeline {
+    margin-bottom: $spacing-lg;
+  }
+
+  .timeline-step {
+    display: flex;
+    gap: $spacing-sm + 4px;
+    animation: fadeSlideIn 0.3s ease-out;
+
+    &:last-child .timeline-line {
+      display: none;
+    }
+  }
+
+  .timeline-marker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 28px;
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      z-index: 1;
+
+      &.step-thinking {
+        color: $ai-primary;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      &.step-tool-running {
+        color: $ai-primary-light;
+        animation: pulse 1s ease-in-out infinite;
+      }
+
+      &.step-complete {
+        color: #00847f;
+      }
+
+      &.step-error {
+        color: $status-closed;
+      }
+    }
+  }
+
+  .timeline-line {
+    width: 2px;
+    flex: 1;
+    min-height: 16px;
+    background: $border-default;
+    margin: $spacing-xs 0;
+  }
+
+  .timeline-content {
+    flex: 1;
+    padding-bottom: $spacing-md;
+    min-width: 0;
+  }
+
+  .timeline-header {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    margin-bottom: $spacing-xs;
+    flex-wrap: wrap;
+
+    .step-number {
+      font-size: $font-size-xs;
+      font-weight: 600;
+      color: $ai-primary-dark;
+    }
+
+    .step-action {
+      font-size: $font-size-xs;
+      font-weight: 500;
+      padding: 2px $spacing-sm;
+      background: $chat-suggestion-bg;
+      color: $chat-suggestion-text;
+      border-radius: $border-radius-sm;
+      white-space: nowrap;
+    }
+
+    .step-duration {
+      font-size: $font-size-xs;
+      color: $text-hint;
+      margin-left: auto;
+    }
+  }
+
+  .step-thought-text {
+    font-size: $font-size-xs;
+    line-height: $line-height-base;
+    color: $text-secondary;
+    margin-bottom: $spacing-xs;
+    // Limit height for very long thoughts
+    max-height: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+  }
+
+  .tool-executing {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    padding: $spacing-xs $spacing-sm;
+    background: linear-gradient(
+      135deg,
+      $chat-suggestion-bg 0%,
+      $brand-white 100%
+    );
+    border-radius: $border-radius-sm;
+    font-size: $font-size-xs;
+    color: $ai-primary;
+    font-weight: 500;
+    animation: fadeSlideIn 0.2s ease-out;
+  }
+
+  .step-observation-text {
+    display: flex;
+    align-items: flex-start;
+    gap: $spacing-xs;
+    padding: $spacing-xs $spacing-sm;
+    background: $bg-surface;
+    border-radius: $border-radius-sm;
+    font-size: $font-size-xs;
+    line-height: $line-height-base;
+    color: $text-secondary;
+    max-height: 60px;
+    overflow: hidden;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: #00847f;
+    }
+
+    &.error mat-icon {
+      color: $status-closed;
+    }
+  }
+
+  // ---- Empty state ----
+
+  .reasoning-empty {
+    @include flex-center;
+    flex-direction: column;
+    padding: $spacing-xl $spacing-md;
+    text-align: center;
+    color: $text-hint;
+
+    mat-icon {
+      font-size: 40px;
+      width: 40px;
+      height: 40px;
+      margin-bottom: $spacing-sm;
+      opacity: 0.4;
+    }
+
+    p {
+      font-size: $font-size-sm;
+      margin: 0;
+      max-width: 240px;
+      line-height: $line-height-base;
+    }
+  }
+
+  // ---- Static reasoning steps (existing) ----
+
   .reasoning-steps {
     margin-bottom: $spacing-lg;
 
@@ -601,6 +828,13 @@
         font-size: $font-size-sm;
         font-weight: 500;
         color: $text-primary;
+
+        mat-icon.step-complete {
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
+          color: #00847f;
+        }
       }
     }
 
@@ -632,6 +866,15 @@
       display: flex;
       gap: $spacing-sm + 4px;
       padding: $spacing-sm + 4px;
+      cursor: pointer;
+      transition:
+        border-color 0.2s,
+        background-color 0.2s;
+
+      &:hover {
+        border-color: $ai-primary-light;
+        background: rgba($ai-primary, 0.04);
+      }
 
       mat-icon {
         color: $ai-primary-light;
@@ -666,6 +909,34 @@
         }
       }
     }
+  }
+}
+
+// Cancel button in thinking indicator
+.cancel-btn {
+  margin-top: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    color: $status-closed;
+  }
+}
+
+// Pulse animation for live indicators
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
   }
 }
 

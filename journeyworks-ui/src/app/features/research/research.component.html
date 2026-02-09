@@ -94,7 +94,11 @@
                   <div class="message-sources">
                     <span class="sources-label">Sources:</span>
                     @for (source of message.sources; track source.id) {
-                      <mat-chip [matTooltip]="source.snippet">
+                      <mat-chip
+                        [matTooltip]="source.snippet"
+                        (click)="openSourceDetail(source)"
+                        class="clickable-source"
+                      >
                         <mat-icon>{{ getSourceIcon(source.type) }}</mat-icon>
                         {{ source.title }}
                       </mat-chip>
@@ -121,8 +125,20 @@
                     <span></span>
                     <span></span>
                   </div>
-                  <span>{{ currentThinking }}</span>
+                  <span>{{
+                    isStreaming() ? streamStatus() : currentThinking
+                  }}</span>
                 </div>
+                @if (isStreaming()) {
+                  <button
+                    mat-button
+                    class="cancel-btn"
+                    (click)="cancelResearch()"
+                  >
+                    <mat-icon>stop</mat-icon>
+                    Cancel
+                  </button>
+                }
               </div>
             </div>
           }
@@ -170,36 +186,145 @@
     </div>
 
     <!-- Reasoning Panel -->
-    @if (showReasoning && lastReasoningSteps().length > 0) {
+    @if (showReasoning) {
       <div class="reasoning-panel">
-        <h3><mat-icon>psychology</mat-icon> Agent Reasoning</h3>
-        <div class="reasoning-steps">
-          @for (step of lastReasoningSteps(); track step.step) {
-            <mat-expansion-panel>
-              <mat-expansion-panel-header>
-                <mat-panel-title>
-                  Step {{ step.step }}: {{ step.action }}
-                </mat-panel-title>
-              </mat-expansion-panel-header>
-              <div class="step-content">
-                <div class="step-thought">
-                  {{ step.thought }}
-                </div>
-                @if (step.observation) {
-                  <div class="step-observation">
-                    <strong>Result:</strong> {{ step.observation }}
-                  </div>
-                }
-              </div>
-            </mat-expansion-panel>
+        <div class="reasoning-header">
+          <h3><mat-icon>psychology</mat-icon> Agent Reasoning</h3>
+          @if (wsConnected()) {
+            <span
+              class="ws-status connected"
+              matTooltip="Live streaming enabled"
+            >
+              <mat-icon>sensors</mat-icon>
+              Live
+            </span>
+          } @else {
+            <span
+              class="ws-status disconnected"
+              matTooltip="WebSocket disconnected - using HTTP fallback"
+            >
+              <mat-icon>sensors_off</mat-icon>
+            </span>
           }
         </div>
+
+        <!-- Live streaming timeline (shown during active research) -->
+        @if (isStreaming() && liveReasoningSteps().length > 0) {
+          <div class="live-reasoning-timeline">
+            @if (currentThinkingState(); as thinking) {
+              <mat-progress-bar
+                mode="indeterminate"
+                class="thinking-progress"
+              ></mat-progress-bar>
+            }
+
+            @for (
+              step of liveReasoningSteps();
+              track step.step;
+              let i = $index
+            ) {
+              <div class="timeline-step" [class]="getStepStatusClass(step)">
+                <div class="timeline-marker">
+                  <mat-icon [class]="getStepStatusClass(step)">
+                    {{ getStepIcon(step) }}
+                  </mat-icon>
+                  @if (i < liveReasoningSteps().length - 1 || isStreaming()) {
+                    <div class="timeline-line"></div>
+                  }
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-header">
+                    <span class="step-number">Step {{ step.step }}</span>
+                    @if (step.action) {
+                      <span class="step-action">{{ step.action }}</span>
+                    }
+                    @if (step.toolDuration) {
+                      <span class="step-duration"
+                        >{{ step.toolDuration }}ms</span
+                      >
+                    }
+                  </div>
+                  <div class="step-thought-text">{{ step.thought }}</div>
+                  @if (
+                    step.status === "tool-running" && currentToolCall();
+                    as tool
+                  ) {
+                    <div class="tool-executing">
+                      <mat-progress-spinner
+                        diameter="16"
+                        mode="indeterminate"
+                      ></mat-progress-spinner>
+                      <span>Running {{ tool.tool | titlecase }}...</span>
+                    </div>
+                  }
+                  @if (step.observation) {
+                    <div
+                      class="step-observation-text"
+                      [class.error]="step.toolSuccess === false"
+                    >
+                      <mat-icon>{{
+                        step.toolSuccess === false
+                          ? "error_outline"
+                          : "check_circle_outline"
+                      }}</mat-icon>
+                      <span>{{ step.observation }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Static reasoning steps (shown after research completes) -->
+        @if (!isStreaming() && lastReasoningSteps().length > 0) {
+          <div class="reasoning-steps">
+            @for (step of lastReasoningSteps(); track step.step) {
+              <mat-expansion-panel>
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    <mat-icon class="step-complete">check_circle</mat-icon>
+                    Step {{ step.step }}: {{ step.action }}
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="step-content">
+                  <div class="step-thought">
+                    {{ step.thought }}
+                  </div>
+                  @if (step.observation) {
+                    <div class="step-observation">
+                      <strong>Result:</strong> {{ step.observation }}
+                    </div>
+                  }
+                </div>
+              </mat-expansion-panel>
+            }
+          </div>
+        }
+
+        <!-- Empty state for reasoning panel -->
+        @if (
+          !isStreaming() &&
+          lastReasoningSteps().length === 0 &&
+          liveReasoningSteps().length === 0
+        ) {
+          <div class="reasoning-empty">
+            <mat-icon>psychology_alt</mat-icon>
+            <p>
+              Submit a question to see the agent's reasoning process in
+              real-time.
+            </p>
+          </div>
+        }
 
         @if (lastSources().length > 0) {
           <h3><mat-icon>source</mat-icon> Sources Used</h3>
           <div class="sources-list">
             @for (source of lastSources(); track source.id) {
-              <div class="source-item">
+              <div
+                class="source-item clickable-source"
+                (click)="openSourceDetail(source)"
+              >
                 <mat-icon>{{ getSourceIcon(source.type) }}</mat-icon>
                 <div class="source-info">
                   <span class="source-title">{{ source.title }}</span>
