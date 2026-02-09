@@ -106,6 +106,7 @@ export interface SyntheticCommunication {
   aiClassification?: SyntheticAIClassification;
   messages?: SyntheticCommunicationMessage[];
   threadId?: string;
+  relatedEventId?: string;
 }
 
 export interface SyntheticCase {

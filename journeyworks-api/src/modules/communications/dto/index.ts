@@ -332,6 +332,11 @@ export class CreateCommunicationDto {
   @IsOptional()
   @IsString()
   threadId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  relatedEventId?: string;
 }
 
 // Update DTO

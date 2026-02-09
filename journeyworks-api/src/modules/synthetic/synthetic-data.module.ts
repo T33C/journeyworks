@@ -12,6 +12,7 @@ import { CommunicationGenerator } from './generators/communication.generator';
 import { CaseGenerator } from './generators/case.generator';
 import { SocialMentionGenerator } from './generators/social-mention.generator';
 import { EventGenerator } from './generators/event.generator';
+import { EventCommunicationGenerator } from './generators/event-communication.generator';
 import { ChunkGenerator } from './generators/chunk.generator';
 import { SurveyGenerator } from './generators/survey.generator';
 import { CommunicationsModule } from '../communications';
@@ -40,6 +41,7 @@ import { SurveysModule } from '../surveys';
     CaseGenerator,
     SocialMentionGenerator,
     EventGenerator,
+    EventCommunicationGenerator,
     ChunkGenerator,
     SurveyGenerator,
   ],

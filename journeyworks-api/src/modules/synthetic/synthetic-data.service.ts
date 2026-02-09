@@ -12,6 +12,7 @@ import { CommunicationGenerator } from './generators/communication.generator';
 import { CaseGenerator } from './generators/case.generator';
 import { SocialMentionGenerator } from './generators/social-mention.generator';
 import { EventGenerator } from './generators/event.generator';
+import { EventCommunicationGenerator } from './generators/event-communication.generator';
 import { ChunkGenerator } from './generators/chunk.generator';
 import { SurveyGenerator } from './generators/survey.generator';
 import {
@@ -47,6 +48,7 @@ export class SyntheticDataService {
     private readonly caseGenerator: CaseGenerator,
     private readonly socialMentionGenerator: SocialMentionGenerator,
     private readonly eventGenerator: EventGenerator,
+    private readonly eventCommGenerator: EventCommunicationGenerator,
     private readonly chunkGenerator: ChunkGenerator,
     private readonly surveyGenerator: SurveyGenerator,
     private readonly communicationsService: CommunicationsService,
@@ -359,6 +361,53 @@ export class SyntheticDataService {
     }));
     const eventsResult = await this.eventsService.createBulk(eventDocs);
     this.logger.log(`Stored ${eventsResult.created} events`);
+
+    // 7b. Generate and store event-correlated communications
+    // These are communications explicitly linked to events with matching products,
+    // relevant content, and dates clustered around the event date.
+    this.logger.log('Generating event-correlated communications...');
+    const eventComms = this.eventCommGenerator.generateForEvents(
+      generatedEvents,
+      generatedCustomers,
+    );
+    this.logger.log(
+      `Generated ${eventComms.length} event-correlated communications`,
+    );
+
+    // Store event-correlated communications in Elasticsearch
+    const eventCommDtos: CreateCommunicationDto[] = eventComms.map((comm) => ({
+      channel: comm.channel as any,
+      direction: comm.direction as any,
+      customerId: comm.customerId,
+      customerName: comm.customerName,
+      caseId: comm.caseId,
+      subject: comm.subject,
+      content: comm.content,
+      summary: comm.summary,
+      timestamp: comm.timestamp,
+      priority: comm.priority as any,
+      sentiment: comm.sentiment as any,
+      intent: comm.intent as any,
+      entities: comm.entities as any,
+      tags: comm.tags,
+      metadata: comm.metadata,
+      aiClassification: comm.aiClassification as any,
+      messages: comm.messages as any,
+      threadId: comm.threadId,
+      relatedEventId: comm.relatedEventId,
+    }));
+
+    let eventCommStoredCount = 0;
+    for (let i = 0; i < eventCommDtos.length; i += batchSize) {
+      const batch = eventCommDtos.slice(i, i + batchSize);
+      const result = await this.communicationsService.createBulk(batch);
+      eventCommStoredCount += result.created;
+    }
+    this.logger.log(
+      `Stored ${eventCommStoredCount} event-correlated communications`,
+    );
+    allCommunications.push(...eventComms);
+    storedCount += eventCommStoredCount;
 
     // 8. Generate and store chunks from communications
     this.logger.log('Generating chunks from communications...');

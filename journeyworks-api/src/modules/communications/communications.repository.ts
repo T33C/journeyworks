@@ -76,6 +76,7 @@ export interface CommunicationDocument {
     sentiment?: number;
   }>;
   threadId?: string;
+  relatedEventId?: string;
   createdAt: string;
   updatedAt: string;
 }

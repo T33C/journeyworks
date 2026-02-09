@@ -101,6 +101,111 @@ export class InsightDataService {
     return PRODUCT_NAME_MAP[normalized] || product;
   }
 
+  /**
+   * Extract meaningful keywords from an event's label and description
+   * for content-based boosting in communication queries.
+   * Filters out common stop words and short tokens.
+   */
+  private extractEventKeywords(event: {
+    label?: string;
+    description?: string;
+    type?: string;
+  }): string[] {
+    const stopWords = new Set([
+      'the',
+      'a',
+      'an',
+      'and',
+      'or',
+      'but',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'is',
+      'was',
+      'are',
+      'were',
+      'been',
+      'be',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'can',
+      'this',
+      'that',
+      'these',
+      'those',
+      'it',
+      'its',
+      'not',
+      'no',
+      'all',
+      'each',
+      'every',
+      'both',
+      'few',
+      'more',
+      'most',
+      'other',
+      'some',
+      'such',
+      'than',
+      'too',
+      'very',
+      'just',
+      'about',
+      'above',
+      'after',
+      'before',
+      'between',
+      'into',
+      'through',
+      'during',
+      'out',
+      'up',
+      'down',
+      'over',
+      'under',
+      'again',
+      'then',
+      'once',
+      'here',
+      'there',
+      'when',
+      'where',
+      'why',
+      'how',
+    ]);
+
+    const text = [event.label, event.description, event.type]
+      .filter(Boolean)
+      .join(' ');
+
+    const words = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !stopWords.has(w));
+
+    // Deduplicate while preserving order
+    return [...new Set(words)];
+  }
+
   constructor(
     private readonly esClient: ElasticsearchClientService,
     @Inject(forwardRef(() => AnalysisService))
@@ -251,14 +356,46 @@ export class InsightDataService {
       }
     }
 
+    // Build should clauses for relevance scoring
+    const should: any[] = [
+      { range: { 'sentiment.score': { lte: -0.3 } } }, // Boost negative
+    ];
+
+    // If analysing a specific event, boost communications linked to it
+    if (context.event) {
+      // Strongly boost communications explicitly linked to this event
+      if (context.event.id) {
+        should.push({
+          term: {
+            relatedEventId: {
+              value: context.event.id,
+              boost: 20,
+            },
+          },
+        });
+      }
+
+      // Extract keywords from event label/description and boost content matches
+      const eventKeywords = this.extractEventKeywords(context.event);
+      if (eventKeywords.length > 0) {
+        should.push({
+          multi_match: {
+            query: eventKeywords.join(' '),
+            fields: ['content^2', 'subject^3', 'summary^2'],
+            type: 'best_fields',
+            boost: 5,
+          },
+        });
+      }
+    }
+
     // Prioritize negative sentiment for insight relevance
     const query: any = {
       bool: {
         must: must.length ? must : [{ match_all: {} }],
         filter,
-        should: [
-          { range: { 'sentiment.score': { lte: -0.3 } } }, // Boost negative
-        ],
+        should,
+        minimum_should_match: 0,
       },
     };
 
@@ -285,6 +422,7 @@ export class InsightDataService {
             'sentiment',
             'aiClassification',
             'customerId',
+            'relatedEventId',
           ],
         },
       });

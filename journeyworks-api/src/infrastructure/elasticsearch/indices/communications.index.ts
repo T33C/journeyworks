@@ -137,6 +137,9 @@ export const COMMUNICATIONS_INDEX: IndexDefinition = {
         },
       },
 
+      // Event correlation
+      relatedEventId: { type: 'keyword' },
+
       // Tags and metadata
       tags: { type: 'keyword' },
       metadata: { type: 'object', enabled: false },

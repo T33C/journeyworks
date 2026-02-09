@@ -68,6 +68,7 @@ export class CommunicationsService {
       aiClassification: dto.aiClassification as any,
       messages: dto.messages as any,
       threadId: dto.threadId,
+      relatedEventId: dto.relatedEventId,
       createdAt: now,
       updatedAt: now,
     };
@@ -108,6 +109,7 @@ export class CommunicationsService {
       aiClassification: dto.aiClassification as any,
       messages: dto.messages as any,
       threadId: dto.threadId,
+      relatedEventId: dto.relatedEventId,
       createdAt: now,
       updatedAt: now,
     }));
