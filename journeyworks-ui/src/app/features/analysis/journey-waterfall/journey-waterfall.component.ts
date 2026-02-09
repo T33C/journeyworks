@@ -101,6 +101,16 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
   // Computed context description for subtitle
   contextDescription = computed(() => {
     const ctx = this.stateService.context();
+    const fallbackProduct = this.dataService.journeyFallbackProduct();
+
+    // When a product-specific query was too sparse, show explanatory subtitle
+    if (fallbackProduct) {
+      const label =
+        fallbackProduct.charAt(0).toUpperCase() +
+        fallbackProduct.slice(1).replace(/-/g, ' ');
+      return `All products (too few responses for ${label})`;
+    }
+
     if (
       !ctx ||
       (!ctx.event &&

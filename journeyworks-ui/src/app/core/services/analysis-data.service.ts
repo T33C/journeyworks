@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Observable, of, delay, switchMap, map, catchError } from 'rxjs';
 import {
   TimelineEvent,
@@ -12,6 +12,13 @@ import {
 } from '../models/analysis.model';
 import { AnalysisApiService } from './analysis-api.service';
 
+/**
+ * Minimum number of survey responses required to show a product-specific
+ * journey chart. Below this threshold we fall back to all products so the
+ * waterfall still displays meaningful NPS variation.
+ */
+const MIN_JOURNEY_RESPONSES = 5;
+
 @Injectable({
   providedIn: 'root',
 })
@@ -21,6 +28,15 @@ export class AnalysisDataService {
 
   // Flag to use API vs mock data (can be toggled for demos)
   private useApi = true;
+
+  /**
+   * When a product-specific journey query returns too few survey responses
+   * to be meaningful, we automatically retry with all products.  This signal
+   * holds the original product that was dropped so the waterfall component
+   * can display an explanatory subtitle.
+   * `null` means no fallback occurred (product-specific data was sufficient).
+   */
+  journeyFallbackProduct = signal<string | null>(null);
 
   // Timeline Events - realistic banking scenarios
   private events: TimelineEvent[] = [
@@ -1360,11 +1376,35 @@ export class AnalysisDataService {
       // bubble window) so there is enough survey data to populate the chart.
       // We keep the product from context so the journey is product-specific.
       const effectiveFilters = this.mergeContextForJourney(context, filters);
+      const requestedProduct = effectiveFilters.product;
+      const isProductSpecific =
+        !!requestedProduct && requestedProduct !== 'all';
+
       return this.apiService.getJourneyStages(effectiveFilters).pipe(
-        // Apply context-aware modifications on top of API data
+        switchMap((stages) => {
+          const totalResponses = stages.reduce(
+            (sum, st) => sum + st.communications,
+            0,
+          );
+
+          // If a product filter was applied but there aren't enough survey
+          // responses to produce a meaningful waterfall, retry without the
+          // product filter so the chart isn't blank.
+          if (isProductSpecific && totalResponses < MIN_JOURNEY_RESPONSES) {
+            const fallbackFilters = { ...effectiveFilters };
+            delete fallbackFilters.product;
+            this.journeyFallbackProduct.set(requestedProduct!);
+            return this.apiService.getJourneyStages(fallbackFilters);
+          }
+
+          // Product-specific data was sufficient (or no product was set)
+          this.journeyFallbackProduct.set(null);
+          return of(stages);
+        }),
         map((stages) => this.applyContextToStages(stages, context)),
       );
     }
+    this.journeyFallbackProduct.set(null);
     const stages = this.generateJourneyForContext(context);
     return of(stages).pipe(delay(100));
   }
