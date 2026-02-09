@@ -94,6 +94,14 @@ export interface InsightChart {
   yLabel?: string;
 }
 
+// Reasoning step from agent's ReAct loop
+export interface InsightReasoningStep {
+  step: number;
+  thought: string;
+  action: string;
+  observation?: string;
+}
+
 // AI Research Panel content
 export interface ResearchInsight {
   summary: string;
@@ -101,7 +109,8 @@ export interface ResearchInsight {
   keyDrivers: string[];
   evidence: EvidenceItem[];
   totalCommunications?: number; // Total matching communications (evidence is a sample)
-  timelineReasoning: string;
+  timelineReasoning?: string; // Deprecated - replaced by reasoningSteps
+  reasoningSteps?: InsightReasoningStep[]; // Agent reasoning steps (ReAct loop)
   suggestedActions: string[];
   suggestedQuestions?: string[]; // LLM-generated contextual follow-up questions
   suggestedFollowUp?: {

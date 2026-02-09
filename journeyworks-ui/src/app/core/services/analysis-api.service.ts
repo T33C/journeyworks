@@ -24,8 +24,8 @@ import {
 })
 export class AnalysisApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiUrl}/api/analysis`;
-  private readonly researchUrl = `${environment.apiUrl}/api/research`;
+  private readonly baseUrl = `${environment.apiUrl}/analysis`;
+  private readonly researchUrl = `${environment.apiUrl}/research`;
 
   /**
    * Get timeline events from API
@@ -293,7 +293,14 @@ export class AnalysisApiService {
             recommendations: [],
             suggestedActions: [],
             evidence: [],
-            timelineReasoning: response.answer,
+            reasoningSteps: response.reasoning?.map(
+              (r: any, index: number) => ({
+                step: r.step || index + 1,
+                thought: r.thought || '',
+                action: r.action || 'Analyse',
+                observation: r.observation,
+              }),
+            ),
             confidence: response.confidence || 0.8,
             sources: response.sources || [],
           } as ResearchInsight;
@@ -573,8 +580,22 @@ export class AnalysisApiService {
         ],
         evidence: [],
         totalCommunications: context.selectedBubble?.volume,
-        timelineReasoning:
-          'Social media detected the issue within 3 minutes, formal complaints peaked 97 minutes later.',
+        reasoningSteps: [
+          {
+            step: 1,
+            thought: 'Analysing the January 3rd payments outage incident data.',
+            action: 'Search Incidents',
+            observation:
+              'Database failover stuck at 67%. Manual intervention delayed 8 minutes. No automatic rollback triggered.',
+          },
+          {
+            step: 2,
+            thought: 'Checking social media vs formal complaint timing.',
+            action: 'Analyse Social Signals',
+            observation:
+              'Social media detected the issue within 3 minutes, formal complaints peaked 97 minutes later.',
+          },
+        ],
         suggestedActions: [
           'Review failover automation',
           'Add monitoring alerts',
@@ -590,7 +611,6 @@ export class AnalysisApiService {
       keyDrivers: [],
       evidence: [],
       totalCommunications: context.selectedBubble?.volume,
-      timelineReasoning: '',
       suggestedActions: [],
     };
   }

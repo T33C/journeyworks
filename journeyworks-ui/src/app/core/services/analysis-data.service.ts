@@ -593,8 +593,40 @@ export class AnalysisDataService {
         'Direct debit failures created secondary mortgage/utility concerns',
       ],
       evidence: [],
-      timelineReasoning:
-        'Social NPS dropped 2-3 days before complaint volume increased, suggesting social monitoring could provide early warning. The sentiment band shows this predictive lead time clearly - watch for social NPS dips as precursors to complaint surges.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'I need to identify the root cause and timeline of the January 3rd payment outage. Let me search for incident data.',
+          action: 'Search Incidents',
+          observation:
+            'Found incident INC-2025-0103: Payment gateway failure at 14:42 GMT. Database failover stuck at 67%. Manual intervention at 14:52. Restored at 15:18.',
+        },
+        {
+          step: 2,
+          thought:
+            'Now I need to understand the customer impact. Let me look at NPS data before, during, and after the outage.',
+          action: 'Query NPS Metrics',
+          observation:
+            'Pre-outage NPS: -20. During outage: -58 (38-point drop). Detractor rate spiked from 45% to 74%. 1,847 formal complaints filed.',
+        },
+        {
+          step: 3,
+          thought:
+            'I should check if social media showed early warning signs before the formal complaints hit.',
+          action: 'Analyse Social Sentiment',
+          observation:
+            'Social sentiment declined 3 days before formal complaints. Twitter/Reddit discussions about payment issues began T-3 days. Social NPS led formal complaint NPS by ~72 hours.',
+        },
+        {
+          step: 4,
+          thought:
+            'Let me assess the downstream impact on other products - outages often cascade.',
+          action: 'Cross-reference Products',
+          observation:
+            'Direct debit failures caused secondary mortgage and utility payment concerns. 312 complaints/hour at peak. 35% filed compensation requests.',
+        },
+      ],
       suggestedActions: [
         'Implement social media NPS monitoring for 3-day early warning',
         'Prepare proactive customer communication when social NPS drops below -30',
@@ -617,8 +649,40 @@ export class AnalysisDataService {
         'Promoter recovery rates are 40% lower than for technical issues',
       ],
       evidence: [],
-      timelineReasoning:
-        'Unlike technical issues which show NPS recovery patterns, fee-related complaints show sustained negative NPS. The social sentiment band clearly led formal complaints by ~3 days, suggesting customers vented on social media before filing formal complaints.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'I need to assess the impact of the January 22nd fee announcement. Let me pull NPS data around that date.',
+          action: 'Query NPS Timeline',
+          observation:
+            'NPS dropped from -23 to -48 within 48 hours of the announcement. Detractor rate rose from 42% to 66%.',
+        },
+        {
+          step: 2,
+          thought:
+            'Fee changes often affect long-term customers differently. Let me segment by tenure.',
+          action: 'Segment by Customer Tenure',
+          observation:
+            'Customers with 5+ years tenure showed 25-point larger NPS drop than newer customers. Long-term customers 3x more likely to file formal complaints.',
+        },
+        {
+          step: 3,
+          thought:
+            'I should check if social media provided early warning, similar to the outage pattern.',
+          action: 'Analyse Social Sentiment',
+          observation:
+            'Social media NPS declined 3 days before formal complaints spiked. Customers vented on social media before filing formal complaints. Pattern consistent with outage behaviour.',
+        },
+        {
+          step: 4,
+          thought:
+            'Let me compare recovery rates with technical issues to understand if fee complaints resolve differently.',
+          action: 'Compare Recovery Patterns',
+          observation:
+            'Promoter recovery rate for fee complaints: 8% vs 42% for technical issues. Fee-related trust damage is persistent - no natural recovery trajectory observed.',
+        },
+      ],
       suggestedActions: [
         'Monitor social NPS for early fee-related discontent detection',
         'Consider loyalty tier exemptions for customers with historical NPS > 30',
@@ -641,8 +705,32 @@ export class AnalysisDataService {
         'Social media sentiment improved faster than formal complaint NPS',
       ],
       evidence: [],
-      timelineReasoning:
-        'Post-resolution, the social sentiment band shows more rapid NPS improvement than formal complaints - customers acknowledged the fix on social media before updating formal feedback. The 3-day lead pattern reversed during recovery.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'The outage was resolved on January 6th. I need to track the NPS recovery trajectory after resolution.',
+          action: 'Query Post-Incident NPS',
+          observation:
+            'NPS recovery: -58 → -42 (day 2) → -32 (day 4). Recovery rate of ~6.5 NPS points per day initially, then slowing.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check how customers responded - compensation requests are a key indicator of ongoing dissatisfaction.',
+          action: 'Analyse Compensation Data',
+          observation:
+            '35% of affected customers filed compensation requests. Average claim value: £45. Only 18% of Detractors converted to Passives within 2 weeks.',
+        },
+        {
+          step: 3,
+          thought:
+            'I should compare social sentiment recovery vs formal complaint sentiment to see which recovers faster.',
+          action: 'Compare Channel Recovery',
+          observation:
+            'Social media sentiment recovered 2 days ahead of formal complaint NPS. Customers acknowledged the fix on social media before updating formal feedback. The 3-day lead pattern reversed during recovery.',
+        },
+      ],
       suggestedActions: [
         'Implement post-incident NPS recovery tracking dashboard',
         'Proactive compensation offers to high-value Detractors',
@@ -665,8 +753,32 @@ export class AnalysisDataService {
         '£150 annual fee mentioned as concern in 28% of social posts',
       ],
       evidence: [],
-      timelineReasoning:
-        'The social sentiment band shows an initial positive spike (early adopters celebrating approval) followed by decline as rejection notifications went out. The 3-day lead pattern shows social discontent building before formal complaints emerged.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'I need to understand the NPS trajectory after the Premium Card launch on January 15th.',
+          action: 'Query Launch NPS Data',
+          observation:
+            'Initial social NPS: +32 among early adopters. By day 3, overall NPS declined to -15 as rejection notifications went out.',
+        },
+        {
+          step: 2,
+          thought:
+            'The NPS split suggests very different experiences for approved vs rejected applicants. Let me segment.',
+          action: 'Segment by Application Outcome',
+          observation:
+            'Approved customers NPS: +32 (65% Promoters, 3% cashback driving satisfaction). Rejected applicants NPS: -45 (68% Detractors). 42% cited unclear rejection reasons.',
+        },
+        {
+          step: 3,
+          thought:
+            'Let me check social media for the sentiment pattern around this launch.',
+          action: 'Analyse Social Timeline',
+          observation:
+            'Social showed initial positive spike (early adopters celebrating) followed by decline as rejections arrived. 28% of social posts mentioned £150 annual fee as a concern.',
+        },
+      ],
       suggestedActions: [
         'Improve rejection letter clarity with specific reasons and alternatives',
         'Consider soft-launch "pre-qualification" to reduce rejection surprises',
@@ -689,8 +801,32 @@ export class AnalysisDataService {
         'Navigation changes generated 15% increase in support calls',
       ],
       evidence: [],
-      timelineReasoning:
-        'Social NPS spiked positive immediately as tech-savvy users praised new features. The 3-day lead pattern showed negative sentiment building among users who lost payee data, culminating in formal complaints by day 3.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Let me assess the overall impact of the v4.2.1 app update released on January 20th.',
+          action: 'Query App Update NPS',
+          observation:
+            'Overall NPS: +12. Dark mode praised highly (+38 NPS). Biometric improvements contributed +25 NPS lift.',
+        },
+        {
+          step: 2,
+          thought:
+            'There seem to be negative signals too. Let me look at complaint drivers post-update.',
+          action: 'Analyse Post-Update Complaints',
+          observation:
+            'Payee data migration bug affected 8% of users. These users dropped to NPS -28 and generated 23% of all complaints. Navigation changes caused 15% increase in support calls.',
+        },
+        {
+          step: 3,
+          thought:
+            'Let me check the social media reaction to understand the sentiment timeline.',
+          action: 'Analyse Social Timeline',
+          observation:
+            'Social NPS spiked positive immediately as tech-savvy users praised dark mode. By day 3, negative sentiment built among users who lost payee data.',
+        },
+      ],
       suggestedActions: [
         'Urgent fix for payee data restoration with proactive push notification',
         'In-app tutorial for navigation changes to reduce support calls',
@@ -713,8 +849,24 @@ export class AnalysisDataService {
         'Response time delays impact NPS by -15 points on average',
       ],
       evidence: [],
-      timelineReasoning:
-        'Select a specific event or time period for detailed NPS analysis. Note: The purple-bordered sentiment band shows social chatter NPS that precedes formal complaints.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'I need to assess the overall NPS landscape across the complaint journey stages.',
+          action: 'Query Journey Stage NPS',
+          observation:
+            'NPS ranges from -55 (Investigation) to -22 (Post-Resolution). Average recovery of +20 points across the journey, but customers end negative.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check the social media lead pattern and response time correlation.',
+          action: 'Analyse Leading Indicators',
+          observation:
+            'Social media NPS leads formal complaints by ~3 days. Response time delays correlate with -15 NPS point impact. Post-resolution Detractor rate remains at 52%.',
+        },
+      ],
       suggestedActions: [
         'Monitor social NPS band for early warning signals',
         'Click on an event or bubble for targeted NPS recommendations',
@@ -738,8 +890,32 @@ export class AnalysisDataService {
         '89% of Detractors cite "embarrassment at point of sale" as primary frustration',
       ],
       evidence: [],
-      timelineReasoning:
-        'Payment errors correlate strongly with the January 3rd outage. Post-outage, baseline error rate increased from 0.8% to 2.3%. Social media complaints about payment failures precede formal complaints by 2-3 days.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Payment Processing Errors is flagged as Critical. Let me examine the root cause and infrastructure metrics.',
+          action: 'Query Infrastructure Metrics',
+          observation:
+            'Legacy payment gateway timeout rate: 2.3% (target: <0.5%). Peak hour failures 4x higher than off-peak. Retry logic causing duplicate transactions in 8% of failures.',
+        },
+        {
+          step: 2,
+          thought:
+            'I need to understand the customer impact and sentiment around payment failures.',
+          action: 'Analyse Customer Impact',
+          observation:
+            'NPS -58 with 74% Detractors. 245 complaints. 89% cite "embarrassment at point of sale" as primary frustration. Post-outage baseline error rate increased from 0.8% to 2.3%.',
+        },
+        {
+          step: 3,
+          thought:
+            'Let me check if social media provides early warning for payment failures.',
+          action: 'Analyse Social Signals',
+          observation:
+            'Social media complaints about payment failures precede formal complaints by 2-3 days. Strong correlation with the January 3rd outage.',
+        },
+      ],
       suggestedActions: [
         'Urgent: Upgrade payment gateway infrastructure (target: <0.5% failure rate)',
         'Implement proactive SMS notification when payment fails',
@@ -763,8 +939,32 @@ export class AnalysisDataService {
         'Competitor fee comparisons cited in 45% of complaints',
       ],
       evidence: [],
-      timelineReasoning:
-        'Fee complaints spiked following the January 22nd announcement. Unlike technical issues which show sentiment recovery, fee-related NPS shows sustained negative trajectory. Social sentiment provides 3-day early warning of formal complaint surges.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Overdraft Fee Disputes is Critical. Let me examine the complaint patterns and customer segments.',
+          action: 'Analyse Fee Complaint Patterns',
+          observation:
+            'NPS -48 with 66% Detractors. 189 complaints. Long-term customers (5+ years) 3x more likely to complain. January fee increase triggered 40% complaint volume spike.',
+        },
+        {
+          step: 2,
+          thought:
+            'Fee complaints may behave differently from technical issues. Let me check recovery patterns.',
+          action: 'Compare Recovery Rates',
+          observation:
+            'Only 8% of fee complainants convert to Promoters post-resolution vs 42% for technical issues. No natural NPS recovery trajectory - sentiment remains persistently negative.',
+        },
+        {
+          step: 3,
+          thought:
+            'Let me check social media lead indicators for fee-related complaints.',
+          action: 'Analyse Social Lead Time',
+          observation:
+            'Social sentiment provides 3-day early warning of formal complaint surges. Competitor fee comparisons cited in 45% of complaints.',
+        },
+      ],
       suggestedActions: [
         'Consider loyalty-based fee exemptions for 5+ year customers',
         'Implement transparent fee communication before charges apply',
@@ -788,8 +988,24 @@ export class AnalysisDataService {
         'Fraud detection false positive rate: 12% (target: <5%)',
       ],
       evidence: [],
-      timelineReasoning:
-        'Card declined events correlate with payment infrastructure issues. The social sentiment band shows customers immediately tweet about declined cards - this provides real-time signal for infrastructure problems.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Card Declined is a Critical issue with churn risk. Let me analyse the technical causes.',
+          action: 'Query Authorization Metrics',
+          observation:
+            'Real-time authorization latency: 4.2s (target: <2s). Fraud detection false positive rate: 12% (target: <5%). Grocery stores and petrol stations show highest decline rates.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me assess the churn risk and customer sentiment impact.',
+          action: 'Analyse Churn Indicators',
+          observation:
+            '28% of complaints mention considering switching banks. NPS -42 with 62% Detractors. 156 complaints. Customers report acute embarrassment at point of sale.',
+        },
+      ],
       suggestedActions: [
         'Reduce authorization latency to <2s',
         'Tune fraud detection to reduce false positives',
@@ -813,8 +1029,24 @@ export class AnalysisDataService {
         '68% Detractor rate highest among Watch quadrant issues',
       ],
       evidence: [],
-      timelineReasoning:
-        'Fraud alert delays show no correlation with timeline events - this is a chronic infrastructure issue rather than incident-driven. Low volume keeps it in Watch rather than Critical.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Fraud Alert Delays is a security-critical Watch issue. Let me examine the delay metrics.',
+          action: 'Query Alert Timing Data',
+          observation:
+            'Average fraud alert delay: 47 minutes (target: <5 minutes). Weekend fraud detection 3x slower than weekdays. Delayed alerts result in £340 average additional fraud loss per incident.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check if this correlates with any timeline events or is a chronic issue.',
+          action: 'Analyse Temporal Patterns',
+          observation:
+            'No correlation with timeline events - this is a chronic infrastructure issue. Low volume (42 complaints) keeps it in Watch rather than Critical, but 68% Detractor rate is highest among Watch quadrant.',
+        },
+      ],
       suggestedActions: [
         'Implement real-time fraud alerting (<5 minute target)',
         'Extend 24/7 fraud monitoring coverage to weekends',
@@ -838,8 +1070,24 @@ export class AnalysisDataService {
         '60% cite "wasted time" as primary frustration',
       ],
       evidence: [],
-      timelineReasoning:
-        'Loan application errors show steady baseline with no event correlation. Issues are chronic rather than incident-driven, keeping this in Watch quadrant.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Loan Application Errors is in Watch. Let me understand the technical issues and customer value at risk.',
+          action: 'Analyse Application Failures',
+          observation:
+            'Application timeout rate: 8% (causes form restart). Document upload failures: 15%. Average affected customer loan value: £45,000. 60% cite "wasted time" as primary frustration.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check if there are any event correlations or if this is a chronic issue.',
+          action: 'Check Temporal Patterns',
+          observation:
+            'Steady baseline with no event correlation. Issues are chronic rather than incident-driven. Timeout rate improved from 12% to 8% last quarter.',
+        },
+      ],
       suggestedActions: [
         'Implement application save/resume functionality',
         'Fix document upload timeout issues',
@@ -863,8 +1111,24 @@ export class AnalysisDataService {
         'High media/regulatory risk despite low per-incident impact',
       ],
       evidence: [],
-      timelineReasoning:
-        'Interest calculation issues are sporadic with no event correlation. Low volume and moderate Detractor rate keep this in Watch, but regulatory risk warrants attention.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Interest Calculation Issues is in Watch with regulatory risk. Let me assess the scope.',
+          action: 'Analyse Calculation Errors',
+          observation:
+            'Rounding errors in 0.3% of calculations. Average customer impact: £12 per incident. 54% Detractor rate - lowest among negative topics. 28 complaints.',
+        },
+        {
+          step: 2,
+          thought:
+            'Despite low per-incident impact, this could be a regulatory risk. Let me check the pattern.',
+          action: 'Assess Regulatory Risk',
+          observation:
+            'Issues sporadic with no event correlation. Low volume and moderate Detractor rate keep this in Watch. However, calculation errors erode fundamental trust in banking accuracy and carry media/regulatory risk.',
+        },
+      ],
       suggestedActions: [
         'Audit interest calculation logic for rounding edge cases',
         'Implement automated reconciliation checks',
@@ -888,8 +1152,24 @@ export class AnalysisDataService {
         'App Store rating: 4.4 stars (up from 4.1)',
       ],
       evidence: [],
-      timelineReasoning:
-        'App satisfaction shows strong positive correlation with the January 20th update. The social sentiment band spiked positive immediately as users discovered dark mode and faster biometrics.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Mobile App Experience is a Strength. Let me understand what is driving the positive NPS.',
+          action: 'Analyse App Satisfaction Drivers',
+          observation:
+            'NPS +32 with 48% Promoters. Dark mode drove +15 NPS improvement. Biometric login satisfaction: 4.6/5 stars. App Store rating: 4.4 stars (up from 4.1).',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check if there are any negative signals that could undermine this strength.',
+          action: 'Check Detractor Drivers',
+          observation:
+            'Payee migration bug affected 8% of users. Navigation changes generated 15% increase in support calls. These are addressable issues that could push NPS above +40.',
+        },
+      ],
       suggestedActions: [
         'Feature dark mode success in marketing campaigns',
         'Survey Promoters for next feature priorities',
@@ -913,8 +1193,24 @@ export class AnalysisDataService {
         'Problem resolution rate: 78% first-visit resolution',
       ],
       evidence: [],
-      timelineReasoning:
-        'Branch service shows stable positive NPS without event correlation - this is consistent operational excellence rather than incident-driven improvement.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Branch Service Quality is our highest NPS topic. Let me understand what makes it successful.',
+          action: 'Analyse Branch Performance',
+          observation:
+            'NPS +42 with 55% Promoters - highest across all topics. Average wait time: 4.2 minutes (target: <5). Staff knowledge satisfaction: 4.7/5. 78% first-visit resolution rate.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check if this is event-driven or consistent operational excellence.',
+          action: 'Analyse Temporal Stability',
+          observation:
+            'Stable positive NPS without event correlation. This is consistent operational excellence - human touchpoint differentiating us from digital-only competitors.',
+        },
+      ],
       suggestedActions: [
         'Document and share best practices from top-performing branches',
         'Recognize high-performing staff to maintain morale',
@@ -938,8 +1234,16 @@ export class AnalysisDataService {
         'Competitor rewards programs cited in 22% of neutral feedback',
       ],
       evidence: [],
-      timelineReasoning:
-        'Rewards mentions show no event correlation - steady positive baseline. The Premium Card launch on January 15th drove temporary increase in rewards-related mentions.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Rewards Program is in the Noise quadrant - positive but low volume. Let me understand the engagement gap.',
+          action: 'Analyse Rewards Engagement',
+          observation:
+            'NPS +25 with 42% Promoters. Low volume (45 mentions) suggests low awareness. Cashback redemption rate: 68% (32% unredeemed). Competitor rewards programs cited in 22% of neutral feedback.',
+        },
+      ],
       suggestedActions: [
         'Increase rewards program awareness through in-app prompts',
         'Simplify redemption process to improve 68% redemption rate',
@@ -963,8 +1267,16 @@ export class AnalysisDataService {
         'Low volume indicates feature meets expectations',
       ],
       evidence: [],
-      timelineReasoning:
-        'Online statements show stable baseline with no event correlation. This is a "hygiene factor" - customers expect it to work but do not actively praise it.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Online Statement Access is in the Noise quadrant. Let me assess its performance as a utility feature.',
+          action: 'Query Statement Access Metrics',
+          observation:
+            'NPS +28 with 45% Promoters. PDF download success rate: 99.2%. Average page load: 1.8 seconds. Low volume (29 mentions) - customers expect it to work and notice when it does not.',
+        },
+      ],
       suggestedActions: [
         'Maintain current performance levels',
         'Consider statement customization features',
@@ -988,8 +1300,24 @@ export class AnalysisDataService {
         'Inconsistent messaging across app, email, and SMS',
       ],
       evidence: [],
-      timelineReasoning:
-        'Communication complaints spike 24-48 hours after major account events (payments, statement generation). Pattern suggests notification timing and clarity issues rather than system failures.',
+      reasoningSteps: [
+        {
+          step: 1,
+          thought:
+            'Communication issues span multiple channels. Let me identify the key failure points.',
+          action: 'Analyse Communication Metrics',
+          observation:
+            'NPS -15 with 38% Detractors. SMS delivery rate: 94% (below 99% target). Email open rate: 18% (industry avg: 22%). Inconsistent messaging across app, email, and SMS.',
+        },
+        {
+          step: 2,
+          thought:
+            'Let me check when communication complaints spike to understand timing issues.',
+          action: 'Analyse Complaint Timing',
+          observation:
+            'Communication complaints spike 24-48 hours after major account events (payments, statement generation). Pattern suggests notification timing and clarity issues rather than system failures.',
+        },
+      ],
       suggestedActions: [
         'Audit notification templates for clarity and consistency',
         'Implement real-time delivery confirmation tracking',
@@ -1587,8 +1915,23 @@ export class AnalysisDataService {
   }
 
   getInsight(context: AnalysisContext): Observable<ResearchInsight> {
-    // Use API only - no mock fallback for consistent demo data
-    return this.apiService.getInsight(context);
+    // Try API first, fall back to mock data if unavailable
+    return this.apiService.getInsight(context).pipe(
+      map((insight) => {
+        // API may return without reasoningSteps - enrich from mock data
+        if (!insight.reasoningSteps?.length) {
+          const mockInsight = this.getMockInsightSync(context);
+          if (mockInsight?.reasoningSteps?.length) {
+            insight.reasoningSteps = mockInsight.reasoningSteps;
+          }
+        }
+        return insight;
+      }),
+      catchError((err) => {
+        console.warn('API insight unavailable, using mock data:', err.message);
+        return this.getInsightFromMockData(context);
+      }),
+    );
   }
 
   /**
@@ -1604,93 +1947,7 @@ export class AnalysisDataService {
   private getInsightFromMockData(
     context: AnalysisContext,
   ): Observable<ResearchInsight> {
-    let insight: ResearchInsight;
-
-    // BUBBLE-SPECIFIC INSIGHTS - Generate contextual analysis when a bubble is selected
-    if (context.selectedBubble) {
-      insight = this.generateBubbleInsight(context.selectedBubble);
-    }
-    // Route to appropriate insight based on event type or context
-    else if (
-      context.event?.type === 'outage' ||
-      context.signal?.toLowerCase().includes('outage')
-    ) {
-      insight = { ...this.insights['payments-outage'] };
-    } else if (
-      context.event?.type === 'resolution' ||
-      context.signal?.toLowerCase().includes('resolved')
-    ) {
-      insight = { ...this.insights['outage-resolved'] };
-    } else if (
-      context.event?.type === 'launch' ||
-      context.signal?.toLowerCase().includes('premium card launch')
-    ) {
-      insight = { ...this.insights['card-launch'] };
-    } else if (
-      context.event?.type === 'issue' ||
-      context.signal?.toLowerCase().includes('mobile app update')
-    ) {
-      insight = { ...this.insights['app-update'] };
-    } else if (
-      context.event?.type === 'announcement' ||
-      context.signal?.toLowerCase().includes('fee change')
-    ) {
-      insight = { ...this.insights['fee-changes'] };
-    }
-    // Topic insights for quadrant items - match both old format and category labels from ES
-    else if (
-      context.signal?.toLowerCase().includes('payment processing') ||
-      context.signal?.toLowerCase().includes('payment issue')
-    ) {
-      insight = { ...this.insights['topic-payment-processing'] };
-    } else if (
-      context.signal?.toLowerCase().includes('overdraft fee') ||
-      context.signal?.toLowerCase().includes('fee dispute')
-    ) {
-      insight = { ...this.insights['topic-overdraft-fees'] };
-    } else if (context.signal?.toLowerCase().includes('card declined')) {
-      insight = { ...this.insights['topic-card-declined'] };
-    } else if (
-      context.signal?.toLowerCase().includes('fraud alert') ||
-      context.signal?.toLowerCase().includes('fraud & security') ||
-      context.signal?.toLowerCase().includes('fraud')
-    ) {
-      insight = { ...this.insights['topic-fraud-alerts'] };
-    } else if (context.signal?.toLowerCase().includes('loan application')) {
-      insight = { ...this.insights['topic-loan-applications'] };
-    } else if (context.signal?.toLowerCase().includes('interest calculation')) {
-      insight = { ...this.insights['topic-interest-calculation'] };
-    } else if (
-      context.signal?.toLowerCase().includes('mobile app experience') ||
-      context.signal?.toLowerCase().includes('technical problem')
-    ) {
-      insight = { ...this.insights['topic-mobile-app'] };
-    } else if (
-      context.signal?.toLowerCase().includes('branch service') ||
-      context.signal?.toLowerCase().includes('service quality')
-    ) {
-      insight = { ...this.insights['topic-branch-service'] };
-    } else if (
-      context.signal?.toLowerCase().includes('rewards program') ||
-      context.signal?.toLowerCase().includes('product feature')
-    ) {
-      insight = { ...this.insights['topic-rewards-program'] };
-    } else if (
-      context.signal?.toLowerCase().includes('online statement') ||
-      context.signal?.toLowerCase().includes('account access')
-    ) {
-      insight = { ...this.insights['topic-online-statements'] };
-    } else if (context.signal?.toLowerCase().includes('communication')) {
-      insight = { ...this.insights['topic-communication'] };
-    } else {
-      insight = { ...this.insights['default'] };
-    }
-
-    // Generate context-specific timeline reasoning (only override if specific content returned)
-    const generatedReasoning = this.generateTimelineReasoning(context);
-    if (!generatedReasoning.startsWith('Select a specific')) {
-      insight.timelineReasoning = generatedReasoning;
-    }
+    let insight = this.getMockInsightSync(context);
 
     // Properly attach evidence using switchMap
     return this.getEvidence(context).pipe(
@@ -1702,184 +1959,103 @@ export class AnalysisDataService {
     );
   }
 
-  private generateTimelineReasoning(context: AnalysisContext): string {
-    // Event-specific reasoning
+  /**
+   * Synchronously resolve the mock insight for a given context.
+   * Used both for full mock fallback and to enrich API responses with reasoning steps.
+   */
+  private getMockInsightSync(context: AnalysisContext): ResearchInsight {
+    // BUBBLE-SPECIFIC INSIGHTS - Generate contextual analysis when a bubble is selected
+    if (context.selectedBubble) {
+      return this.generateBubbleInsight(context.selectedBubble);
+    }
+    // Route to appropriate insight based on event type or context
     if (
       context.event?.type === 'outage' ||
       context.signal?.toLowerCase().includes('outage')
     ) {
-      return `**Incident Timeline Analysis:**
-
-• **T-3 days**: Social sentiment band shows early decline - customers discussing issues on Twitter/Reddit
-• **T-1 day**: Social chatter intensifies, sentiment drops sharply
-• **T-0 (14:42)**: Payment gateway failure detected by monitoring systems  
-• **T+15 min**: First wave of formal complaints submitted via digital channels
-• **T+2 hours**: Peak complaint volume reached (312 complaints/hour)
-• **T+36 min**: Services restored after database failover
-• **T+72 hours**: Sentiment recovered to pre-incident levels
-
-**Key Pattern:** The social sentiment band (purple-bordered on timeline) led formal complaints by ~3 days. Monitoring this band could enable proactive intervention before complaint volumes surge.`;
+      return { ...this.insights['payments-outage'] };
     }
-
-    if (
-      context.event?.type === 'announcement' ||
-      context.signal?.toLowerCase().includes('fee')
-    ) {
-      return `**Fee Change Impact Timeline:**
-
-• **Pre-announcement**: Baseline sentiment at -0.15 (within normal range)
-• **Day 0**: Fee change announced - immediate sentiment drop to -0.52
-• **Day 1-3**: Sustained complaint volume, primarily from 5+ year customers
-• **Day 7**: Media coverage amplified negative sentiment (-0.68 peak)
-• **Day 14**: Complaint volume stabilizing but sentiment remains depressed
-• **Day 30+**: Projected recovery to -0.30 (below pre-announcement baseline)
-
-**Key Pattern:** Unlike technical issues, fee-related sentiment shows no "resolution bounce". Customer trust degradation creates a persistent negative sentiment band.`;
-    }
-
-    // Resolution event
     if (
       context.event?.type === 'resolution' ||
       context.signal?.toLowerCase().includes('resolved')
     ) {
-      return `**Post-Resolution Recovery Timeline:**
-
-• **T+0**: Services restored - social media acknowledges fix immediately
-• **T+4 hours**: NPS begins recovering, social NPS leads by showing +15 point improvement
-• **T+24 hours**: Formal complaint volume drops 60%, NPS at -42 (up from -58)
-• **T+48 hours**: Compensation requests peak (35% of affected customers)
-• **T+7 days**: NPS stabilizes at -32, Detractor rate drops from 74% to 55%
-• **T+14 days**: Only 18% of Detractors converted to Passives or Promoters
-
-**Key Pattern:** Social sentiment leads recovery by ~12 hours. Proactive compensation outreach accelerates Detractor-to-Passive conversion by 40%.`;
+      return { ...this.insights['outage-resolved'] };
     }
-
-    // Card launch
     if (
       context.event?.type === 'launch' ||
-      context.signal?.toLowerCase().includes('launch') ||
-      context.signal?.toLowerCase().includes('premium') ||
-      context.signal?.toLowerCase().includes('card')
+      context.signal?.toLowerCase().includes('premium card launch')
     ) {
-      return `**Premium Card Launch Timeline:**
-
-• **Pre-launch**: Social buzz positive (NPS +25 among engaged followers)
-• **Day 0 AM**: Launch - early adopters celebrate approvals (NPS +32)
-• **Day 0 PM**: First rejection notifications sent
-• **Day 1-2**: Rejected applicant complaints surge, NPS drops to -15
-• **Day 3**: Social sentiment stabilizes, formal complaints plateau
-• **Day 7**: Overall NPS settles at +8 (mixed: approved +32, rejected -45)
-
-**Key Pattern:** Two distinct customer cohorts with opposite NPS trajectories. The 3-day social lead shows rejection frustration building on Twitter before formal complaints.`;
+      return { ...this.insights['card-launch'] };
     }
-
-    // App update
     if (
       context.event?.type === 'issue' ||
-      context.signal?.toLowerCase().includes('app') ||
-      context.signal?.toLowerCase().includes('update')
+      context.signal?.toLowerCase().includes('mobile app update')
     ) {
-      return `**App Update (v4.2.1) Impact Timeline:**
-
-• **T+0**: Update released - immediate positive social response (dark mode!)
-• **T+2 hours**: Tech reviewers praise biometric improvements (NPS +38)
-• **T+4 hours**: First payee data loss reports surface on social media
-• **T+12 hours**: Payee bug becomes trending complaint topic
-• **T+24 hours**: Formal complaints peak, affected users NPS -28
-• **T+48 hours**: Bug acknowledged, workaround published
-
-**Key Pattern:** Positive features masked emerging bug in aggregate NPS. Social monitoring detected payee issue 12+ hours before complaint surge - segmented NPS tracking by feature would catch this earlier.`;
+      return { ...this.insights['app-update'] };
     }
-
-    // Time window reasoning
-    if (context.timeWindow) {
-      const start = context.timeWindow.start.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-      });
-      const end = context.timeWindow.end.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-      });
-      return `**Selected Period Analysis (${start} – ${end}):**
-
-• **Volume Pattern**: Peak activity observed mid-week (Tuesday-Thursday)
-• **Sentiment Trend**: Gradual improvement through period (+0.12 change)
-• **Channel Mix**: 45% complaint portal, 32% social, 18% phone, 5% email
-• **Resolution Rate**: 67% resolved within SLA (target: 72%)
-
-**Anomaly Detected**: Unusual spike in card-related complaints on Tuesday correlates with batch processing delay identified at 14:30.
-
-**Comparison**: Volume is 13% higher than same period last month, primarily driven by new product issues.`;
+    if (
+      context.event?.type === 'announcement' ||
+      context.signal?.toLowerCase().includes('fee change')
+    ) {
+      return { ...this.insights['fee-changes'] };
     }
-
-    // Quadrant-specific reasoning
-    if (context.quadrant === 'critical') {
-      return `**Critical Quadrant Pattern Analysis:**
-
-• **Common Thread**: Top 3 issues share backend system dependencies
-• **Escalation Rate**: 34% of critical issues escalate beyond first contact
-• **Time to Resolution**: Average 4.2 days (vs 2.1 days for other quadrants)
-• **Repeat Rate**: 23% of customers had prior critical issues in past 90 days
-
-**Root Cause Mapping**:
-- Payment Processing Errors → Core banking integration
-- Overdraft Fee Disputes → Policy/system mismatch
-- Card Declined → Real-time authorization timeout
-
-**Recommendation**: System architecture review for shared dependencies.`;
+    // Topic insights for quadrant items - match both old format and category labels from ES
+    if (
+      context.signal?.toLowerCase().includes('payment processing') ||
+      context.signal?.toLowerCase().includes('payment issue')
+    ) {
+      return { ...this.insights['topic-payment-processing'] };
     }
-
-    if (context.quadrant === 'strength') {
-      return `**Strength Quadrant Success Factors:**
-
-• **First Contact Resolution**: 78% (vs 45% in Critical quadrant)
-• **Agent Empowerment**: Higher decision authority correlates with satisfaction
-• **Digital Self-Service**: 45% resolved via app without human intervention
-• **Proactive Communication**: Status updates every 24 hours
-
-**Why These Work**:
-- Mobile app issues have clear troubleshooting flows
-- Branch service benefits from face-to-face relationship building
-- Rewards inquiries have well-defined eligibility rules
-
-**Replication Opportunity**: Apply branch service training patterns to call center.`;
+    if (
+      context.signal?.toLowerCase().includes('overdraft fee') ||
+      context.signal?.toLowerCase().includes('fee dispute')
+    ) {
+      return { ...this.insights['topic-overdraft-fees'] };
     }
-
-    if (context.quadrant === 'watch') {
-      return `**Watch Quadrant Early Warning Analysis:**
-
-• **Volume Trend**: +15% growth in past 30 days (approaching critical threshold)
-• **Sentiment Trajectory**: Declining (-0.05/week)
-• **Risk Assessment**: 2 of 3 issues likely to migrate to Critical within 60 days
-
-**Emerging Patterns**:
-- Fraud Alert Delays correlate with new security implementation
-- Loan Application Errors increasing with online channel usage
-- Interest Calculation issues spike at statement generation time
-
-**Intervention Window**: Addressing root causes now prevents escalation.`;
+    if (context.signal?.toLowerCase().includes('card declined')) {
+      return { ...this.insights['topic-card-declined'] };
     }
-
-    // Journey stage reasoning
-    if (context.journeyStage) {
-      const stage = context.journeyStage.label;
-      return `**${stage} Stage Deep Dive:**
-
-• **Current Performance**: ${context.journeyStage.sentiment > 0 ? 'Positive' : 'Negative'} sentiment (${context.journeyStage.sentiment.toFixed(2)})
-• **Volume at Stage**: ${context.journeyStage.communications} communications
-• **Drop-off Rate**: 12% of cases stall at this stage
-
-**Bottleneck Analysis**:
-- Handoff friction between departments
-- System lookup delays averaging 4 minutes
-- Agent knowledge gaps for edge cases
-
-**Quick Wins**: Pre-populated templates could reduce handling time by 25%.`;
+    if (
+      context.signal?.toLowerCase().includes('fraud alert') ||
+      context.signal?.toLowerCase().includes('fraud & security') ||
+      context.signal?.toLowerCase().includes('fraud')
+    ) {
+      return { ...this.insights['topic-fraud-alerts'] };
     }
-
-    // Default reasoning
-    return 'Select a specific event, time range, or quadrant to see detailed timeline reasoning and pattern analysis.';
+    if (context.signal?.toLowerCase().includes('loan application')) {
+      return { ...this.insights['topic-loan-applications'] };
+    }
+    if (context.signal?.toLowerCase().includes('interest calculation')) {
+      return { ...this.insights['topic-interest-calculation'] };
+    }
+    if (
+      context.signal?.toLowerCase().includes('mobile app experience') ||
+      context.signal?.toLowerCase().includes('technical problem')
+    ) {
+      return { ...this.insights['topic-mobile-app'] };
+    }
+    if (
+      context.signal?.toLowerCase().includes('branch service') ||
+      context.signal?.toLowerCase().includes('service quality')
+    ) {
+      return { ...this.insights['topic-branch-service'] };
+    }
+    if (
+      context.signal?.toLowerCase().includes('rewards program') ||
+      context.signal?.toLowerCase().includes('product feature')
+    ) {
+      return { ...this.insights['topic-rewards-program'] };
+    }
+    if (
+      context.signal?.toLowerCase().includes('online statement') ||
+      context.signal?.toLowerCase().includes('account access')
+    ) {
+      return { ...this.insights['topic-online-statements'] };
+    }
+    if (context.signal?.toLowerCase().includes('communication')) {
+      return { ...this.insights['topic-communication'] };
+    }
+    return { ...this.insights['default'] };
   }
 
   /**
@@ -2007,18 +2183,32 @@ export class AnalysisDataService {
     // Theme insight
     keyDrivers.push(`Top themes: ${bubble.themes.slice(0, 3).join(', ')}`);
 
-    // Build timeline reasoning
-    let timelineReasoning = `**Period Analysis for ${dateStr}:**\n\n`;
-    timelineReasoning += `• **NPS Performance:** ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore} (${npsVsAvg >= 0 ? '+' : ''}${npsVsAvg.toFixed(0)} vs period average)\n`;
-    timelineReasoning += `• **Survey Volume:** ${bubble.volume} responses (${volumeRatio > 1.1 ? 'above' : volumeRatio < 0.9 ? 'below' : 'at'} typical)\n`;
-    timelineReasoning += `• **Promoters:** ${bubble.promoterPct}% ▲ | **Passives:** ${bubble.passivePct}% ● | **Detractors:** ${bubble.detractorPct}% ▼\n`;
-    timelineReasoning += `• **Social Alignment:** ${socialLeading === 'aligned' ? 'Social and survey sentiment aligned' : socialLeading === 'positive' ? 'Social more positive than surveys' : 'Social more negative than surveys'}\n\n`;
+    // Build reasoning steps for the bubble analysis
+    const reasoningSteps = [
+      {
+        step: 1,
+        thought: `I need to analyse the NPS data for ${dateStr} and compare it against the period average.`,
+        action: 'Query NPS Metrics',
+        observation: `NPS: ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore} (${npsVsAvg >= 0 ? '+' : ''}${npsVsAvg.toFixed(0)} vs period average). Promoters: ${bubble.promoterPct}%, Passives: ${bubble.passivePct}%, Detractors: ${bubble.detractorPct}%. Volume: ${bubble.volume} responses.`,
+      },
+      {
+        step: 2,
+        thought:
+          'Let me check social sentiment alignment and identify any leading indicators.',
+        action: 'Analyse Social Alignment',
+        observation: `Social sentiment: ${socialLeading === 'aligned' ? 'aligned with surveys' : socialLeading === 'positive' ? 'more positive than surveys' : 'more negative than surveys - potential early warning'}. Key themes: ${bubble.themes.join(', ')}.`,
+      },
+    ];
 
     if (prevBubble) {
-      timelineReasoning += `**Trend:** ${npsChange >= 0 ? 'Improvement' : 'Decline'} of ${Math.abs(npsChange)} points from ${prevBubble.npsScore > 0 ? '+' : ''}${prevBubble.npsScore} to ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}.\n\n`;
+      reasoningSteps.push({
+        step: 3,
+        thought:
+          'Let me compare with the previous period to identify the trend.',
+        action: 'Compare Trend',
+        observation: `${npsChange >= 0 ? 'Improvement' : 'Decline'} of ${Math.abs(npsChange)} points from ${prevBubble.npsScore > 0 ? '+' : ''}${prevBubble.npsScore} to ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}.`,
+      });
     }
-
-    timelineReasoning += `**Key Themes:** ${bubble.themes.join(', ')}`;
 
     // Build suggested actions
     const suggestedActions: string[] = [];
@@ -2073,7 +2263,7 @@ export class AnalysisDataService {
       keyDrivers,
       evidence: [], // Will be populated by getEvidence call
       totalCommunications: bubble.volume, // Use bubble volume as the total
-      timelineReasoning,
+      reasoningSteps,
       suggestedActions,
       suggestedFollowUp: {
         question: `What drove ${bubble.npsScore < avgNps ? 'the lower' : 'the higher'} NPS on ${dateStr}?`,
