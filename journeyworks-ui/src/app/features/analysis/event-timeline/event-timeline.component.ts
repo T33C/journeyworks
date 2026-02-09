@@ -1087,7 +1087,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
         <strong>${d3.timeFormat('%d %B %Y')(bubble.date)}</strong><br/>
         <div style="margin-top: 8px;">
           <strong style="font-size: 16px; color:${this.getSentimentColor(bubble.sentiment)}">
-            NPS: ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}
+            Est. NPS: ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}
           </strong>
         </div>
         <div style="margin-top: 6px; font-size: 11px;">
@@ -1100,7 +1100,10 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
         <div style="margin-top: 6px; font-size: 11px; color: #666;">
           <strong>Themes:</strong> ${bubble.themes.slice(0, 3).join(', ')}
         </div>
-        <div style="margin-top: 8px; font-size: 10px; color: #999;">Click for detailed analysis →</div>
+        <div style="margin-top: 6px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 6px;">
+          <em>NPS estimated from communication sentiment</em>
+        </div>
+        <div style="margin-top: 4px; font-size: 10px; color: #999;">Click for detailed analysis →</div>
       `,
       );
 

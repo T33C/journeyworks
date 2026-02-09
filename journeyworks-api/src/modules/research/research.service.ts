@@ -889,6 +889,21 @@ You analyze customer feedback, complaints, and social media sentiment to provide
 Always focus on NPS (Net Promoter Score) trends, Detractor/Promoter conversion, and early warning signals.
 Be specific with numbers and percentages from the data provided. Recommend concrete actions.
 
+IMPORTANT - NPS ESTIMATION METHODOLOGY:
+The NPS scores shown on the Sentiment-Weighted Event Timeline are ESTIMATED values, not from direct survey responses.
+They are derived from communication sentiment analysis using the following methodology:
+- Communication sentiment scores (ranging from -1.0 to +1.0) are aggregated per day
+- The average daily sentiment is mapped to a simulated Promoter/Passive/Detractor distribution:
+  • Very negative sentiment (< -0.5): ~70-84% Detractors, ~15-24% Passives → Est. NPS -55 to -70
+  • Negative sentiment (-0.5 to -0.2): ~50-64% Detractors, ~25-34% Passives → Est. NPS -30 to -50
+  • Neutral sentiment (-0.2 to +0.2): ~30-39% Detractors, ~35-44% Passives → Est. NPS -5 to -15
+  • Positive sentiment (+0.2 to +0.5): ~40-54% Promoters, ~30-39% Passives → Est. NPS +10 to +30
+  • Very positive sentiment (> +0.5): ~55-74% Promoters, ~25-34% Passives → Est. NPS +30 to +60
+- NPS = Promoter% − Detractor% (standard NPS formula, range -100 to +100)
+- The survey response count shown alongside bubbles indicates how many actual survey responses exist for that day,
+  but the NPS score itself is derived from sentiment, not from those surveys.
+When users ask how NPS is calculated, explain this methodology clearly. Always refer to bubble NPS as "Estimated NPS".
+
 CRITICAL for "Did we improve CX?" analysis:
 - If the final NPS is still NEGATIVE (below 0), the answer should be "Partially" or "No" - never "Yes, significantly"
 - Even if there's improvement from -50 to -10, ending negative means customers are still unsatisfied
@@ -1144,7 +1159,16 @@ Return ONLY valid JSON, no markdown code blocks or extra text.`);
     const systemPrompt = `You are an expert customer experience analyst for a financial services company. 
 You analyze customer feedback, complaints, and social media sentiment to provide actionable insights.
 Always focus on NPS (Net Promoter Score) trends, Detractor/Promoter conversion, and early warning signals.
-Be specific with numbers and percentages. Recommend concrete actions.`;
+Be specific with numbers and percentages. Recommend concrete actions.
+
+IMPORTANT - NPS ESTIMATION METHODOLOGY:
+The NPS scores shown on the Sentiment-Weighted Event Timeline are ESTIMATED values derived from communication sentiment,
+not from direct survey responses. Daily communication sentiment (-1 to +1) is mapped to simulated Promoter/Passive/Detractor
+distributions: very negative sentiment yields ~70-84% Detractors (Est. NPS -55 to -70), negative ~50-64% Detractors
+(Est. NPS -30 to -50), neutral ~30-39% Detractors (Est. NPS -5 to -15), positive ~40-54% Promoters (Est. NPS +10 to +30),
+very positive ~55-74% Promoters (Est. NPS +30 to +60). NPS = Promoter% − Detractor%. The survey count shown alongside
+bubbles is how many actual surveys exist, but the NPS score itself is sentiment-derived. Always refer to bubble NPS
+as "Estimated NPS" and explain this methodology when users ask how NPS is calculated.`;
 
     const userPrompt = `Analyze the following customer experience context and provide insights:
 
@@ -1226,7 +1250,9 @@ Return ONLY valid JSON, no markdown formatting.`;
         parts.push(`Sentiment: ${context.selectedBubble.sentiment}`);
       }
       if (context.selectedBubble.npsScore !== undefined) {
-        parts.push(`NPS Score: ${context.selectedBubble.npsScore}`);
+        parts.push(
+          `Estimated NPS Score: ${context.selectedBubble.npsScore} (derived from communication sentiment, not survey data)`,
+        );
       }
     }
 

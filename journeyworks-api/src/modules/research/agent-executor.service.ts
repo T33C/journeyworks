@@ -892,6 +892,17 @@ export class AgentExecutor {
       'what insights can you',
       'what reports can you',
       'what information can you',
+      'how is nps',
+      'how nps is',
+      'how are nps',
+      'what is nps',
+      'nps calculated',
+      'nps methodology',
+      'nps estimation',
+      'how do you calculate nps',
+      'how do you estimate nps',
+      'explain nps',
+      'how does nps work',
     ];
     return metaPatterns.some((pattern) => q.includes(pattern));
   }
@@ -1272,23 +1283,18 @@ Return only the questions, one per line.`;
 
   /**
    * Prompt the LLM with a timeout to prevent indefinite hangs.
-   * Wraps llmClient.prompt() with Promise.race.
+   * Uses centralized timeout handling with timer cleanup.
    */
-  private async promptWithTimeout(
+  private promptWithTimeout(
     prompt: string,
     systemPrompt?: string,
     options?: { rateLimitKey?: string },
   ): Promise<string> {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error('LLM call timed out')),
-        AGENT_CONFIG.LLM_TIMEOUT_MS,
-      );
-    });
-
-    return Promise.race([
-      this.llmClient.prompt(prompt, systemPrompt, options),
-      timeoutPromise,
-    ]);
+    return this.llmClient.promptWithTimeout(
+      prompt,
+      systemPrompt,
+      options,
+      AGENT_CONFIG.LLM_TIMEOUT_MS,
+    );
   }
 }

@@ -63,6 +63,22 @@
  */
 export const REACT_AGENT_PROMPT = `You are an intelligent agent that can use tools to help answer questions and complete tasks.
 
+PLATFORM METHODOLOGY — NPS ESTIMATION:
+The NPS scores shown on the Sentiment-Weighted Event Timeline bubbles are ESTIMATED values, not from direct survey responses.
+They are derived from communication sentiment analysis using the following methodology:
+- Communication sentiment scores (ranging from -1.0 to +1.0) are aggregated per day.
+- The average daily sentiment is mapped to a simulated Promoter/Passive/Detractor distribution:
+  • Very negative sentiment (< -0.5): ~70-84% Detractors, ~15-24% Passives → Est. NPS -55 to -70
+  • Negative sentiment (-0.5 to -0.2): ~50-64% Detractors, ~25-34% Passives → Est. NPS -30 to -50
+  • Neutral sentiment (-0.2 to +0.2): ~30-39% Detractors, ~35-44% Passives → Est. NPS -5 to -15
+  • Positive sentiment (+0.2 to +0.5): ~40-54% Promoters, ~30-39% Passives → Est. NPS +10 to +30
+  • Very positive sentiment (> +0.5): ~55-74% Promoters, ~25-34% Passives → Est. NPS +30 to +60
+- NPS = Promoter% − Detractor% (standard NPS formula, range -100 to +100).
+- The survey response count shown alongside bubbles indicates how many actual survey responses exist for that day,
+  but the NPS score itself is derived from communication sentiment, not from those surveys.
+- The gold ring around a bubble indicates that real survey responses exist for that day.
+When users ask how NPS is calculated, explain this methodology clearly. Always refer to bubble NPS as "Estimated NPS".
+
 Available Tools:
 {{tools}}
 
@@ -94,6 +110,7 @@ Rules:
 - CRITICAL: NEVER fabricate, invent, or estimate data/statistics. You MUST use tools to retrieve real data.
 - CRITICAL: Your FIRST response MUST be a tool call (Action), NOT a Final Answer. You are FORBIDDEN from providing a Final Answer before calling at least one tool.
 - EXCEPTION: If the user is asking about YOUR capabilities, what analysis you can perform, what tools you have, or how you can help — you MAY provide a Final Answer immediately without calling a tool. Describe your capabilities in clear, grouped categories with plain-language explanations. You MUST include the example questions listed under each tool so the user can see exactly what they can ask. Present them as quoted suggestions (e.g. "Try asking: '...'").
+- EXCEPTION: If the user is asking how NPS is calculated, how NPS works, or about NPS methodology — you MAY provide a Final Answer immediately using the NPS estimation methodology described in your system prompt. Do NOT search the knowledge base for this — it is platform-internal methodology that will not appear in customer communications.
 - For any question involving metrics, counts, breakdowns, or analysis, you MUST call at least one tool first.
 - Use tools when you need information you don't have
 - Think step by step
