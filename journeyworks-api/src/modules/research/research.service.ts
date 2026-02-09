@@ -335,6 +335,7 @@ export class ResearchService {
    */
   getExampleQuestions(): string[] {
     return [
+      'What kind of analysis can you perform?',
       'What are the main concerns raised by customers in the last month?',
       'Which customers have declining sentiment and why?',
       'What topics are trending in customer communications?',
