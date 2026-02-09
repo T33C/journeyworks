@@ -321,9 +321,11 @@ export class AgentExecutor {
 
     // Check for final answer
     if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
+      const isMeta = this.isMetaQuestion(request.query);
       if (
         state.actions.length === 0 &&
-        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS
+        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS &&
+        !isMeta
       ) {
         this.logger.warn(
           `[Streaming] Iteration ${state.iteration}: Agent attempted Final Answer without calling any tools - forcing tool use`,
@@ -780,9 +782,12 @@ export class AgentExecutor {
     if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
       // Prevent premature Final Answer - require at least one tool call
       // Allow Final Answer after MIN_TOOL_FORCE_ITERATIONS to prevent infinite loops
+      // EXCEPTION: Meta questions about capabilities can be answered immediately
+      const isMeta = this.isMetaQuestion(request.query);
       if (
         state.actions.length === 0 &&
-        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS
+        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS &&
+        !isMeta
       ) {
         this.logger.warn(
           `Iteration ${state.iteration}: Agent attempted Final Answer without calling any tools - forcing tool use`,
@@ -855,6 +860,40 @@ export class AgentExecutor {
     step.observation = this.formatObservation(output);
 
     state.steps.push(step);
+  }
+
+  /**
+   * Detect whether the user is asking about the agent's own capabilities,
+   * available tools, or what kind of analysis it can perform.
+   * These "meta" questions can be answered directly without tool calls.
+   */
+  private isMetaQuestion(query: string): boolean {
+    const q = query.toLowerCase();
+    const metaPatterns = [
+      'what can you do',
+      'what do you do',
+      'what are you capable',
+      'what are your capabilities',
+      'what tools do you have',
+      'what tools are available',
+      'list your tools',
+      'describe your tools',
+      'what kind of analysis',
+      'what types of analysis',
+      'what analysis can you',
+      'how can you help',
+      'what can you help',
+      'what are you able to',
+      'tell me about your',
+      'explain your capabilities',
+      'what functions do you',
+      'what features do you',
+      'help me understand what you can',
+      'what insights can you',
+      'what reports can you',
+      'what information can you',
+    ];
+    return metaPatterns.some((pattern) => q.includes(pattern));
   }
 
   /**
