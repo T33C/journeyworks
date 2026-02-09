@@ -32,6 +32,11 @@ import {
   ENTITY_EXTRACTION_PROMPT,
   SUMMARY_PROMPT,
   COMPREHENSIVE_ANALYSIS_PROMPT,
+  TOPIC_ANALYSIS_PROMPT,
+  SENTIMENT_ANALYSIS_AGGREGATE_PROMPT,
+  RISK_ASSESSMENT_PROMPT,
+  ISSUE_DETECTION_PROMPT,
+  RELATIONSHIP_SUMMARY_PROMPT,
 } from './prompts/analysis';
 
 // RAG prompts
@@ -165,6 +170,17 @@ export class PromptTemplateService {
     this.registerTemplate(
       'analysis:comprehensive',
       COMPREHENSIVE_ANALYSIS_PROMPT,
+    );
+    this.registerTemplate('analysis:topic_analysis', TOPIC_ANALYSIS_PROMPT);
+    this.registerTemplate(
+      'analysis:sentiment_analysis',
+      SENTIMENT_ANALYSIS_AGGREGATE_PROMPT,
+    );
+    this.registerTemplate('analysis:risk_assessment', RISK_ASSESSMENT_PROMPT);
+    this.registerTemplate('analysis:issue_detection', ISSUE_DETECTION_PROMPT);
+    this.registerTemplate(
+      'analysis:relationship_summary',
+      RELATIONSHIP_SUMMARY_PROMPT,
     );
 
     // RAG prompts
