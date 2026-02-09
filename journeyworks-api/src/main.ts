@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import axios from 'axios';
 
@@ -34,6 +35,9 @@ async function bootstrap() {
     origin: ['http://localhost:4200', 'http://localhost:4280'],
     credentials: true,
   });
+
+  // Configure WebSocket adapter for Socket.IO
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   // Global validation pipe
   app.setGlobalPrefix('api');

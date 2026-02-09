@@ -364,3 +364,108 @@ export interface InsightRequest {
   /** Whether to use cached insights */
   useCache?: boolean;
 }
+
+// =============================================================================
+// Streaming Event Types (for WebSocket real-time updates)
+// =============================================================================
+
+/**
+ * Event types for streaming research progress
+ */
+export type StreamEventType =
+  | 'connected'
+  | 'thinking'
+  | 'reasoning-step'
+  | 'tool-call'
+  | 'tool-result'
+  | 'complete'
+  | 'error';
+
+/**
+ * Base streaming event
+ */
+export interface StreamEvent {
+  type: StreamEventType;
+  timestamp: string;
+  sessionId: string;
+}
+
+/**
+ * Event when WebSocket connects
+ */
+export interface ConnectedEvent extends StreamEvent {
+  type: 'connected';
+}
+
+/**
+ * Event when agent is thinking (LLM call in progress)
+ */
+export interface ThinkingEvent extends StreamEvent {
+  type: 'thinking';
+  iteration: number;
+  maxIterations: number;
+}
+
+/**
+ * Event when a reasoning step is parsed
+ */
+export interface ReasoningStepEvent extends StreamEvent {
+  type: 'reasoning-step';
+  step: ReasoningStep;
+}
+
+/**
+ * Event when a tool is about to be called
+ */
+export interface ToolCallEvent extends StreamEvent {
+  type: 'tool-call';
+  tool: string;
+  input: any;
+  iteration: number;
+}
+
+/**
+ * Event when a tool completes
+ */
+export interface ToolResultEvent extends StreamEvent {
+  type: 'tool-result';
+  tool: string;
+  success: boolean;
+  duration: number;
+  outputSummary: string;
+  error?: string;
+}
+
+/**
+ * Event when research completes
+ */
+export interface CompleteEvent extends StreamEvent {
+  type: 'complete';
+  response: ResearchResponse;
+}
+
+/**
+ * Event when an error occurs
+ */
+export interface ErrorEvent extends StreamEvent {
+  type: 'error';
+  message: string;
+  code?: string;
+}
+
+/**
+ * Union type for all streaming events
+ */
+export type ResearchStreamEvent =
+  | ConnectedEvent
+  | ThinkingEvent
+  | ReasoningStepEvent
+  | ToolCallEvent
+  | ToolResultEvent
+  | CompleteEvent
+  | ErrorEvent;
+
+/**
+ * Callback for streaming events
+ */
+export type StreamEventCallback = (event: ResearchStreamEvent) => void;

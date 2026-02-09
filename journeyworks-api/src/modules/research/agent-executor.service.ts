@@ -19,6 +19,7 @@ import {
   ReasoningStep,
   AgentAction,
   AgentState,
+  StreamEventCallback,
 } from './research.types';
 
 /** Agent configuration constants */
@@ -171,6 +172,314 @@ export class AgentExecutor {
         model: this.modelName,
       },
     };
+  }
+
+  /**
+   * Execute the research agent with streaming events.
+   * Emits progress events via the callback as the agent works through
+   * the ReAct loop, enabling real-time UI updates via WebSocket.
+   */
+  async executeStreaming(
+    request: ResearchRequest,
+    sessionId: string,
+    onEvent: StreamEventCallback,
+  ): Promise<ResearchResponse> {
+    const startTime = Date.now();
+    const maxIterations = request.maxIterations || this.defaultMaxIterations;
+    const timestamp = () => new Date().toISOString();
+
+    // Initialize agent state
+    const state: AgentState = {
+      iteration: 0,
+      maxIterations,
+      steps: [],
+      actions: [],
+      sources: [],
+      isDone: false,
+    };
+
+    this.logger.log(
+      `Starting streaming agent execution for query: "${request.query}"`,
+    );
+
+    // Main agent loop
+    while (!state.isDone && state.iteration < maxIterations) {
+      state.iteration++;
+      this.logger.debug(
+        `[Streaming] Agent iteration ${state.iteration}/${maxIterations}`,
+      );
+
+      // Emit thinking event
+      onEvent({
+        type: 'thinking',
+        timestamp: timestamp(),
+        sessionId,
+        iteration: state.iteration,
+        maxIterations,
+      });
+
+      try {
+        await this.runStreamingIteration(request, state, sessionId, onEvent);
+      } catch (error) {
+        this.logger.error(
+          `[Streaming] Agent iteration failed: ${error.message}`,
+        );
+        state.error = error.message;
+        state.isDone = true;
+
+        onEvent({
+          type: 'error',
+          timestamp: timestamp(),
+          sessionId,
+          message: error.message,
+          code: error instanceof AgentExecutionError ? error.code : 'UNKNOWN',
+        });
+        break;
+      }
+    }
+
+    // If we hit max iterations without finishing, synthesize an answer
+    if (!state.isDone && !state.finalAnswer) {
+      onEvent({
+        type: 'thinking',
+        timestamp: timestamp(),
+        sessionId,
+        iteration: state.iteration,
+        maxIterations,
+      });
+      state.finalAnswer = await this.synthesizeFinalAnswer(request, state);
+    }
+
+    const totalTime = Date.now() - startTime;
+
+    // Generate follow-up questions
+    const followUpQuestions = await this.generateFollowUpQuestions(
+      request,
+      state,
+    );
+
+    const response: ResearchResponse = {
+      answer:
+        state.finalAnswer || 'I was unable to find a satisfactory answer.',
+      confidence: this.calculateConfidence(state),
+      sources: this.deduplicateSources(state.sources),
+      charts: this.extractChartsFromActions(state),
+      reasoning: state.steps,
+      actions: state.actions,
+      followUpQuestions,
+      stats: {
+        totalTime,
+        iterations: state.iteration,
+        toolCalls: state.actions.length,
+        model: this.modelName,
+      },
+    };
+
+    // Emit complete event
+    onEvent({
+      type: 'complete',
+      timestamp: timestamp(),
+      sessionId,
+      response,
+    });
+
+    return response;
+  }
+
+  /**
+   * Run a single streaming iteration of the agent loop.
+   * Emits reasoning-step, tool-call, and tool-result events.
+   */
+  private async runStreamingIteration(
+    request: ResearchRequest,
+    state: AgentState,
+    sessionId: string,
+    onEvent: StreamEventCallback,
+  ): Promise<void> {
+    const timestamp = () => new Date().toISOString();
+
+    // Build the prompt with scratchpad
+    const prompt = this.buildPrompt(request, state);
+
+    // Get the agent's response
+    const response = await this.promptWithTimeout(
+      prompt,
+      this.promptTemplate.getTemplate('system:researcher'),
+      { rateLimitKey: 'llm:agent' },
+    );
+
+    // Parse the response
+    const parsed = this.parseAgentResponse(response);
+
+    // Create the reasoning step
+    const step: ReasoningStep = {
+      step: state.iteration,
+      thought: parsed.thought,
+      action: parsed.action,
+      actionInput: parsed.actionInput,
+    };
+
+    // Check for final answer
+    if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
+      if (
+        state.actions.length === 0 &&
+        state.iteration < AGENT_CONFIG.MIN_TOOL_FORCE_ITERATIONS
+      ) {
+        this.logger.warn(
+          `[Streaming] Iteration ${state.iteration}: Agent attempted Final Answer without calling any tools - forcing tool use`,
+        );
+        const suggestedTool = this.suggestToolForQuery(request.query);
+        step.thought = `${parsed.thought}\n\n[System: REJECTED - You MUST call at least one tool before providing a Final Answer. Do NOT fabricate data. ${suggestedTool}]`;
+        step.action = undefined;
+        step.observation = `SYSTEM OVERRIDE: Final Answer rejected because no tools have been called yet (iteration ${state.iteration}). You MUST output an Action with a tool call on your next response.`;
+        state.steps.push(step);
+
+        // Emit the rejected reasoning step
+        onEvent({
+          type: 'reasoning-step',
+          timestamp: timestamp(),
+          sessionId,
+          step,
+        });
+        return;
+      } else {
+        if (state.actions.length === 0) {
+          this.logger.warn(
+            `[Streaming] Iteration ${state.iteration}: Allowing Final Answer without tool calls (safety valve)`,
+          );
+        }
+        state.isDone = true;
+        state.finalAnswer = parsed.finalAnswer || parsed.actionInput;
+        state.steps.push(step);
+
+        // Emit the final reasoning step
+        onEvent({
+          type: 'reasoning-step',
+          timestamp: timestamp(),
+          sessionId,
+          step,
+        });
+        return;
+      }
+    }
+
+    // Guard: no action parsed
+    if (!parsed.action) {
+      this.logger.warn(
+        `[Streaming] Iteration ${state.iteration}: No parseable Action - redirecting`,
+      );
+      const suggestedTool = this.suggestToolForQuery(request.query);
+      step.observation = `SYSTEM: Your response did not contain a valid Action. You must respond in the exact format:\nThought: [your reasoning]\nAction: {"tool": "tool_name", "input": {"param": "value"}}\n\n${suggestedTool}`;
+      state.steps.push(step);
+
+      onEvent({
+        type: 'reasoning-step',
+        timestamp: timestamp(),
+        sessionId,
+        step,
+      });
+      return;
+    }
+
+    // Emit reasoning step (before tool call)
+    onEvent({
+      type: 'reasoning-step',
+      timestamp: timestamp(),
+      sessionId,
+      step: { ...step }, // snapshot before observation is added
+    });
+
+    // Emit tool-call event
+    onEvent({
+      type: 'tool-call',
+      timestamp: timestamp(),
+      sessionId,
+      tool: parsed.action,
+      input: parsed.actionInput,
+      iteration: state.iteration,
+    });
+
+    // Execute the action
+    const actionStart = Date.now();
+    let output: any;
+    let success = true;
+    let error: string | undefined;
+
+    try {
+      const result = await this.tools.executeTool(
+        parsed.action,
+        parsed.actionInput,
+      );
+      output = result.output;
+      state.sources.push(...result.sources);
+    } catch (e) {
+      success = false;
+      error = e.message;
+      output = { error: e.message };
+    }
+
+    const duration = Date.now() - actionStart;
+
+    const action: AgentAction = {
+      tool: parsed.action,
+      input: parsed.actionInput,
+      output,
+      duration,
+      success,
+      error,
+    };
+    state.actions.push(action);
+
+    step.observation = this.formatObservation(output);
+    state.steps.push(step);
+
+    // Emit tool-result event
+    onEvent({
+      type: 'tool-result',
+      timestamp: timestamp(),
+      sessionId,
+      tool: parsed.action,
+      success,
+      duration,
+      outputSummary: this.summarizeToolOutput(output),
+      error,
+    });
+  }
+
+  /**
+   * Summarize tool output for streaming (brief, for UI display)
+   */
+  private summarizeToolOutput(output: any): string {
+    if (!output) return 'No output';
+    if (typeof output === 'string') return output.substring(0, 200);
+    if (output.error) return `Error: ${output.error}`;
+
+    // Summarize based on common output patterns
+    const keys = Object.keys(output);
+    const parts: string[] = [];
+
+    if (output.totalResults !== undefined) {
+      parts.push(`${output.totalResults} results found`);
+    }
+    if (output.answer) {
+      parts.push(output.answer.substring(0, 100));
+    }
+    if (output.results?.length !== undefined) {
+      parts.push(`${output.results.length} items`);
+    }
+    if (output.sentimentBreakdown) {
+      const b = output.sentimentBreakdown;
+      parts.push(
+        `Sentiment: +${b.positive || 0} =${b.neutral || 0} -${b.negative || 0}`,
+      );
+    }
+    if (output.daily?.length) {
+      parts.push(`${output.daily.length} days of data`);
+    }
+
+    return parts.length > 0
+      ? parts.join(' | ')
+      : `Returned ${keys.length} field(s)`;
   }
 
   // Theme colors from chart.config.ts
@@ -583,6 +892,21 @@ export class AgentExecutor {
     }
     if (q.includes('risk')) {
       return 'Try calling: Action: {"tool": "assess_risk", "input": {}}';
+    }
+    if (
+      q.includes('issue') ||
+      q.includes('problem') ||
+      q.includes('detect') ||
+      q.includes('recurring')
+    ) {
+      return 'Try calling: Action: {"tool": "detect_issues", "input": {}}';
+    }
+    if (
+      q.includes('relationship') ||
+      q.includes('history with') ||
+      q.includes('interactions with')
+    ) {
+      return 'Try calling: Action: {"tool": "get_relationship_summary", "input": {"customerId": "<ID>"}}';
     }
     // Default suggestion
     return (

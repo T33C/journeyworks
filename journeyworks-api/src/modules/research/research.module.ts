@@ -8,6 +8,7 @@
 import { Module } from '@nestjs/common';
 import { ResearchService } from './research.service';
 import { ResearchController } from './research.controller';
+import { ResearchGateway } from './research.gateway';
 import { AgentExecutor } from './agent-executor.service';
 import { AgentTools } from './agent-tools.service';
 import { InsightDataService } from './insight-data.service';
@@ -28,7 +29,13 @@ import { ElasticsearchModule } from '../../infrastructure/elasticsearch';
     ElasticsearchModule,
   ],
   controllers: [ResearchController],
-  providers: [ResearchService, AgentExecutor, AgentTools, InsightDataService],
+  providers: [
+    ResearchService,
+    AgentExecutor,
+    AgentTools,
+    InsightDataService,
+    ResearchGateway,
+  ],
   exports: [ResearchService],
 })
 export class ResearchModule {}

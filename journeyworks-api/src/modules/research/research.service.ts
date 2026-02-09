@@ -225,6 +225,39 @@ export class ResearchService {
   }
 
   /**
+   * Add a conversation turn (used by the WebSocket gateway to persist
+   * streaming research results into the conversation history)
+   */
+  async addConversationTurn(
+    conversationId: string,
+    query: string,
+    response: ResearchResponse,
+  ): Promise<void> {
+    const history = await this.getConversationHistory(conversationId);
+
+    history.push({
+      role: 'user',
+      content: query,
+      timestamp: new Date().toISOString(),
+    });
+    history.push({
+      role: 'assistant',
+      content: response.answer,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Keep only last N turns
+    if (history.length > ResearchService.MAX_CONVERSATION_HISTORY) {
+      history.splice(
+        0,
+        history.length - ResearchService.MAX_CONVERSATION_HISTORY,
+      );
+    }
+
+    await this.saveConversationHistory(conversationId, history);
+  }
+
+  /**
    * Clear conversation history
    */
   async clearConversation(conversationId: string): Promise<void> {

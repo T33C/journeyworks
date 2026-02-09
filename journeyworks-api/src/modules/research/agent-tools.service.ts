@@ -1172,6 +1172,82 @@ export class AgentTools {
         }
       },
     });
+
+    // Issue Detection Tool
+    this.tools.set('detect_issues', {
+      name: 'detect_issues',
+      description:
+        'Detect and categorize issues from customer communications. Identifies recurring problems, systemic issues, and urgent complaints. Focuses on negative sentiment and high-priority messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: {
+            type: 'string',
+            description: 'Optional customer ID to filter',
+          },
+          timeRange: {
+            type: 'string',
+            description:
+              'Optional time range filter. Only specify if the user explicitly requests a date range (e.g., "last 7 days", "this month"). Omit to search all data.',
+          },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card", "Cash ISA"). Accepts product names, slugs, or aliases.',
+          },
+        },
+      },
+      execute: async (input) => {
+        const timeRange = input.timeRange
+          ? this.parseTimeRange(input.timeRange)
+          : undefined;
+        const product = this.normalizeProduct(input.product);
+        const result = await this.analysisService.analyze({
+          type: 'issue-detection',
+          targetId: input.customerId,
+          product,
+          timeRange,
+        });
+        return {
+          summary: result.summary,
+          issueCount: result.metrics.issueCount,
+          problematicCount: result.metrics.problematicCount,
+          totalCommunications: result.metrics.totalCommunications,
+          insights: result.insights?.slice(0, 5),
+          recommendations: result.recommendations,
+        };
+      },
+    });
+
+    // Relationship Summary Tool
+    this.tools.set('get_relationship_summary', {
+      name: 'get_relationship_summary',
+      description:
+        'Get a comprehensive relationship summary for a specific customer. Analyzes their full communication history to assess relationship health, sentiment trajectory, key interactions, and active issues.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customerId: {
+            type: 'string',
+            description: 'The customer ID to summarize',
+          },
+        },
+        required: ['customerId'],
+      },
+      execute: async (input) => {
+        const result = await this.analysisService.analyze({
+          type: 'relationship-summary',
+          targetId: input.customerId,
+        });
+        return {
+          summary: result.summary,
+          customerName: result.metrics.customerName,
+          communicationCount: result.metrics.communicationCount,
+          firstContact: result.metrics.firstContact,
+          lastContact: result.metrics.lastContact,
+        };
+      },
+    });
   }
 
   /**
@@ -1210,7 +1286,7 @@ export class AgentTools {
             title:
               item.summary || item.content?.substring(0, 50) || 'Communication',
             relevance: item.score || item.similarity || 0.5,
-            excerpt: item.content?.substring(0, 200),
+            excerpt: item.content?.substring(0, 500),
             metadata: item.metadata,
           });
         }
@@ -1223,7 +1299,7 @@ export class AgentTools {
             id: doc.id || 'unknown',
             title: doc.summary || doc.subject || 'Document',
             relevance: 0.5,
-            excerpt: doc.content?.substring(0, 200),
+            excerpt: doc.content?.substring(0, 500),
           });
         }
       }
