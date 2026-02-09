@@ -7,6 +7,7 @@ import {
   ViewChild,
   ElementRef,
   AfterViewChecked,
+  OnInit,
   HostListener,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -23,21 +24,29 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { AnalysisStateService } from '../../../core/services/analysis-state.service';
 import { AnalysisDataService } from '../../../core/services/analysis-data.service';
-import { ResearchService } from '../../../core/services/research.service';
+import {
+  ResearchService,
+  LiveReasoningStep,
+  ReasoningStep,
+} from '../../../core/services/research.service';
 import {
   ResearchInsight,
   EvidenceItem,
   AnalysisContext,
 } from '../../../core/models/analysis.model';
 import { InsightChartCardComponent } from './insight-chart-card.component';
+import { ReasoningSummaryComponent } from './reasoning-summary/reasoning-summary.component';
 
 interface ChatMessage {
   role: 'user' | 'ai';
   message: string;
   timestamp?: Date;
+  reasoningSteps?: ReasoningStep[];
 }
 
 @Component({
@@ -55,14 +64,16 @@ interface ChatMessage {
     MatInputModule,
     MatDividerModule,
     MatProgressSpinnerModule,
+    MatProgressBarModule,
     MatTooltipModule,
     MarkdownPipe,
     InsightChartCardComponent,
+    ReasoningSummaryComponent,
   ],
   templateUrl: './research-panel.component.html',
   styleUrl: './research-panel.component.scss',
 })
-export class ResearchPanelComponent implements AfterViewChecked {
+export class ResearchPanelComponent implements OnInit, AfterViewChecked {
   private stateService = inject(AnalysisStateService);
   private dataService = inject(AnalysisDataService);
   private researchService = inject(ResearchService);
@@ -77,6 +88,7 @@ export class ResearchPanelComponent implements AfterViewChecked {
   insight = signal<ResearchInsight | null>(null);
   chatInput = '';
   isChatExpanded = signal(false);
+  showLiveReasoning = signal(false);
   private shouldScrollToBottom = false;
 
   // Chat history - computed from the shared ResearchService for persistence
@@ -87,12 +99,21 @@ export class ResearchPanelComponent implements AfterViewChecked {
       role: msg.role === 'user' ? 'user' : 'ai',
       message: msg.content,
       timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
+      reasoningSteps: msg.reasoningSteps,
     })) as ChatMessage[];
   });
 
   // Shared conversation state from ResearchService
   readonly hasSharedConversation = this.researchService.hasConversation;
   readonly sharedMessageCount = this.researchService.messageCount;
+
+  // Agent reasoning state from ResearchService (live streaming)
+  readonly liveReasoningSteps = this.researchService.liveReasoningSteps;
+  readonly currentToolCall = this.researchService.currentToolCall;
+  readonly currentThinkingState = this.researchService.currentThinkingState;
+  readonly isStreamingReasoning = this.researchService.isStreaming;
+  readonly streamStatus = this.researchService.streamStatus;
+  readonly wsConnected = this.researchService.wsConnected;
 
   // Resize state
   chatHeight = signal<number | null>(null); // null means use CSS default
@@ -220,7 +241,23 @@ export class ResearchPanelComponent implements AfterViewChecked {
         this.isTyping.set(false);
       }
     });
-    // No auto-load on init - show empty state until user interacts
+
+    // React to streaming completion — clear typing indicator when agent finishes
+    effect(() => {
+      const streaming = this.researchService.isStreaming();
+      const loading = this.researchService.isLoading();
+      // When streaming was active and has now completed
+      if (!streaming && !loading && this.isTyping()) {
+        // Use untracked to avoid circular dependency
+        this.isTyping.set(false);
+        this.shouldScrollToBottom = true;
+      }
+    });
+  }
+
+  ngOnInit(): void {
+    // Connect WebSocket eagerly for live reasoning during chat
+    this.researchService.connectWebSocket();
   }
 
   ngAfterViewChecked() {
@@ -277,9 +314,15 @@ export class ResearchPanelComponent implements AfterViewChecked {
 
   private loadInsight(context: AnalysisContext) {
     this.isLoading.set(true);
-    this.dataService.getInsight(context).subscribe((data) => {
-      this.insight.set(data);
-      this.isLoading.set(false);
+    this.dataService.getInsight(context).subscribe({
+      next: (data) => {
+        this.insight.set(data);
+        this.isLoading.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load insight:', err);
+        this.isLoading.set(false);
+      },
     });
   }
 
@@ -319,6 +362,7 @@ export class ResearchPanelComponent implements AfterViewChecked {
 
     this.chatInput = '';
     this.shouldScrollToBottom = true;
+    this.showLiveReasoning.set(false);
 
     // Auto-expand chat when user sends a message
     if (!this.isChatExpanded()) {
@@ -328,16 +372,48 @@ export class ResearchPanelComponent implements AfterViewChecked {
     // Show typing indicator
     this.isTyping.set(true);
 
-    // If we have context, use real LLM with data
-    if (ctx) {
+    // Prefer WebSocket streaming for live reasoning steps
+    if (this.wsConnected()) {
+      // Build context for the research service
+      const researchContext = ctx
+        ? {
+            event: ctx.event
+              ? {
+                  id: ctx.event.id,
+                  type: ctx.event.type,
+                  label: ctx.event.label,
+                }
+              : undefined,
+            timeWindow: ctx.timeWindow
+              ? {
+                  start: ctx.timeWindow.start.toISOString(),
+                  end: ctx.timeWindow.end.toISOString(),
+                }
+              : undefined,
+            journeyStage: ctx.journeyStage?.stage,
+            quadrant: ctx.quadrant,
+          }
+        : undefined;
+
+      // Streaming — service handles isStreaming, liveReasoningSteps,
+      // and auto-adds the assistant message on 'complete' event.
+      // The effect in the constructor clears isTyping when streaming finishes.
+      this.researchService.sendMessageStreaming(userMessage, researchContext);
+    } else if (ctx) {
+      // Fallback: HTTP path when WebSocket is not connected
       this.dataService.askFollowUpQuestion(ctx, userMessage).subscribe({
         next: (insight) => {
           this.isTyping.set(false);
           // Format the response from the insight
           const response = this.formatInsightAsResponse(insight, userMessage);
 
-          // Add to shared ResearchService state (chatHistory is derived from this)
-          this.researchService.addAssistantMessage(response);
+          // Add to shared ResearchService state with reasoning steps
+          this.researchService.addAssistantMessage(
+            response,
+            undefined,
+            undefined,
+            insight.reasoningSteps,
+          );
 
           this.shouldScrollToBottom = true;
           // Update suggested questions from the new response
@@ -362,7 +438,7 @@ export class ResearchPanelComponent implements AfterViewChecked {
         },
       });
     } else {
-      // No context - use fallback response
+      // No context and no WebSocket - use fallback response
       const thinkTime = 500 + Math.random() * 500;
       setTimeout(() => {
         this.isTyping.set(false);
@@ -378,6 +454,13 @@ export class ResearchPanelComponent implements AfterViewChecked {
    * Navigate to the full research page to continue the conversation
    */
   openFullResearchPage(): void {
+    // Sync the panel's suggested questions to the shared service
+    // so they carry over to the full research page
+    const questions = this.suggestedQuestions();
+    if (questions?.length) {
+      this.researchService.setSuggestions(questions);
+    }
+
     this.router.navigate(['/research']);
   }
 
@@ -401,11 +484,6 @@ export class ResearchPanelComponent implements AfterViewChecked {
       insight.keyDrivers.forEach((driver) => {
         parts.push(`• ${driver}`);
       });
-    }
-
-    // Timeline reasoning if available
-    if (insight.timelineReasoning) {
-      parts.push(`\n\n**Timeline Analysis:**\n${insight.timelineReasoning}`);
     }
 
     // Suggested actions if the question asks for recommendations
@@ -529,6 +607,26 @@ export class ResearchPanelComponent implements AfterViewChecked {
     }
 
     return 'I can help you explore the data further. Based on the current analysis, I recommend focusing on the relationship between social sentiment and formal complaint timing. The 1-3 hour lead time provides an opportunity for proactive intervention.\n\nTry asking about specific incidents, customer segments, or request recommendations.';
+  }
+
+  // Agent reasoning step helpers
+  getStepIcon(step: LiveReasoningStep): string {
+    switch (step.status) {
+      case 'thinking':
+        return 'psychology';
+      case 'tool-running':
+        return 'build';
+      case 'complete':
+        return step.toolSuccess === false ? 'error' : 'check_circle';
+      case 'error':
+        return 'error';
+      default:
+        return 'radio_button_unchecked';
+    }
+  }
+
+  getStepStatusClass(step: LiveReasoningStep): string {
+    return `step-${step.status}`;
   }
 
   getEvidenceIcon(type: string): string {

@@ -178,17 +178,132 @@
         </div>
       </mat-expansion-panel>
 
-      <!-- Timeline Reasoning (Expandable) -->
-      <mat-expansion-panel class="reasoning-panel">
-        <mat-expansion-panel-header>
-          <mat-panel-title>
-            <mat-icon>history</mat-icon>
-            Timeline Reasoning
-          </mat-panel-title>
-        </mat-expansion-panel-header>
+      <!-- Agent Reasoning Steps -->
+      @if (insight()!.reasoningSteps?.length) {
+        <mat-divider></mat-divider>
+        <mat-expansion-panel class="reasoning-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              <mat-icon>psychology</mat-icon>
+              Agent Reasoning ({{ insight()!.reasoningSteps!.length }} steps)
+            </mat-panel-title>
+          </mat-expansion-panel-header>
 
-        <p class="reasoning-text">{{ insight()!.timelineReasoning }}</p>
-      </mat-expansion-panel>
+          <div class="agent-reasoning-steps">
+            @for (
+              step of insight()!.reasoningSteps!;
+              track step.step;
+              let i = $index
+            ) {
+              <div class="reasoning-step">
+                <div class="step-marker">
+                  <mat-icon class="step-complete">check_circle</mat-icon>
+                  @if (i < insight()!.reasoningSteps!.length - 1) {
+                    <div class="step-line"></div>
+                  }
+                </div>
+                <div class="step-body">
+                  <div class="step-header">
+                    <span class="step-number">Step {{ step.step }}</span>
+                    <span class="step-action">{{ step.action }}</span>
+                  </div>
+                  <div class="step-thought">{{ step.thought }}</div>
+                  @if (step.observation) {
+                    <div class="step-observation">
+                      <mat-icon>check_circle_outline</mat-icon>
+                      <span>{{ step.observation }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </mat-expansion-panel>
+      }
+
+      <!-- Live Reasoning (shown during chat queries via WebSocket) -->
+      @if (isStreamingReasoning() && liveReasoningSteps().length > 0) {
+        <mat-expansion-panel class="reasoning-panel" [expanded]="true">
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              <mat-icon>psychology</mat-icon>
+              Agent Reasoning
+              <span class="live-badge">
+                <mat-icon>sensors</mat-icon>
+                Live
+              </span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+
+          <div class="agent-reasoning-steps live">
+            @if (currentThinkingState(); as thinking) {
+              <mat-progress-bar
+                mode="indeterminate"
+                class="thinking-progress"
+              ></mat-progress-bar>
+            }
+
+            @for (
+              step of liveReasoningSteps();
+              track step.step;
+              let i = $index
+            ) {
+              <div class="reasoning-step" [class]="getStepStatusClass(step)">
+                <div class="step-marker">
+                  <mat-icon [class]="getStepStatusClass(step)">
+                    {{ getStepIcon(step) }}
+                  </mat-icon>
+                  @if (
+                    i < liveReasoningSteps().length - 1 ||
+                    isStreamingReasoning()
+                  ) {
+                    <div class="step-line"></div>
+                  }
+                </div>
+                <div class="step-body">
+                  <div class="step-header">
+                    <span class="step-number">Step {{ step.step }}</span>
+                    @if (step.action) {
+                      <span class="step-action">{{ step.action }}</span>
+                    }
+                    @if (step.toolDuration) {
+                      <span class="step-duration"
+                        >{{ step.toolDuration }}ms</span
+                      >
+                    }
+                  </div>
+                  <div class="step-thought">{{ step.thought }}</div>
+                  @if (
+                    step.status === "tool-running" && currentToolCall();
+                    as tool
+                  ) {
+                    <div class="tool-executing">
+                      <mat-progress-spinner
+                        diameter="16"
+                        mode="indeterminate"
+                      ></mat-progress-spinner>
+                      <span>Running {{ tool.tool | titlecase }}...</span>
+                    </div>
+                  }
+                  @if (step.observation) {
+                    <div
+                      class="step-observation"
+                      [class.error]="step.toolSuccess === false"
+                    >
+                      <mat-icon>{{
+                        step.toolSuccess === false
+                          ? "error_outline"
+                          : "check_circle_outline"
+                      }}</mat-icon>
+                      <span>{{ step.observation }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </mat-expansion-panel>
+      }
 
       <!-- Suggested Actions -->
       <section class="actions-section">
@@ -274,25 +389,62 @@
               msg.role === "user" ? "person" : "psychology"
             }}</mat-icon>
           </div>
-          <div
-            class="message-content"
-            [innerHTML]="msg.message | markdown"
-          ></div>
+          <div class="message-body">
+            <!-- Reasoning Summary (for completed AI responses) -->
+            @if (msg.role === "ai" && msg.reasoningSteps?.length) {
+              <app-reasoning-summary
+                [steps]="msg.reasoningSteps!"
+                [streaming]="false"
+              />
+            }
+            <div
+              class="message-content"
+              [innerHTML]="msg.message | markdown"
+            ></div>
+          </div>
         </div>
       }
 
-      <!-- Typing Indicator (inside scrollable area) -->
+      <!-- Live Reasoning + Typing Indicator (during streaming) -->
       @if (isTyping()) {
         <div class="chat-message ai typing">
           <div class="message-avatar">
             <mat-icon>psychology</mat-icon>
           </div>
-          <div class="message-content">
-            <div class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+          <div class="message-body">
+            <div
+              class="message-content typing-toggle"
+              (click)="showLiveReasoning.set(!showLiveReasoning())"
+              [matTooltip]="
+                showLiveReasoning() ? 'Hide reasoning' : 'Show reasoning'
+              "
+            >
+              <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              @if (isStreamingReasoning() && liveReasoningSteps().length > 0) {
+                <mat-icon
+                  class="reasoning-peek-icon"
+                  [class.active]="showLiveReasoning()"
+                >
+                  {{ showLiveReasoning() ? "visibility_off" : "auto_awesome" }}
+                </mat-icon>
+              }
             </div>
+            <!-- Live Reasoning Summary (toggled by clicking dots) -->
+            @if (
+              showLiveReasoning() &&
+              isStreamingReasoning() &&
+              liveReasoningSteps().length > 0
+            ) {
+              <app-reasoning-summary
+                [liveSteps]="liveReasoningSteps()"
+                [streaming]="true"
+                [streamStatus]="streamStatus()"
+              />
+            }
           </div>
         </div>
       }

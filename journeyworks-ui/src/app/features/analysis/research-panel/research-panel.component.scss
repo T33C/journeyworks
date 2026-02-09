@@ -259,31 +259,6 @@
   border-radius: 0 $border-radius-md $border-radius-md 0;
 }
 
-// Charts Section
-.charts-section {
-  margin: $spacing-md 0;
-  animation: fadeSlideIn 0.4s ease-out 0.15s both;
-
-  h3 {
-    margin: 0 0 $spacing-sm 0;
-    font-size: $font-size-sm;
-    font-weight: 600;
-    color: $text-primary;
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-
-    &::before {
-      content: '';
-      display: block;
-      width: 3px;
-      height: 14px;
-      background: $ai-primary-light;
-      border-radius: 2px;
-    }
-  }
-}
-
 mat-divider {
   margin: $spacing-md 0;
 }
@@ -459,6 +434,193 @@ mat-divider {
   font-size: $font-size-sm;
   line-height: $line-height-base;
   color: $text-primary;
+}
+
+// Agent Reasoning Steps
+.agent-reasoning-steps {
+  &.live {
+    .thinking-progress {
+      margin-bottom: $spacing-sm;
+
+      ::ng-deep .mdc-linear-progress__bar-inner {
+        border-color: $ai-primary;
+      }
+    }
+  }
+}
+
+.reasoning-step {
+  display: flex;
+  gap: $spacing-sm + 4px;
+  animation: fadeSlideIn 0.3s ease-out;
+}
+
+.step-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 24px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    z-index: 1;
+
+    &.step-complete {
+      color: #00847f;
+    }
+
+    &.step-thinking {
+      color: $ai-primary;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    &.step-tool-running {
+      color: $ai-primary-light;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    &.step-error {
+      color: $confidence-low;
+    }
+  }
+}
+
+.step-line {
+  width: 2px;
+  flex: 1;
+  min-height: 12px;
+  background: $border-default;
+  margin: $spacing-xs 0;
+}
+
+.step-body {
+  flex: 1;
+  padding-bottom: $spacing-sm + 4px;
+  min-width: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs + 2px;
+  margin-bottom: $spacing-xs;
+  flex-wrap: wrap;
+
+  .step-number {
+    font-size: $font-size-xs;
+    font-weight: 600;
+    color: $ai-primary-dark;
+  }
+
+  .step-action {
+    font-size: $font-size-xs;
+    font-weight: 500;
+    padding: 1px $spacing-xs + 2px;
+    background: $chat-suggestion-bg;
+    color: $chat-suggestion-text;
+    border-radius: $border-radius-sm;
+    white-space: nowrap;
+  }
+
+  .step-duration {
+    font-size: $font-size-xs;
+    color: $text-hint;
+    margin-left: auto;
+  }
+}
+
+.reasoning-step .step-thought {
+  font-size: $font-size-xs;
+  line-height: $line-height-base;
+  color: $text-secondary;
+  margin-bottom: $spacing-xs;
+  max-height: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.reasoning-step .step-observation {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-xs + 2px;
+  background: $bg-surface;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-xs;
+  line-height: $line-height-base;
+  color: $text-secondary;
+  max-height: 60px;
+  overflow: hidden;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: #00847f;
+  }
+
+  &.error mat-icon {
+    color: $confidence-low;
+  }
+}
+
+.tool-executing {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs + 2px;
+  padding: $spacing-xs $spacing-xs + 2px;
+  background: $chat-suggestion-bg;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-xs;
+  color: $ai-primary;
+  font-weight: 500;
+  animation: fadeSlideIn 0.2s ease-out;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: $font-size-xs;
+  color: #00847f;
+  font-weight: 500;
+  margin-left: auto;
+
+  mat-icon {
+    font-size: 14px !important;
+    width: 14px !important;
+    height: 14px !important;
+    color: #00847f !important;
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 // Actions
@@ -716,9 +878,15 @@ mat-divider {
     }
   }
 
-  .message-content {
+  .message-body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .message-content {
     font-size: $font-size-sm;
     line-height: $line-height-base;
     word-wrap: break-word;
@@ -868,6 +1036,39 @@ mat-divider {
 }
 
 // Typing Indicator (using global animation from mixins)
+.typing-toggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs + 2px;
+  padding: $spacing-xs $spacing-sm !important;
+  border-radius: $border-radius-md;
+  transition: background 0.2s ease;
+  width: fit-content;
+
+  &:hover {
+    background: rgba($ai-primary, 0.06);
+
+    .reasoning-peek-icon {
+      opacity: 1;
+    }
+  }
+}
+
+.reasoning-peek-icon {
+  font-size: 14px !important;
+  width: 14px !important;
+  height: 14px !important;
+  color: $ai-primary-light;
+  opacity: 0.4;
+  transition: all 0.2s ease;
+
+  &.active {
+    opacity: 1;
+    color: $ai-primary;
+  }
+}
+
 .typing-indicator {
   @include typing-indicator;
 }
