@@ -1,0 +1,198 @@
+<div class="source-detail-dialog">
+  <div class="dialog-header">
+    <div class="header-left">
+      <mat-icon class="source-type-icon">{{
+        source.type === "communication" ? "email" : "description"
+      }}</mat-icon>
+      <h2>{{ source.title }}</h2>
+    </div>
+    <button mat-icon-button (click)="close()" class="close-btn">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-state">
+      <mat-spinner diameter="36"></mat-spinner>
+      <span>Loading communication...</span>
+    </div>
+  } @else if (communication(); as comm) {
+    <!-- Full communication loaded -->
+    <div class="communication-content">
+      <!-- Metadata bar -->
+      <div class="metadata-bar">
+        <div class="meta-item">
+          <mat-icon>{{ getChannelIcon(comm.channel) }}</mat-icon>
+          <span>{{ comm.channel | titlecase }}</span>
+        </div>
+        <div class="meta-item">
+          <mat-icon>person</mat-icon>
+          <span>{{ comm.customerName }}</span>
+        </div>
+        <div class="meta-item">
+          <mat-icon>schedule</mat-icon>
+          <span>{{ comm.timestamp | date: "medium" }}</span>
+        </div>
+        <div class="meta-item">
+          <mat-icon>{{
+            comm.direction === "inbound" ? "call_received" : "call_made"
+          }}</mat-icon>
+          <span>{{ comm.direction | titlecase }}</span>
+        </div>
+        @if (comm.sentiment) {
+          <div
+            class="meta-item sentiment"
+            [class]="getSentimentClass(comm.sentiment)"
+          >
+            <mat-icon>{{
+              comm.sentiment.score > 0.3
+                ? "sentiment_satisfied"
+                : comm.sentiment.score < -0.3
+                  ? "sentiment_dissatisfied"
+                  : "sentiment_neutral"
+            }}</mat-icon>
+            <span
+              >{{ getSentimentLabel(comm.sentiment.score) }} ({{
+                comm.sentiment.score | number: "1.2-2"
+              }})</span
+            >
+          </div>
+        }
+      </div>
+
+      @if (comm.subject) {
+        <div class="subject-line">
+          <strong>Subject:</strong> {{ comm.subject }}
+        </div>
+      }
+
+      <!-- Tags -->
+      @if (comm.tags?.length) {
+        <div class="tags-row">
+          @for (tag of comm.tags; track tag) {
+            <mat-chip>{{ tag }}</mat-chip>
+          }
+        </div>
+      }
+
+      <!-- Main content -->
+      <div class="message-body">
+        <div class="body-content">{{ comm.content }}</div>
+      </div>
+
+      <!-- Thread messages if present -->
+      @if (comm.messages?.length) {
+        <div class="thread-section">
+          <h3>
+            <mat-icon>forum</mat-icon>
+            Thread ({{ comm.messages!.length }} messages)
+          </h3>
+          <div class="thread-messages">
+            @for (msg of comm.messages!; track msg.id) {
+              <div class="thread-message" [class]="msg.sender">
+                <div class="thread-msg-header">
+                  <span class="sender-label">{{ msg.sender | titlecase }}</span>
+                  <span class="msg-time">{{
+                    msg.timestamp | date: "short"
+                  }}</span>
+                </div>
+                <div class="thread-msg-body">{{ msg.content }}</div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Relevance score -->
+      <div class="relevance-bar">
+        <mat-icon>search</mat-icon>
+        <span
+          >Relevance: {{ source.relevanceScore * 100 | number: "1.0-0" }}%
+          match</span
+        >
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <button mat-button (click)="close()">Close</button>
+      <a
+        mat-flat-button
+        [routerLink]="['/communications', comm.id]"
+        (click)="close()"
+        class="open-full-btn"
+      >
+        <mat-icon>open_in_new</mat-icon>
+        Open Full Page
+      </a>
+    </div>
+  } @else {
+    <!-- Fallback: show source excerpt when full communication can't be loaded -->
+    <div class="communication-content">
+      @if (source.metadata) {
+        <div class="metadata-bar">
+          @if (source.metadata["channel"]) {
+            <div class="meta-item">
+              <mat-icon>{{
+                getChannelIcon(source.metadata["channel"])
+              }}</mat-icon>
+              <span>{{ source.metadata["channel"] | titlecase }}</span>
+            </div>
+          }
+          @if (source.metadata["customerName"]) {
+            <div class="meta-item">
+              <mat-icon>person</mat-icon>
+              <span>{{ source.metadata["customerName"] }}</span>
+            </div>
+          }
+          @if (source.metadata["timestamp"]) {
+            <div class="meta-item">
+              <mat-icon>schedule</mat-icon>
+              <span>{{ source.metadata["timestamp"] | date: "medium" }}</span>
+            </div>
+          }
+          @if (source.metadata["sentiment"] !== undefined) {
+            <div class="meta-item">
+              <mat-icon>psychology</mat-icon>
+              <span
+                >Sentiment:
+                {{ source.metadata["sentiment"] | number: "1.2-2" }}</span
+              >
+            </div>
+          }
+        </div>
+      }
+
+      @if (source.metadata?.["tags"]?.length) {
+        <div class="tags-row">
+          @for (tag of source.metadata?.["tags"]; track tag) {
+            <mat-chip>{{ tag }}</mat-chip>
+          }
+        </div>
+      }
+
+      <div class="message-body">
+        @if (error()) {
+          <div class="error-notice">
+            <mat-icon>info_outline</mat-icon>
+            <span>{{ error() }}</span>
+          </div>
+        }
+        <div class="body-content">
+          {{ source.excerpt || source.snippet || "No content available." }}
+        </div>
+      </div>
+
+      <div class="relevance-bar">
+        <mat-icon>search</mat-icon>
+        <span
+          >Relevance: {{ source.relevanceScore * 100 | number: "1.0-0" }}%
+          match</span
+        >
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <button mat-button (click)="close()">Close</button>
+    </div>
+  }
+</div>

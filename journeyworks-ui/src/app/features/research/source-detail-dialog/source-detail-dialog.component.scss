@@ -1,0 +1,257 @@
+@use "styles/variables" as *;
+
+.source-detail-dialog {
+  max-width: 680px;
+  min-width: 400px;
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $spacing-md $spacing-lg;
+    border-bottom: 1px solid $border-light;
+    background: $bg-surface;
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      min-width: 0;
+
+      .source-type-icon {
+        color: $ai-primary;
+        flex-shrink: 0;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: $font-size-lg;
+        font-weight: 600;
+        color: $text-primary;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .close-btn {
+      flex-shrink: 0;
+    }
+  }
+
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-xxl;
+    color: $text-secondary;
+
+    span {
+      font-size: $font-size-sm;
+    }
+  }
+
+  .communication-content {
+    padding: $spacing-md $spacing-lg;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .metadata-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-md;
+    padding: $spacing-sm 0;
+    margin-bottom: $spacing-md;
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+      font-size: $font-size-sm;
+      color: $text-secondary;
+
+      mat-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        color: $ai-primary-light;
+      }
+
+      &.positive {
+        color: $rag-green;
+      }
+
+      &.negative {
+        color: $rag-red;
+      }
+    }
+  }
+
+  .subject-line {
+    font-size: $font-size-md;
+    color: $text-primary;
+    margin-bottom: $spacing-md;
+    padding: $spacing-sm $spacing-md;
+    background: $bg-surface;
+    border-radius: $border-radius-sm;
+    border-left: 3px solid $ai-primary;
+  }
+
+  .tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-xs;
+    margin-bottom: $spacing-md;
+
+    mat-chip {
+      font-size: $font-size-xs;
+      min-height: 22px;
+    }
+  }
+
+  .message-body {
+    margin-bottom: $spacing-md;
+
+    .error-notice {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      padding: $spacing-sm $spacing-md;
+      margin-bottom: $spacing-md;
+      background: rgba($rag-amber, 0.08);
+      border-radius: $border-radius-sm;
+      font-size: $font-size-sm;
+      color: $text-secondary;
+
+      mat-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        color: $rag-amber;
+      }
+    }
+
+    .body-content {
+      font-size: $font-size-md;
+      line-height: 1.7;
+      color: $text-primary;
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: $spacing-md;
+      background: $bg-card;
+      border: 1px solid $border-light;
+      border-radius: $border-radius-sm;
+    }
+  }
+
+  .thread-section {
+    margin-top: $spacing-lg;
+
+    h3 {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      font-size: $font-size-md;
+      font-weight: 600;
+      color: $text-primary;
+      margin: 0 0 $spacing-md 0;
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+        color: $ai-primary-light;
+      }
+    }
+
+    .thread-messages {
+      display: flex;
+      flex-direction: column;
+      gap: $spacing-sm;
+    }
+
+    .thread-message {
+      padding: $spacing-sm $spacing-md;
+      border-radius: $border-radius-sm;
+      border-left: 3px solid $border-default;
+
+      &.customer {
+        border-left-color: $ai-primary;
+        background: rgba($ai-primary, 0.04);
+      }
+
+      &.agent {
+        border-left-color: $rag-green;
+        background: rgba($rag-green, 0.04);
+      }
+
+      &.system {
+        border-left-color: $rag-amber;
+        background: rgba($rag-amber, 0.04);
+      }
+
+      .thread-msg-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: $spacing-xs;
+
+        .sender-label {
+          font-size: $font-size-sm;
+          font-weight: 600;
+          color: $text-primary;
+        }
+
+        .msg-time {
+          font-size: $font-size-xs;
+          color: $text-hint;
+        }
+      }
+
+      .thread-msg-body {
+        font-size: $font-size-sm;
+        line-height: 1.5;
+        color: $text-secondary;
+        white-space: pre-wrap;
+      }
+    }
+  }
+
+  .relevance-bar {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    padding: $spacing-sm 0;
+    font-size: $font-size-xs;
+    color: $ai-primary;
+    font-weight: 500;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: $spacing-sm;
+    padding: $spacing-md $spacing-lg;
+    border-top: 1px solid $border-light;
+
+    .open-full-btn {
+      background: $ai-primary;
+      color: white;
+
+      mat-icon {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        margin-right: $spacing-xs;
+      }
+    }
+  }
+}
