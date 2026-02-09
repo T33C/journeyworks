@@ -347,9 +347,19 @@ export class ResearchService implements OnDestroy {
       this._currentThinkingState.set(null);
       this._streamStatus.set('');
 
-      this.addAssistantMessage(
-        `**Research failed:** ${event.message || 'An error occurred'}`,
-      );
+      const message = event.message || '';
+      const isTimeout =
+        /timed? ?out/i.test(message) || /timeout/i.test(message);
+
+      if (isTimeout) {
+        this.addAssistantMessage(
+          `**The analysis took too long to complete.**\n\nThe LLM provider didn't respond within the time limit. This can happen with complex queries or when the service is under heavy load.\n\nSuggestions:\n- Try a simpler or more specific question\n- Break your question into smaller parts\n- Wait a moment and try again`,
+        );
+      } else {
+        this.addAssistantMessage(
+          `**Research failed:** ${message || 'An error occurred'}`,
+        );
+      }
     });
   }
 

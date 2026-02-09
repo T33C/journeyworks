@@ -259,6 +259,20 @@ This may be because:
 Please wait a moment and try again.`;
     }
 
+    if (
+      error.status === 504 ||
+      /timed? ?out|timeout/i.test(error.message || '')
+    ) {
+      return `**The analysis took too long to complete.**
+
+The LLM provider didn't respond within the time limit. This can happen with complex queries or when the service is under heavy load.
+
+Suggestions:
+- Try a simpler or more specific question
+- Break your question into smaller parts
+- Wait a moment and try again`;
+    }
+
     return `**Something went wrong while processing your request.**
 
 Error: ${error.message || 'Unknown error'}
