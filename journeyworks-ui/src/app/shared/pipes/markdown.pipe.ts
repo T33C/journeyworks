@@ -31,6 +31,7 @@ export class MarkdownPipe implements PipeTransform {
       let line = lines[i];
 
       // Convert headers (h1-h4)
+      // Strip bold markers (**) from heading content since headings are already styled
       if (line.match(/^####\s/)) {
         if (inList) {
           result.push(inSubList ? '</ul>' : '');
@@ -39,7 +40,8 @@ export class MarkdownPipe implements PipeTransform {
           inSubList = false;
           listType = null;
         }
-        result.push(line.replace(/^####\s(.*)$/, '<h4>$1</h4>'));
+        const content = line.replace(/^####\s(.*)$/, '$1');
+        result.push(`<h4>${this.stripBold(content)}</h4>`);
         continue;
       }
       if (line.match(/^###\s/)) {
@@ -50,7 +52,8 @@ export class MarkdownPipe implements PipeTransform {
           inSubList = false;
           listType = null;
         }
-        result.push(line.replace(/^###\s(.*)$/, '<h3>$1</h3>'));
+        const content = line.replace(/^###\s(.*)$/, '$1');
+        result.push(`<h3>${this.stripBold(content)}</h3>`);
         continue;
       }
       if (line.match(/^##\s/)) {
@@ -61,7 +64,8 @@ export class MarkdownPipe implements PipeTransform {
           inSubList = false;
           listType = null;
         }
-        result.push(line.replace(/^##\s(.*)$/, '<h2>$1</h2>'));
+        const content = line.replace(/^##\s(.*)$/, '$1');
+        result.push(`<h2>${this.stripBold(content)}</h2>`);
         continue;
       }
       if (line.match(/^#\s/)) {
@@ -72,7 +76,25 @@ export class MarkdownPipe implements PipeTransform {
           inSubList = false;
           listType = null;
         }
-        result.push(line.replace(/^#\s(.*)$/, '<h1>$1</h1>'));
+        const content = line.replace(/^#\s(.*)$/, '$1');
+        result.push(`<h1>${this.stripBold(content)}</h1>`);
+        continue;
+      }
+
+      // Convert bold-only lines (e.g. "**Section Title**") to headings
+      // LLMs commonly output these as section separators
+      const boldHeadingMatch = line.match(/^\*\*(.+)\*\*$/);
+      if (boldHeadingMatch) {
+        if (inSubList) {
+          result.push('</ul>');
+          inSubList = false;
+        }
+        if (inList) {
+          result.push(listType === 'ul' ? '</ul>' : '</ol>');
+          inList = false;
+          listType = null;
+        }
+        result.push(`<h4>${boldHeadingMatch[1]}</h4>`);
         continue;
       }
 
@@ -176,6 +198,14 @@ export class MarkdownPipe implements PipeTransform {
     html = html.replace(/(<\/(?:h[1-4]|ul|ol|p)>)\s*<br>/g, '$1');
 
     return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  /**
+   * Strip bold markers from heading content.
+   * Headings are already visually styled, so bold markers are redundant.
+   */
+  private stripBold(text: string): string {
+    return text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1');
   }
 
   /**
