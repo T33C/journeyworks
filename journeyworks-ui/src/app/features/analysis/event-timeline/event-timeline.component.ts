@@ -725,7 +725,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
           .style('cursor', 'pointer')
           .on('click', () => this.onEventClick(event));
 
-        svg
+        const textEl = svg
           .append('text')
           .attr('x', xPos)
           .attr('y', labelY)
@@ -747,6 +747,9 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
               : event.label,
           )
           .on('click', () => this.onEventClick(event));
+
+        // Add native SVG tooltip showing the full event name
+        textEl.append('title').text(event.label);
       });
     }
 

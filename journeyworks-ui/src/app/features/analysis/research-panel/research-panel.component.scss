@@ -162,28 +162,28 @@
 .hint-cards {
   @include flex-column;
   align-items: center;
-  gap: $spacing-sm;
+  gap: $spacing-xs;
   width: 100%;
 }
 
 .hint-card {
   display: flex;
   align-items: center;
-  gap: $spacing-sm + 4px;
-  padding: $spacing-sm + 4px $spacing-md;
+  gap: $spacing-xs + 2px;
+  padding: $spacing-xs $spacing-sm;
   background: $bg-surface;
   border-radius: $border-radius-md;
   border: 1px solid $border-default;
   text-align: left;
   transition: all 0.2s ease;
-  width: 75%;
-  min-width: 300px;
+  width: 60%;
+  min-width: 270px;
 
   mat-icon {
-    font-size: 20px;
-    width: 20px;
-    height: 20px;
-    line-height: 20px;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
     color: $ai-primary;
     flex-shrink: 0;
     display: flex;
@@ -192,9 +192,9 @@
   }
 
   span {
-    font-size: $font-size-sm;
+    font-size: $font-size-xs;
     color: $text-primary;
-    line-height: $line-height-tight;
+    line-height: 1.2;
     display: flex;
     align-items: center;
 
