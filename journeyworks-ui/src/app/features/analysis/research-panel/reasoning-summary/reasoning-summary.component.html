@@ -1,0 +1,86 @@
+@if (hasSteps()) {
+  <div
+    class="reasoning-bubble"
+    [class.streaming]="streaming()"
+    [class.expanded]="isExpanded()"
+    [class.clickable]="!streaming() && stepCount() > 0"
+    (click)="toggleExpanded()"
+  >
+    <!-- Summary Row (always visible) -->
+    <div class="summary-row">
+      <div class="summary-left">
+        @if (streaming()) {
+          <div class="thinking-icon">
+            <mat-icon>auto_awesome</mat-icon>
+            <div class="pulse-ring"></div>
+          </div>
+        } @else {
+          <mat-icon class="sparkle-icon">auto_awesome</mat-icon>
+        }
+        <span class="summary-text">{{ summaryLabel() }}</span>
+      </div>
+      @if (!streaming() && stepCount() > 0) {
+        <mat-icon class="expand-icon">
+          {{ isExpanded() ? "expand_less" : "expand_more" }}
+        </mat-icon>
+      }
+    </div>
+
+    <!-- Streaming Progress Bar -->
+    @if (streaming()) {
+      <mat-progress-bar
+        mode="indeterminate"
+        class="stream-progress"
+      ></mat-progress-bar>
+    }
+
+    <!-- Expanded Steps List -->
+    @if (isExpanded() && !streaming()) {
+      <div class="steps-list">
+        @for (step of resolvedSteps(); track step.step; let i = $index) {
+          <div class="step-row" [class]="getStepClass(step)">
+            <div class="step-indicator">
+              <mat-icon [class]="getStepClass(step)">
+                {{ getStepIcon(step) }}
+              </mat-icon>
+              @if (i < resolvedSteps().length - 1) {
+                <div class="step-connector"></div>
+              }
+            </div>
+            <div class="step-info">
+              <span class="step-label">Step {{ step.step }}</span>
+              <span class="step-summary">{{ getStepSummary(step) }}</span>
+              @if (isLiveStep(step) && step.toolDuration) {
+                <span class="step-duration">{{ step.toolDuration }}ms</span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Live Steps (compact, during streaming) -->
+    @if (streaming() && stepCount() > 0) {
+      <div class="live-steps-compact">
+        @for (step of resolvedSteps(); track step.step; let last = $last) {
+          <div
+            class="live-step-row"
+            [class]="getStepClass(step)"
+            [class.latest]="last"
+          >
+            <mat-icon [class]="getStepClass(step)">
+              {{ getStepIcon(step) }}
+            </mat-icon>
+            <span class="live-step-text">{{ getStepSummary(step) }}</span>
+            @if (isLiveStep(step) && step.status === "tool-running") {
+              <mat-progress-spinner
+                diameter="12"
+                mode="indeterminate"
+              ></mat-progress-spinner>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+}

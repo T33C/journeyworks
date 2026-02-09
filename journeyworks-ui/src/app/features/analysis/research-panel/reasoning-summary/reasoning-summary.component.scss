@@ -1,0 +1,320 @@
+@use "styles/variables" as *;
+@use "styles/mixins" as *;
+
+// ============================================================================
+// Reasoning Summary Bubble
+// Compact, inline reasoning disclosure for chat messages.
+// ============================================================================
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reasoning-bubble {
+  border-radius: $border-radius-md;
+  padding: $spacing-sm $spacing-sm + 4px;
+  margin-bottom: $spacing-sm;
+  background: $grey-1;
+  border: 1px solid $border-default;
+  transition: all 0.2s ease;
+  overflow: hidden;
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: $grey-2;
+      border-color: $ai-primary-light;
+
+      .expand-icon {
+        color: $ai-primary;
+      }
+    }
+  }
+
+  &.streaming {
+    background: linear-gradient(
+      135deg,
+      $ai-message-bg-start 0%,
+      rgba($ai-primary, 0.04) 100%
+    );
+    border-color: rgba($ai-primary, 0.2);
+  }
+
+  &.expanded {
+    background: $brand-white;
+    border-color: rgba($ai-primary, 0.25);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+}
+
+// Summary Row
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  min-height: 24px;
+}
+
+.summary-left {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs + 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sparkle-icon {
+  font-size: 16px !important;
+  width: 16px !important;
+  height: 16px !important;
+  color: $ai-primary;
+  flex-shrink: 0;
+}
+
+.thinking-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: $ai-primary;
+    z-index: 1;
+  }
+
+  .pulse-ring {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba($ai-primary, 0.2);
+    animation: pulseRing 1.8s ease-out infinite;
+  }
+}
+
+.summary-text {
+  font-size: $font-size-xs;
+  font-weight: 500;
+  color: $ai-primary-dark;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  .streaming & {
+    background: linear-gradient(
+      90deg,
+      $ai-primary-dark 30%,
+      $ai-primary-light 50%,
+      $ai-primary-dark 70%
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.5s linear infinite;
+  }
+}
+
+.expand-icon {
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: $text-hint;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+// Stream Progress
+.stream-progress {
+  margin-top: $spacing-xs;
+  border-radius: 2px;
+  height: 2px !important;
+
+  ::ng-deep .mdc-linear-progress__bar-inner {
+    border-color: $ai-primary;
+  }
+
+  ::ng-deep .mdc-linear-progress__buffer-bar {
+    background-color: rgba($ai-primary, 0.08);
+  }
+}
+
+// Expanded Steps List
+.steps-list {
+  margin-top: $spacing-sm;
+  padding-top: $spacing-sm;
+  border-top: 1px solid $border-light;
+}
+
+.step-row {
+  display: flex;
+  gap: $spacing-sm;
+  animation: fadeSlideIn 0.2s ease-out;
+
+  &:last-child .step-connector {
+    display: none;
+  }
+}
+
+.step-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 18px;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    z-index: 1;
+
+    &.step-complete {
+      color: $rag-green;
+    }
+
+    &.step-thinking {
+      color: $ai-primary;
+    }
+
+    &.step-tool-running {
+      color: $ai-primary-light;
+    }
+
+    &.step-error {
+      color: $confidence-low;
+    }
+  }
+}
+
+.step-connector {
+  width: 1.5px;
+  flex: 1;
+  min-height: 8px;
+  background: $border-default;
+  margin: 2px 0;
+}
+
+.step-info {
+  display: flex;
+  align-items: baseline;
+  gap: $spacing-xs;
+  padding-bottom: $spacing-xs + 2px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.step-label {
+  font-size: $font-size-xs;
+  font-weight: 600;
+  color: $ai-primary-dark;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.step-summary {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.step-duration {
+  font-size: 9px;
+  color: $text-hint;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+// Live Steps (compact, during streaming)
+.live-steps-compact {
+  margin-top: $spacing-xs + 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.live-step-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: 2px $spacing-xs;
+  border-radius: $border-radius-sm;
+  animation: fadeSlideIn 0.2s ease-out;
+
+  &.latest {
+    background: rgba($ai-primary, 0.04);
+  }
+
+  mat-icon {
+    font-size: 12px;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+
+    &.step-complete {
+      color: $rag-green;
+    }
+
+    &.step-thinking {
+      color: $ai-primary;
+    }
+
+    &.step-tool-running {
+      color: $ai-primary-light;
+    }
+
+    &.step-error {
+      color: $confidence-low;
+    }
+  }
+}
+
+.live-step-text {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
