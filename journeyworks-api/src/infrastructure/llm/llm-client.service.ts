@@ -52,10 +52,22 @@ export class LlmProviderError extends Error {
   }
 }
 
+/** Error type for LLM timeout - allows callers to distinguish timeouts from other errors */
+export class LlmTimeoutError extends Error {
+  constructor(
+    message: string,
+    public readonly timeoutMs: number,
+  ) {
+    super(message);
+    this.name = 'LlmTimeoutError';
+  }
+}
+
 /** Default retry configuration */
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
+const DEFAULT_PROMPT_TIMEOUT_MS = 60_000;
 
 @Injectable()
 export class LlmClientService {
@@ -328,6 +340,54 @@ export class LlmClientService {
     const response = await this.complete({ messages, systemPrompt }, options);
 
     return response.content;
+  }
+
+  /**
+   * Prompt with a timeout guard to prevent indefinite hangs.
+   *
+   * Unlike the raw `prompt()` method, this:
+   *  - Races the LLM call against a configurable deadline (default 60 s).
+   *  - Clears the timer on success so it doesn't leak.
+   *  - Throws a typed `LlmTimeoutError` so callers can distinguish
+   *    timeouts from other failures.
+   *
+   * @param userMessage  The user prompt text
+   * @param systemPrompt Optional system prompt
+   * @param options      LlmClientOptions (rateLimitKey, etc.)
+   * @param timeoutMs    Timeout in milliseconds (default: 60 000)
+   */
+  async promptWithTimeout(
+    userMessage: string,
+    systemPrompt?: string,
+    options: LlmClientOptions = {},
+    timeoutMs: number = DEFAULT_PROMPT_TIMEOUT_MS,
+  ): Promise<string> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const seconds = Math.round(timeoutMs / 1000);
+        reject(
+          new LlmTimeoutError(
+            `LLM call timed out after ${seconds}s`,
+            timeoutMs,
+          ),
+        );
+      }, timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([
+        this.prompt(userMessage, systemPrompt, options),
+        timeoutPromise,
+      ]);
+      return result;
+    } finally {
+      // Always clear the timer — prevents leaking handles on success
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   /**

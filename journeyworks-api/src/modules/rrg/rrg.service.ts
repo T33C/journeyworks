@@ -768,21 +768,11 @@ Provide a concise, natural language summary of what was found.`;
   /**
    * Wrap an LLM call with a timeout to prevent indefinite hangs.
    */
-  private async promptWithTimeout(
+  private promptWithTimeout(
     prompt: string,
     systemPrompt?: string,
     options?: { rateLimitKey?: string },
   ): Promise<string> {
-    const LLM_TIMEOUT_MS = 60_000;
-    const result = await Promise.race([
-      this.llmClient.prompt(prompt, systemPrompt, options),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error('LLM call timed out after 60s')),
-          LLM_TIMEOUT_MS,
-        ),
-      ),
-    ]);
-    return result;
+    return this.llmClient.promptWithTimeout(prompt, systemPrompt, options);
   }
 }

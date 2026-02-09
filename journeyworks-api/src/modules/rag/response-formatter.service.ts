@@ -11,9 +11,6 @@ import {
   PromptTemplateService,
 } from '../../infrastructure/llm';
 
-/** LLM call timeout in milliseconds */
-const LLM_TIMEOUT_MS = 60_000;
-
 // =============================================================================
 // Response Types
 // =============================================================================
@@ -472,21 +469,12 @@ export class ResponseFormatterService {
   /**
    * Wrap LLM prompt call with a timeout to prevent indefinite hangs
    */
-  private async promptWithTimeout(
+  private promptWithTimeout(
     prompt: string,
     systemPrompt?: string,
     options?: { rateLimitKey?: string },
   ): Promise<string> {
-    const result = await Promise.race([
-      this.llmClient.prompt(prompt, systemPrompt, options),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error('LLM prompt timed out')),
-          LLM_TIMEOUT_MS,
-        ),
-      ),
-    ]);
-    return result;
+    return this.llmClient.promptWithTimeout(prompt, systemPrompt, options);
   }
 
   /**
