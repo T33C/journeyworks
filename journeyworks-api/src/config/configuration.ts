@@ -96,4 +96,10 @@ export default () => ({
       end: process.env.SYNTHETIC_DATE_END || '2026-01-31',
     },
   },
+
+  // Branding (used in synthetic data generation)
+  branding: {
+    bankName: process.env.BANK_NAME || 'JourneyWorks Bank',
+    bankHandle: process.env.BANK_HANDLE || '@JourneyWorksBank',
+  },
 });

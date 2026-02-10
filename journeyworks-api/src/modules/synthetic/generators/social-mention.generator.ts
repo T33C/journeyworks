@@ -5,6 +5,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { SyntheticSocialMention } from '../synthetic-data.types';
 import {
@@ -156,6 +157,30 @@ const PRODUCTS = PRODUCT_NAMES;
 
 @Injectable()
 export class SocialMentionGenerator {
+  private readonly bankName: string;
+  private readonly bankHandle: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.bankName = this.configService.get<string>(
+      'branding.bankName',
+      'JourneyWorks Bank',
+    );
+    this.bankHandle = this.configService.get<string>(
+      'branding.bankHandle',
+      '@JourneyWorksBank',
+    );
+  }
+
+  /**
+   * Replace default bank references with configured branding
+   */
+  private brandContent(content: string): string {
+    return content
+      .replace(/@JourneyWorksBank/g, this.bankHandle)
+      .replace(/JourneyWorks Bank/g, this.bankName)
+      .replace(/JourneyWorks/g, this.bankName);
+  }
+
   /**
    * Generate a single social mention
    */
@@ -166,7 +191,7 @@ export class SocialMentionGenerator {
   ): SyntheticSocialMention {
     const templates = this.getTemplates(platform);
     const templateList = templates[sentiment] || templates.neutral;
-    const content = randomChoice(templateList);
+    const content = this.brandContent(randomChoice(templateList));
 
     const author = this.getAuthor(platform);
     const authorHandle = this.getHandle(author, platform);

@@ -13,6 +13,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import {
   SyntheticCommunication,
@@ -308,6 +309,20 @@ const EVENT_AI_CATEGORIES: Record<string, string[]> = {
 
 @Injectable()
 export class EventCommunicationGenerator {
+  private readonly bankName: string;
+  private readonly bankHandle: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.bankName = this.configService.get<string>(
+      'branding.bankName',
+      'JourneyWorks Bank',
+    );
+    this.bankHandle = this.configService.get<string>(
+      'branding.bankHandle',
+      '@JourneyWorksBank',
+    );
+  }
+
   /**
    * Generate communications correlated with events.
    * For each event, generates 5–15 communications clustered around the event date
@@ -522,7 +537,8 @@ export class EventCommunicationGenerator {
       .replace(/\{event_description\}/g, event.description)
       .replace(/\{product\}/g, productName)
       .replace(/\{name\}/g, customer.name)
-      .replace(/\{bank\}/g, 'JourneyWorks Bank');
+      .replace(/\{bank\}/g, this.bankName)
+      .replace(/@JourneyWorksBank/g, this.bankHandle);
   }
 
   private generateEventAIClassification(

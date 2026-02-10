@@ -5,6 +5,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import {
   SyntheticCommunication,
@@ -526,6 +527,20 @@ const REGULATORY_FLAGS = [
 
 @Injectable()
 export class CommunicationGenerator {
+  private readonly bankName: string;
+  private readonly bankHandle: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.bankName = this.configService.get<string>(
+      'branding.bankName',
+      'JourneyWorks Bank',
+    );
+    this.bankHandle = this.configService.get<string>(
+      'branding.bankHandle',
+      '@JourneyWorksBank',
+    );
+  }
+
   generate(
     customer: SyntheticCustomer,
     channel: 'email' | 'phone' | 'chat' | 'letter' | 'social',
@@ -957,7 +972,7 @@ export class CommunicationGenerator {
     const replacements: Record<string, string> = {
       '{name}': customer.name,
       '{manager}': customer.relationshipManager,
-      '{bank}': 'JourneyWorks Bank',
+      '{bank}': this.bankName,
       '{product}': randomChoice(PRODUCTS),
       '{action}': randomChoice(ACTIONS),
       '{issue}': randomChoice(ISSUES),
@@ -985,6 +1000,9 @@ export class CommunicationGenerator {
         value,
       );
     }
+
+    // Replace branded handles/names
+    result = result.replace(/@JourneyWorksBank/g, this.bankHandle);
 
     return result;
   }
