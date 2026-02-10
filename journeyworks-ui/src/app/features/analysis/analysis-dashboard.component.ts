@@ -109,13 +109,13 @@ import { ResearchPanelComponent } from './research-panel/research-panel.componen
             Surveys Only
           </mat-slide-toggle>
 
-          <button
+          <!-- <button
             mat-icon-button
             matTooltip="More filters"
             [matMenuTriggerFor]="moreFiltersMenu"
           >
             <mat-icon>tune</mat-icon>
-          </button>
+          </button> -->
 
           <mat-menu #moreFiltersMenu="matMenu">
             <button mat-menu-item>

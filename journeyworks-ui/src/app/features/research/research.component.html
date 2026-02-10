@@ -55,7 +55,10 @@
 
             <div class="suggestion-chips">
               @for (suggestion of suggestions(); track suggestion) {
-                <button (click)="useSuggestion(suggestion)">
+                <button
+                  [matTooltip]="suggestion"
+                  (click)="useSuggestion(suggestion)"
+                >
                   {{ suggestion }}
                 </button>
               }
@@ -155,6 +158,7 @@
             @for (suggestion of suggestions(); track suggestion) {
               <button
                 (click)="useSuggestion(suggestion)"
+                [matTooltip]="suggestion"
                 class="suggestion-btn"
               >
                 {{ suggestion }}

@@ -735,7 +735,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
           .attr('x', xPos)
           .attr('y', labelY)
           .attr('text-anchor', 'middle')
-          .attr('font-size', '9px')
+          .attr('font-size', '11px')
           .attr('font-weight', '600')
           .attr(
             'fill',
@@ -747,8 +747,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
           )
           .style('cursor', 'pointer')
           .text(
-            event.label.length > 15
-              ? event.label.substring(0, 15) + '…'
+            event.label.length > 22
+              ? event.label.substring(0, 22) + '…'
               : event.label,
           )
           .on('click', () => this.onEventClick(event));

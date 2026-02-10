@@ -310,7 +310,7 @@
         <h3>Suggested Actions</h3>
         <div class="action-chips">
           @for (action of insight()!.suggestedActions; track $index) {
-            <mat-chip class="action-chip">
+            <mat-chip class="action-chip" [matTooltip]="action">
               <mat-icon>lightbulb</mat-icon>
               {{ action }}
             </mat-chip>
@@ -374,6 +374,7 @@
       @for (question of suggestedQuestions(); track $index) {
         <button
           class="suggestion-chip"
+          [matTooltip]="question"
           (click)="onSuggestedQuestionClick(question)"
         >
           {{ question }}
