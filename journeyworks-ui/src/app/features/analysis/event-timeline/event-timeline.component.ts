@@ -329,6 +329,9 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
   // All-time bubble data — used by both the mini chart and main chart
   private allBubbles = signal<SentimentBubble[]>([]);
+  // Currently visible (filtered) bubbles — used for badge computation
+  // Both D3 labels and tooltip pills must reference the same set to stay in sync.
+  private visibleBubbles: SentimentBubble[] = [];
 
   // Store the full time domain so the mini chart brush can zoom the main chart
   private fullXDomain: [Date, Date] | null = null;
@@ -510,6 +513,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     const bubbles = domain
       ? allBubbles.filter((b) => b.date >= domain[0] && b.date <= domain[1])
       : allBubbles;
+    // Store for tooltip badge computation (must use same set as D3 labels)
+    this.visibleBubbles = bubbles;
 
     if (bubbles.length === 0) {
       // Show empty state if no bubbles in range
@@ -813,6 +818,66 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     chartContent.selectAll('.survey-ring').raise();
     chartContent.selectAll('.bubble').raise();
 
+    // PEAK / TROUGH / OUTLIER badge labels
+    const allNps = bubbles.map((b) => b.npsScore);
+    const npsMax = Math.max(...allNps);
+    const npsMin = Math.min(...allNps);
+    const npsMean = allNps.reduce((s, v) => s + v, 0) / allNps.length;
+    const npsStdDev = Math.sqrt(
+      allNps.reduce((s, v) => s + (v - npsMean) ** 2, 0) / allNps.length,
+    );
+
+    const badgeBubbles = bubbles
+      .map((b) => {
+        const isPeak = b.npsScore === npsMax && bubbles.length > 1;
+        const isTrough = b.npsScore === npsMin && bubbles.length > 1;
+        const isOutlier =
+          npsStdDev > 0 &&
+          Math.abs(b.npsScore - npsMean) > 1.5 * npsStdDev &&
+          !isPeak &&
+          !isTrough;
+        const label = isPeak
+          ? '📈 PEAK'
+          : isTrough
+            ? '📉 TROUGH'
+            : isOutlier
+              ? '⚠️ OUTLIER'
+              : null;
+        const color = isPeak ? '#00847f' : isTrough ? '#a8000b' : '#ed500d';
+        return { bubble: b, label, color };
+      })
+      .filter((d) => d.label !== null);
+
+    chartContent
+      .selectAll('.bubble-badge')
+      .data(badgeBubbles)
+      .enter()
+      .append('text')
+      .attr('class', 'bubble-badge')
+      .attr('x', (d) => x(d.bubble.date))
+      .attr(
+        'y',
+        (d) => y(d.bubble.sentiment) - radiusScale(d.bubble.volume) - 6,
+      )
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '9px')
+      .attr('font-weight', '700')
+      .attr('fill', (d) => d.color)
+      .attr('stroke', 'white')
+      .attr('stroke-width', '3px')
+      .attr('stroke-linejoin', 'round')
+      .style('paint-order', 'stroke')
+      .attr('opacity', 0)
+      .text((d) => d.label!)
+      .style('pointer-events', 'none')
+      .transition()
+      .duration(500)
+      .delay((d) => {
+        const idx = bubbles.findIndex((b) => b.id === d.bubble.id);
+        return idx * 30 + 300;
+      })
+      .attr('opacity', 1);
+
     // Axes
     svg
       .append('g')
@@ -1068,6 +1133,30 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
   }
 
   private showTooltip(event: MouseEvent, bubble: SentimentBubble) {
+    // Compute badge using the same visible bubble set as D3 labels (not allBubbles)
+    const visible = this.visibleBubbles;
+    const allNps = visible.map((b) => b.npsScore);
+    const npsMax = Math.max(...allNps);
+    const npsMin = Math.min(...allNps);
+    const npsMean = allNps.reduce((s, v) => s + v, 0) / allNps.length;
+    const npsStdDev = Math.sqrt(
+      allNps.reduce((s, v) => s + (v - npsMean) ** 2, 0) / allNps.length,
+    );
+    const isPeak = bubble.npsScore === npsMax && visible.length > 1;
+    const isTrough = bubble.npsScore === npsMin && visible.length > 1;
+    const isOutlier =
+      npsStdDev > 0 &&
+      Math.abs(bubble.npsScore - npsMean) > 1.5 * npsStdDev &&
+      !isPeak &&
+      !isTrough;
+    const badgeHtml = isPeak
+      ? `<span style="display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:#e6f7f6;color:#00847f;border:1px solid #00847f;">📈 PEAK</span>`
+      : isTrough
+        ? `<span style="display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:#fde8ea;color:#a8000b;border:1px solid #a8000b;">📉 TROUGH</span>`
+        : isOutlier
+          ? `<span style="display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:#fff3e0;color:#ed500d;border:1px solid #ed500d;">⚠️ OUTLIER</span>`
+          : '';
+
     const tooltip = d3
       .select('body')
       .append('div')
@@ -1084,6 +1173,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       .style('pointer-events', 'none')
       .html(
         `
+        ${badgeHtml}
         <strong>${d3.timeFormat('%d %B %Y')(bubble.date)}</strong><br/>
         <div style="margin-top: 8px;">
           <strong style="font-size: 16px; color:${this.getSentimentColor(bubble.sentiment)}">

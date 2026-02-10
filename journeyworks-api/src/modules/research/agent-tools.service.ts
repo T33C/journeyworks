@@ -1219,6 +1219,239 @@ export class AgentTools {
       },
     });
 
+    // Anomaly Detection Tool
+    this.tools.set('detect_anomalies', {
+      name: 'detect_anomalies',
+      description:
+        'Detect statistical anomalies and outliers in communication data. Uses z-score and IQR methods to find unusual spikes or drops in volume, sentiment, or other metrics. Also detects concentration risk (e.g., single category dominating). Use this when asked about anomalies, outliers, spikes, unusual patterns, or abnormal values.',
+      parameters: {
+        type: 'object',
+        properties: {
+          timeRange: {
+            type: 'string',
+            description:
+              'Optional time range filter (e.g., "last 7 days", "this month"). Omit to search all data.',
+          },
+          product: {
+            type: 'string',
+            description:
+              'Optional product to filter by (e.g., "Advance Account", "credit-card"). Accepts product names, slugs, or aliases.',
+          },
+          field: {
+            type: 'string',
+            description:
+              'Optional specific field to check for outliers (e.g., "sentiment", "volume"). Omit to analyse all numeric fields.',
+          },
+          method: {
+            type: 'string',
+            description:
+              'Outlier detection method: "zscore" (default) or "iqr"',
+            default: 'zscore',
+            enum: ['zscore', 'iqr'],
+          },
+          threshold: {
+            type: 'number',
+            description:
+              'Sensitivity threshold. For z-score: number of standard deviations (default: 2.0). For IQR: multiplier (default: 1.5). Lower values = more sensitive.',
+            default: 2.0,
+          },
+        },
+      },
+      execute: async (input) => {
+        try {
+          const timeRange = input.timeRange
+            ? this.parseTimeRange(input.timeRange)
+            : null;
+          const product = this.normalizeProduct(input.product);
+
+          // Build ES query to fetch raw communications for analysis
+          const must: any[] = [];
+          if (timeRange) {
+            must.push({
+              range: {
+                timestamp: { gte: timeRange.from, lte: timeRange.to },
+              },
+            });
+          }
+          if (product) {
+            must.push({ term: { 'product.keyword': product } });
+          }
+
+          const client = this.getElasticClient();
+          const response = await client.search({
+            index: AgentTools.ES_INDICES.communications,
+            size: 2000,
+            body: {
+              query: must.length > 0 ? { bool: { must } } : { match_all: {} },
+              _source: [
+                'timestamp',
+                'sentiment',
+                'channel',
+                'category',
+                'subcategory',
+                'product',
+                'subject',
+              ],
+              sort: [{ timestamp: 'asc' }],
+            },
+          });
+
+          const hits = (response.hits as any).hits || [];
+          if (hits.length === 0) {
+            return {
+              summary: 'No communications found matching the criteria.',
+              anomalies: [],
+              totalAnalysed: 0,
+            };
+          }
+
+          // Extract numeric fields for analysis
+          const records = hits.map((h: any) => h._source);
+          const sentiments = records
+            .map((r: any) => r.sentiment)
+            .filter((v: any) => typeof v === 'number');
+
+          // Group by day for volume analysis
+          const dailyVolumes: Record<string, number> = {};
+          for (const r of records) {
+            const day = (r.timestamp || '').substring(0, 10);
+            if (day) dailyVolumes[day] = (dailyVolumes[day] || 0) + 1;
+          }
+          const volumeValues = Object.values(dailyVolumes);
+
+          // Category concentration (HHI)
+          const categoryCounts: Record<string, number> = {};
+          for (const r of records) {
+            const cat = r.category || 'unknown';
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+          }
+
+          const method = input.method || 'zscore';
+          const threshold =
+            input.threshold || (method === 'zscore' ? 2.0 : 1.5);
+
+          const anomalies: any[] = [];
+
+          // Helper: detect outliers in a numeric array
+          const detectOutliers = (
+            values: number[],
+            fieldName: string,
+            labels?: string[],
+          ) => {
+            if (values.length < 3) return;
+            const mean = values.reduce((s, v) => s + v, 0) / values.length;
+            const stdDev = Math.sqrt(
+              values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length,
+            );
+            if (stdDev === 0) return;
+
+            if (method === 'zscore') {
+              values.forEach((v, i) => {
+                const z = Math.abs((v - mean) / stdDev);
+                if (z > threshold) {
+                  anomalies.push({
+                    type: 'statistical_outlier',
+                    field: fieldName,
+                    label: labels ? labels[i] : `index ${i}`,
+                    value: v,
+                    zScore: +z.toFixed(2),
+                    mean: +mean.toFixed(3),
+                    stdDev: +stdDev.toFixed(3),
+                    severity: z > 3 ? 'high' : 'medium',
+                    description: `${fieldName} value ${typeof v === 'number' ? v.toFixed(3) : v} is ${z.toFixed(1)}σ from the mean`,
+                  });
+                }
+              });
+            } else {
+              // IQR method
+              const sorted = [...values].sort((a, b) => a - b);
+              const q1 = sorted[Math.floor(sorted.length * 0.25)];
+              const q3 = sorted[Math.floor(sorted.length * 0.75)];
+              const iqr = q3 - q1;
+              const lower = q1 - threshold * iqr;
+              const upper = q3 + threshold * iqr;
+              values.forEach((v, i) => {
+                if (v < lower || v > upper) {
+                  anomalies.push({
+                    type: 'statistical_outlier',
+                    field: fieldName,
+                    label: labels ? labels[i] : `index ${i}`,
+                    value: v,
+                    bounds: {
+                      lower: +lower.toFixed(3),
+                      upper: +upper.toFixed(3),
+                    },
+                    severity:
+                      v < lower - iqr || v > upper + iqr ? 'high' : 'medium',
+                    description: `${fieldName} value ${v.toFixed(3)} outside IQR bounds [${lower.toFixed(3)}, ${upper.toFixed(3)}]`,
+                  });
+                }
+              });
+            }
+          };
+
+          // Detect sentiment outliers
+          if (!input.field || input.field === 'sentiment') {
+            detectOutliers(sentiments, 'sentiment');
+          }
+
+          // Detect daily volume outliers
+          if (!input.field || input.field === 'volume') {
+            const days = Object.keys(dailyVolumes).sort();
+            detectOutliers(volumeValues, 'daily_volume', days);
+          }
+
+          // Detect concentration risk
+          if (!input.field || input.field === 'category') {
+            const total = records.length;
+            const shares = Object.values(categoryCounts).map(
+              (c) => (c / total) ** 2,
+            );
+            const hhi = shares.reduce((s, v) => s + v, 0);
+            if (hhi > 0.25) {
+              const topCat = Object.entries(categoryCounts).sort(
+                (a, b) => b[1] - a[1],
+              )[0];
+              anomalies.push({
+                type: 'concentration_risk',
+                field: 'category',
+                severity: hhi > 0.5 ? 'high' : 'medium',
+                hhi: +hhi.toFixed(3),
+                topCategory: topCat[0],
+                topCategoryPct: +((topCat[1] / total) * 100).toFixed(1),
+                description: `High concentration risk (HHI=${hhi.toFixed(2)}): "${topCat[0]}" accounts for ${((topCat[1] / total) * 100).toFixed(0)}% of all communications`,
+              });
+            }
+          }
+
+          // Sort by severity
+          anomalies.sort((a, b) =>
+            a.severity === 'high' && b.severity !== 'high' ? -1 : 1,
+          );
+
+          const highCount = anomalies.filter(
+            (a) => a.severity === 'high',
+          ).length;
+          const summary =
+            anomalies.length === 0
+              ? `No statistical anomalies detected across ${records.length} communications (method: ${method}, threshold: ${threshold}).`
+              : `Detected ${anomalies.length} anomalies (${highCount} high severity) across ${records.length} communications using ${method} method (threshold: ${threshold}).`;
+
+          return {
+            summary,
+            method,
+            threshold,
+            totalAnalysed: records.length,
+            anomalyCount: anomalies.length,
+            highSeverityCount: highCount,
+            anomalies: anomalies.slice(0, 20),
+          };
+        } catch (error) {
+          return { error: `Anomaly detection failed: ${error.message}` };
+        }
+      },
+    });
+
     // Relationship Summary Tool
     this.tools.set('get_relationship_summary', {
       name: 'get_relationship_summary',

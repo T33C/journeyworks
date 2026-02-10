@@ -183,7 +183,7 @@ export class ResearchService implements OnDestroy {
       'What are the main customer pain points this month?',
       'Show me sentiment trends for enterprise customers',
       'Which customers are at risk of churning?',
-      'Summarize escalated cases from last week',
+      'Detect any anomalies or unusual spikes in recent complaints',
       'What topics are trending in customer communications?',
     ]);
   }

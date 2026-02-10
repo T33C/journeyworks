@@ -909,7 +909,15 @@ CRITICAL for "Did we improve CX?" analysis:
 - Even if there's improvement from -50 to -10, ending negative means customers are still unsatisfied
 - True CX success requires ending with POSITIVE NPS (above 0) and high promoter rates (>30%)
 - Highlight what's still broken and what actions are needed to achieve positive outcomes
-- Be honest and actionable - the purpose is to identify problems that need fixing`;
+- Be honest and actionable - the purpose is to identify problems that need fixing
+
+ANOMALY DETECTION:
+When reviewing the data provided (especially daily trends, NPS scores, and volumes), proactively flag any statistical outliers or anomalies. Specifically:
+- Flag any day where NPS or sentiment deviates more than 1.5 standard deviations from the period mean
+- Flag any day where communication volume exceeds 2× the period average
+- Flag any sudden sentiment reversals between consecutive days (>0.3 shift)
+If outliers exist, call them out clearly in your summary and keyDrivers with the ⚠️ prefix and quantify the deviation.
+If no anomalies are present, do not mention them — only flag when genuinely unusual.`;
 
     // Add statistical analysis context to system prompt if available
     if (statisticalAnalysis) {

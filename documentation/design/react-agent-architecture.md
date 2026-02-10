@@ -97,7 +97,12 @@ Agent:
 │  │ • analyze_sla_      │    │                     │    │                  ││
 │  │   compliance        │    │                     │    │                  ││
 │  │ • get_category_     │    │                     │    │                  ││
+│  │ • get_category_     │    │                     │    │                  ││
 │  │   breakdown         │    │                     │    │                  ││
+│  │ • detect_issues     │    │                     │    │                  ││
+│  │ • detect_anomalies  │    │                     │    │                  ││
+│  │ • get_relationship_ │    │                     │    │                  ││
+│  │   summary           │    │                     │    │                  ││
 │  └─────────────────────┘    └─────────────────────┘    └──────────────────┘│
 │           │                                                                  │
 │           ▼                                                                  │
@@ -197,7 +202,7 @@ ReAct (Reasoning + Acting) is an agent architecture from the paper ["ReAct: Syne
 
 ## Agent Tools
 
-The agent has access to 16 specialized tools across three categories:
+The agent has access to 19 specialized tools across four categories:
 
 ### Information Retrieval
 
@@ -211,15 +216,23 @@ The agent has access to 16 specialized tools across three categories:
 
 ### Analysis
 
-| Tool                      | Description          | Example Use                     |
-| ------------------------- | -------------------- | ------------------------------- |
-| `analyze_sentiment`       | Sentiment analysis   | Track emotional trends          |
-| `analyze_topics`          | Topic extraction     | Identify what customers discuss |
-| `analyze_trends`          | Time-series analysis | Spot emerging patterns          |
-| `assess_risk`             | Risk scoring         | Identify at-risk customers      |
-| `analyze_customer_health` | Health score         | Relationship assessment         |
+| Tool                      | Description                                                   | Example Use                          |
+| ------------------------- | ------------------------------------------------------------- | ------------------------------------ |
+| `analyze_sentiment`       | Sentiment analysis                                            | Track emotional trends               |
+| `analyze_topics`          | Topic extraction                                              | Identify what customers discuss      |
+| `analyze_trends`          | Time-series analysis                                          | Spot emerging patterns               |
+| `assess_risk`             | Risk scoring                                                  | Identify at-risk customers           |
+| `analyze_customer_health` | Health score                                                  | Relationship assessment              |
+| `detect_anomalies`        | Statistical anomaly & outlier detection (z-score / IQR)       | "Any unusual spikes in complaints?"  |
+| `detect_issues`           | Detect recurring problems, systemic issues, urgent complaints | "What are the top recurring issues?" |
 
-### Specialized Analytics (NEW)
+### Customer Intelligence
+
+| Tool                       | Description                                                                       | Example Use                               |
+| -------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
+| `get_relationship_summary` | Comprehensive relationship summary — history, sentiment trajectory, active issues | "Give me a full summary of this customer" |
+
+### Specialized Analytics
 
 | Tool                         | Description                                                    | Example Use                                |
 | ---------------------------- | -------------------------------------------------------------- | ------------------------------------------ |
@@ -676,14 +689,15 @@ The agent tools leverage enhanced data fields:
 
 ### Communication Fields
 
-| Field           | Type                             | Description                                         |
-| --------------- | -------------------------------- | --------------------------------------------------- |
-| `channel`       | email/phone/chat/letter/social   | Communication channel                               |
-| `chatMode`      | chatbot/human-agent              | For chat: distinguishes bot vs human (NEW)          |
-| `escalatedFrom` | chatbot/email/chat               | Tracks escalation source (NEW)                      |
-| `status`        | open/in_progress/resolved/escalated | Communication status                           |
+| Field           | Type                                | Description                                |
+| --------------- | ----------------------------------- | ------------------------------------------ |
+| `channel`       | email/phone/chat/letter/social      | Communication channel                      |
+| `chatMode`      | chatbot/human-agent                 | For chat: distinguishes bot vs human (NEW) |
+| `escalatedFrom` | chatbot/email/chat                  | Tracks escalation source (NEW)             |
+| `status`        | open/in_progress/resolved/escalated | Communication status                       |
 
 These fields enable the `analyze_channel_escalation` tool to answer questions like:
+
 - "How many chatbot conversations escalate to human agents?"
 - "What percentage of phone calls are escalations from chat?"
 

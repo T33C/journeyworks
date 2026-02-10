@@ -648,6 +648,27 @@ export class AgentExecutor {
           this.buildTimeSeriesChart('Volume Trend', output.dailyVolume),
         );
       }
+
+      // Anomaly detection → Bar chart of anomaly severity
+      if (action.tool === 'detect_anomalies' && output.anomalies?.length) {
+        const byField: Record<string, number> = {};
+        for (const a of output.anomalies) {
+          const key = `${a.field} (${a.severity})`;
+          byField[key] = (byField[key] || 0) + 1;
+        }
+        charts.push(
+          this.buildBarChart(
+            'Detected Anomalies',
+            Object.entries(byField).map(([label, value]) => ({
+              label,
+              value,
+              color: label.includes('high')
+                ? AgentExecutor.RAG_COLORS.red
+                : AgentExecutor.RAG_COLORS.amber,
+            })),
+          ),
+        );
+      }
     }
 
     // Limit to 3 charts max to avoid overwhelming the UI
@@ -930,6 +951,16 @@ export class AgentExecutor {
     }
     if (q.includes('sentiment')) {
       return 'Try calling: Action: {"tool": "analyze_sentiment", "input": {}}';
+    }
+    if (
+      q.includes('anomal') ||
+      q.includes('outlier') ||
+      q.includes('spike') ||
+      q.includes('unusual') ||
+      q.includes('abnormal') ||
+      q.includes('deviation')
+    ) {
+      return 'Try calling: Action: {"tool": "detect_anomalies", "input": {}}';
     }
     if (q.includes('volume') || q.includes('daily') || q.includes('trend')) {
       return 'Try calling: Action: {"tool": "get_daily_volumes", "input": {}}';

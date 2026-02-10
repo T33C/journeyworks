@@ -131,13 +131,15 @@ Your Capabilities (use this when users ask what you can do — you MUST reproduc
 - find_similar: Find communications that are similar to a specific one — useful for spotting patterns or related issues.
   Example questions: "Find communications similar to this mortgage complaint", "Are there other customers reporting the same issue?"
 
-**Sentiment & Topic Analysis**
+**Sentiment, Topic & Anomaly Analysis**
 - analyze_sentiment: Break down sentiment (positive, neutral, negative) across communications, filterable by customer, time range, channel, or product.
   Example questions: "What's the overall customer sentiment this month?", "How is sentiment trending for the Advance Account?", "Show me sentiment breakdown by channel"
 - analyze_topics: Discover what topics and themes customers are discussing, with frequency and trend data.
   Example questions: "What are the top topics customers are talking about?", "What themes are emerging in recent complaints?", "What are VIP customers discussing?"
 - detect_issues: Automatically identify recurring problems, systemic issues, and urgent complaints from negative-sentiment communications.
   Example questions: "Are there any recurring issues we should be aware of?", "What systemic problems are customers reporting?", "Detect urgent complaints from the last 7 days"
+- detect_anomalies: Statistical anomaly detection across communications — identifies outlier sentiment scores, unusual volume spikes, and abnormal category concentrations using z-score or IQR methods. Flags data points that deviate significantly from the norm.
+  Example questions: "Are there any anomalies in customer sentiment this month?", "Detect any unusual spikes in complaint volumes", "Find outliers in daily communication patterns", "Are there any abnormal concentrations in complaint categories?"
 
 **Customer Health & Risk**
 - analyze_customer_health: Get a health score for a specific customer with sentiment trends, risk factors, and actionable recommendations.

@@ -2114,6 +2114,12 @@ export class AnalysisDataService {
     const maxNps = Math.max(...allBubbles.map((b) => b.npsScore));
     const minNps = Math.min(...allBubbles.map((b) => b.npsScore));
 
+    // Standard deviation for outlier detection (>1.5σ from mean)
+    const npsStdDev = Math.sqrt(
+      allBubbles.reduce((sum, b) => sum + (b.npsScore - avgNps) ** 2, 0) /
+        allBubbles.length,
+    );
+
     // Trend analysis
     const prevBubble = bubbleIndex > 0 ? allBubbles[bubbleIndex - 1] : null;
     const npsChange = prevBubble ? bubble.npsScore - prevBubble.npsScore : 0;
@@ -2121,6 +2127,11 @@ export class AnalysisDataService {
     // Determine bubble characteristics
     const isPeak = bubble.npsScore === maxNps;
     const isTrough = bubble.npsScore === minNps;
+    const isOutlier =
+      npsStdDev > 0 &&
+      Math.abs(bubble.npsScore - avgNps) > 1.5 * npsStdDev &&
+      !isPeak &&
+      !isTrough;
     const npsVsAvg = bubble.npsScore - avgNps;
     const volumeRatio = bubble.volume / avgVolume;
     const socialDiff = bubble.socialSentiment - bubble.sentiment;
@@ -2141,13 +2152,18 @@ export class AnalysisDataService {
     // Build summary based on characteristics
     let summary = `**${dateStr}** - `;
     if (isPeak) {
-      summary += `This is the highest NPS point in the period at ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}. `;
+      summary += `📈 **PEAK** — This is the highest NPS point in the period at ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore}. `;
       summary += `${bubble.promoterPct}% of ${bubble.volume} respondents were Promoters (9-10 scores). `;
       summary += `Key themes: ${bubble.themes.slice(0, 2).join(' and ')}.`;
     } else if (isTrough) {
-      summary += `This is the lowest NPS point in the period at ${bubble.npsScore}. `;
+      summary += `📉 **TROUGH** — This is the lowest NPS point in the period at ${bubble.npsScore}. `;
       summary += `${bubble.detractorPct}% were Detractors (0-6 scores) from ${bubble.volume} responses. `;
       summary += `Primary concerns: ${bubble.themes.slice(0, 2).join(' and ')}.`;
+    } else if (isOutlier) {
+      const deviation = ((bubble.npsScore - avgNps) / npsStdDev).toFixed(1);
+      summary += `⚠️ **OUTLIER** — NPS of ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore} is statistically unusual (${deviation}σ from mean of ${avgNps.toFixed(0)}). `;
+      summary += `This ${bubble.npsScore > avgNps ? 'outperformance' : 'underperformance'} warrants investigation. `;
+      summary += `${bubble.volume} responses across themes: ${bubble.themes.slice(0, 2).join(' and ')}.`;
     } else if (npsVsAvg > 5) {
       summary += `NPS of ${bubble.npsScore > 0 ? '+' : ''}${bubble.npsScore} outperforms the period average (${avgNps.toFixed(0)}) by ${npsVsAvg.toFixed(0)} points. `;
       summary += `Strong Promoter base at ${bubble.promoterPct}% driving positive momentum.`;
@@ -2161,6 +2177,14 @@ export class AnalysisDataService {
 
     // Build key drivers
     const keyDrivers: string[] = [];
+
+    // Outlier alert
+    if (isOutlier) {
+      const deviation = ((bubble.npsScore - avgNps) / npsStdDev).toFixed(1);
+      keyDrivers.push(
+        `⚠️ Statistical outlier: NPS is ${deviation}σ from the period mean (${avgNps.toFixed(0)}) — beyond the 1.5σ threshold`,
+      );
+    }
 
     // NPS composition insight
     if (bubble.detractorPct > 50) {
