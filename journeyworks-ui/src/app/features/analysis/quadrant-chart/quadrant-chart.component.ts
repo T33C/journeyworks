@@ -289,6 +289,17 @@ export class QuadrantChartComponent implements OnInit, AfterViewInit {
       .attr('stroke', THEME.chart.grid)
       .attr('stroke-width', 1);
 
+    // Reassign each item's quadrant based on its actual position
+    // relative to the chart's boundaries. This ensures color, tooltip,
+    // click handler, and quadrant-click filtering are all consistent.
+    items.forEach((d) => {
+      if (d.sentiment < 0) {
+        d.quadrant = d.volume >= volumeMidline ? 'critical' : 'watch';
+      } else {
+        d.quadrant = d.volume >= volumeMidline ? 'strength' : 'noise';
+      }
+    });
+
     // Data points with enter animation
     const points = svg
       .selectAll('.point')
