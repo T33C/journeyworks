@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JourneyWorks Visualizations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* Corporate Brand Colors */
+            --hsbc-red: #DB0011;
+            --hsbc-red-light: #E31E22;
+            --hsbc-red-dark: #730014;
+            --brand-black: #000000;
+            --brand-white: #FFFFFF;
+
+            /* Corporate Grey Palette */
+            --grey-1: #F3F3F3; /* Page BG */
+            --grey-2: #EDEDED; /* Card BG */
+            --grey-3: #D7D8D6; /* Borders */
+            --grey-5: #9B9B9B; /* Muted Text */
+            --grey-6: #767676; /* Secondary Text */
+            --grey-8: #333333; /* Primary Text */
+
+            /* RAG Palette */
+            --rag-red: #A8000B;
+            --rag-amber: #FFBB33;
+            --rag-green: #00847F;
+            --rag-blue: #305A85;
+
+            /* Mappings */
+            --primary: var(--hsbc-red);
+            --secondary: var(--rag-blue);
+            --accent: var(--hsbc-red-dark);
+            --text-dark: var(--grey-8);
+            --text-light: var(--grey-6);
+            --bg: var(--grey-1);
+            --card-bg: var(--brand-white);
+            --border: var(--grey-3);
+            
+            --radius: 8px; /* Slightly sharper for corporate feel */
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-dark);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 80px;
+            align-items: center;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-dark);
+        }
+
+        .visualization-container {
+            width: 100%;
+            max-width: 1200px;
+            background: white;
+            padding: 60px;
+            border-radius: 24px;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .viz-header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .viz-header h2 {
+            font-size: 2rem;
+            color: var(--text-dark); /* Use dark grey for headers, not red */
+            margin-bottom: 8px;
+        }
+
+        .viz-header p {
+            color: var(--text-light);
+        }
+
+        /* --- Common Elements --- */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            background: var(--grey-2);
+            color: var(--text-dark);
+            font-weight: 600;
+        }
+        
+        .arrow-down {
+            color: var(--border);
+            font-size: 1.5rem;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- Diagram 1: Process Flow --- */
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 32px;
+            position: relative;
+        }
+
+        .flow-box {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 100%;
+            max-width: 900px;
+            box-shadow: var(--shadow);
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Highlight box using secondary blue, not red (red is sparing) */
+        .flow-box.primary {
+            border-top: 4px solid var(--secondary);
+            background: linear-gradient(to bottom, #f8fbff, #ffffff);
+        }
+
+        .flow-box h3 {
+            font-size: 1.25rem;
+            margin-bottom: 16px;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .flow-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .flow-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 0.95rem;
+            color: var(--text-dark);
+            background: var(--grey-1);
+            padding: 12px;
+            border-radius: var(--radius);
+            border: 1px solid transparent;
+        }
+
+        .flow-list li i {
+            color: var(--secondary);
+            margin-top: 3px;
+        }
+
+        .ai-engine-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        
+        .ai-feature {
+            background: var(--secondary); /* Corporate Blue */
+            color: white;
+            padding: 16px;
+            border-radius: var(--radius);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(48, 90, 133, 0.3);
+        }
+        
+        /* Use red for anomaly/risk */
+        .ai-feature.risk {
+            background: var(--hsbc-red);
+            box-shadow: 0 4px 6px -1px rgba(219, 0, 17, 0.3);
+        }
+        
+        .ai-feature i {
+            font-size: 1.5rem;
+            margin-bottom: 4px;
+            color: rgba(255,255,255,0.95);
+        }
+        
+        .ai-feature strong {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .ai-feature span {
+            font-size: 0.8rem;
+            opacity: 0.9;
+            line-height: 1.3;
+        }
+
+        /* --- Diagram 2: Agent Architecture (ReAct) --- */
+        .react-arch {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .arch-layer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+
+        .arch-box {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .frontend-box {
+            width: 60%;
+            border-top: 4px solid var(--secondary);
+        }
+
+        .backend-box {
+            width: 90%;
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 20px;
+            padding: 20px;
+            background: var(--grey-1);
+            align-items: start;
+        }
+
+        .controller-service {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .executor-box {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            position: relative;
+        }
+        
+        .executor-title {
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            background: white;
+            padding: 0 10px;
+            color: var(--secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .react-loop {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .loop-step {
+            padding: 10px;
+            background: var(--grey-1);
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+            width: 100px;
+            position: relative;
+            border: 1px solid var(--grey-3);
+        }
+        
+        .loop-step.active {
+            background: #e6f3f2; /* Light green bg */
+            border-color: var(--rag-green);
+            color: var(--rag-green);
+        }
+
+        .loop-arrow {
+            color: var(--grey-5);
+            font-size: 0.8rem;
+        }
+
+        .tools-layer {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            width: 90%;
+        }
+
+        .tools-box {
+            background: white;
+            border: 1px solid var(--border);
+            padding: 16px;
+            border-radius: var(--radius);
+            border-top: 3px solid var(--secondary);
+        }
+
+        .tools-box h4 {
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-list {
+            list-style: none;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            text-align: left;
+        }
+        
+        .tool-list li {
+            margin-bottom: 4px;
+            padding-left: 12px;
+            position: relative;
+        }
+        
+        .tool-list li::before {
+            content: "•";
+            color: var(--secondary);
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        .services-layer {
+            width: 90%;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+        }
+
+        .service-pill {
+            flex: 1;
+            background: var(--grey-8);
+            color: white;
+            padding: 12px;
+            border-radius: var(--radius);
+            font-size: 0.8rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        /* Connecting Lines (CSS Tricks) */
+        .connector-line {
+            width: 2px;
+            background: var(--border);
+            height: 20px;
+            margin: 0 auto;
+        }
+
+        /* --- Diagram 3: Capabilities Grid --- */
+        .capabilities-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .cap-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .cap-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .cap-header {
+            background: var(--grey-1);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cap-header i {
+            color: var(--secondary);
+            font-size: 1.2rem;
+        }
+        
+        /* Specific header colors for variety based on corporate palette */
+        .cap-card:nth-child(1) .cap-header i { color: var(--secondary); }
+        .cap-card:nth-child(2) .cap-header i { color: var(--rag-amber); }
+        .cap-card:nth-child(3) .cap-header i { color: var(--rag-green); }
+        .cap-card:nth-child(4) .cap-header i { color: var(--hsbc-red); }
+        .cap-card:nth-child(5) .cap-header i { color: var(--secondary); }
+        .cap-card:nth-child(6) .cap-header i { color: var(--text-dark); }
+
+        .cap-header h4 {
+            color: var(--text-dark);
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .cap-body {
+            padding: 20px;
+        }
+
+        .cap-list {
+            list-style: none;
+        }
+
+        .cap-list li {
+            position: relative;
+            padding-left: 20px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: var(--text-light);
+            line-height: 1.4;
+        }
+
+        .cap-list li::before {
+            content: "•";
+            color: var(--secondary);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+        
+        .watermark {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 0.8rem;
+            color: var(--grey-3);
+            font-weight: 500;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Diagram 1: Process Flow -->
+    <div class="visualization-container" id="process-flow">
+        <div class="viz-header">
+            <h2>The JourneyWorks AI Transformation</h2>
+            <p>From Raw Data to Actionable Intelligence</p>
+        </div>
+
+        <div class="flow-diagram">
+            <!-- Input Layer -->
+            <div class="flow-box">
+                <h3><i class="fa-solid fa-layer-group"></i> Inputs</h3>
+                <ul class="flow-list">
+                    <li><i class="fa-solid fa-comments"></i> 30,000+ Communications / Month</li>
+                    <li><i class="fa-brands fa-twitter"></i> Social Media (X, Reddit, Trustpilot)</li>
+                    <li><i class="fa-solid fa-envelope-open-text"></i> Letters (OCR Digitised) <span class="badge" style="margin-left: 8px; font-size: 0.7em;">ROADMAP</span></li>
+                </ul>
+            </div>
+
+            <div class="arrow-down"><i class="fa-solid fa-arrow-down"></i></div>
+
+            <!-- Transformation Layer -->
+            <div class="flow-box primary">
+                <h3><i class="fa-solid fa-brain"></i> AI Engine</h3>
+                <div class="ai-engine-grid">
+                    <div class="ai-feature">
+                        <i class="fa-solid fa-tags"></i>
+                        <strong>Auto-classify</strong>
+                        <span>LLM-powered classification (regulatory, product, severity)</span>
+                    </div>
+                    <div class="ai-feature">
+                        <i class="fa-solid fa-heart-pulse"></i>
+                        <strong>Sentiment</strong>
+                        <span>Emotion tracking across the journey</span>
+                    </div>
+                    <div class="ai-feature">
+                        <i class="fa-solid fa-magnifying-glass-chart"></i>
+                        <strong>Root Cause</strong>
+                        <span>LLM-driven topic & theme analysis</span>
+                    </div>
+                    <!-- Risk/Anomaly uses RED for Alert status -->
+                    <div class="ai-feature risk">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <strong>Anomaly Detection</strong>
+                        <span>On-demand statistical outlier scanning</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arrow-down"><i class="fa-solid fa-arrow-down"></i></div>
+
+            <!-- Output Layer -->
+            <div class="flow-box">
+                <h3><i class="fa-solid fa-user-tie"></i> Analyst UI</h3>
+                <ul class="flow-list" style="grid-template-columns: 1fr 1fr;">
+                    <li><i class="fa-solid fa-message"></i> Ask questions in plain English</li>
+                    <li><i class="fa-solid fa-bolt"></i> Get evidence-backed answers in seconds</li>
+                    <li><i class="fa-solid fa-book-open"></i> Every insight cites its sources</li>
+                    <li><i class="fa-solid fa-scale-balanced"></i> AI supports judgement, never replaces it</li>
+                </ul>
+            </div>
+        </div>
+        <div class="watermark">JourneyWorks Strategy</div>
+    </div>
+
+    <!-- Diagram 2: ReAct Architecture -->
+    <div class="visualization-container" id="architecture">
+        <div class="viz-header">
+            <h2>ReAct Agent Architecture</h2>
+            <p>Autonomous Reasoning & Action Loop</p>
+        </div>
+
+        <div class="react-arch">
+            <!-- Frontend -->
+             <div class="arch-layer">
+                 <div class="arch-box frontend-box">
+                     <h4><i class="fa-brands fa-angular"></i> Frontend (Research Panel)</h4>
+                     <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 4px;">"Why are customers complaining?"</div>
+                 </div>
+             </div>
+             
+             <div class="connector-line"></div>
+
+             <!-- Backend -->
+             <div class="arch-layer">
+                 <div class="arch-box backend-box">
+                     <!-- Left: Controller -->
+                      <div class="controller-service">
+                          <div class="arch-box" style="background: white;">
+                              <strong>Controller</strong>
+                              <div style="font-size: 0.75rem; color: var(--text-light);">POST /api/research</div>
+                          </div>
+                          <div class="arrow-down" style="height: 20px; font-size: 1rem;"><i class="fa-solid fa-arrow-down"></i></div>
+                          <div class="arch-box" style="background: white;">
+                              <strong>Service</strong>
+                              <div style="font-size: 0.75rem; color: var(--text-light);">Direct vs Agent?</div>
+                          </div>
+                      </div>
+
+                      <!-- Right: Agent Executor -->
+                      <div class="executor-box">
+                          <span class="executor-title">AgentExecutor (ReAct Loop)</span>
+                          <div class="react-loop">
+                              <div class="loop-step">
+                                  <i class="fa-regular fa-lightbulb"></i><br>Thought
+                              </div>
+                              <i class="fa-solid fa-arrow-right loop-arrow"></i>
+                              <div class="loop-step">
+                                  <i class="fa-solid fa-hand-pointer"></i><br>Action
+                              </div>
+                              <i class="fa-solid fa-arrow-right loop-arrow"></i>
+                              <div class="loop-step active">
+                                  <i class="fa-solid fa-gears"></i><br>Execute Tool
+                              </div>
+                              <i class="fa-solid fa-arrow-right loop-arrow"></i>
+                              <div class="loop-step">
+                                  <i class="fa-solid fa-eye"></i><br>Observe
+                              </div>
+                          </div>
+                          <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-light); border-top: 1px dashed var(--border); padding-top: 8px;">
+                              Repeat until <strong>Final Answer</strong> found
+                          </div>
+                      </div>
+                 </div>
+             </div>
+
+             <div class="connector-line"></div>
+
+             <!-- Tools -->
+             <div class="tools-layer">
+                 <div class="tools-box">
+                     <h4><i class="fa-solid fa-database"></i> Retrieval</h4>
+                     <ul class="tool-list">
+                         <li>search_knowledge_base</li>
+                         <li>ask_question</li>
+                         <li>query_data (RRG)</li>
+                         <li>get_customer_info</li>
+                     </ul>
+                 </div>
+                 <div class="tools-box">
+                     <h4><i class="fa-solid fa-chart-pie"></i> Analysis</h4>
+                     <ul class="tool-list">
+                         <li>analyze_sentiment</li>
+                         <li>analyze_topics</li>
+                         <li>analyze_trends</li>
+                         <li>detect_anomalies</li>
+                     </ul>
+                 </div>
+                 <div class="tools-box">
+                     <h4><i class="fa-solid fa-briefcase"></i> Operations</h4>
+                     <ul class="tool-list">
+                         <li>analyze_sla_compliance</li>
+                         <li>analyze_resolution_times</li>
+                         <li>channel_escalation</li>
+                         <li>cdd_case_analysis</li>
+                     </ul>
+                 </div>
+             </div>
+
+             <div class="connector-line"></div>
+
+             <!-- Underlying Services -->
+             <div class="services-layer">
+                 <div class="service-pill">RAG Service</div>
+                 <div class="service-pill">RRG Service</div>
+                 <div class="service-pill">Analysis Service</div>
+                 <div class="service-pill">Comms Service</div>
+             </div>
+
+        </div>
+        <div class="watermark">JourneyWorks Architecture</div>
+    </div>
+
+    <!-- Diagram 3: Capabilities -->
+    <div class="visualization-container" id="capabilities">
+        <div class="viz-header">
+            <h2>Use Cases Enabled by AI</h2>
+            <p>Solving Real-World Challenges</p>
+        </div>
+
+        <div class="capabilities-grid">
+            <!-- Card 1 -->
+            <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <h4>Complaints Intelligence</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>Root cause across thousands of cases</li>
+                        <li>Theme clustering</li>
+                        <li>Trend detection</li>
+                        <li>Category breakdown</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+             <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <h4>Vulnerability Detection</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>Risk scoring per customer</li>
+                        <li>Sentiment analysis</li>
+                        <li>At-risk customer identification</li>
+                    </ul>
+                </div>
+            </div>
+
+             <!-- Card 3 -->
+             <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <h4>Regulatory Compliance</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>Regulatory auto-tagging ¹</li>
+                        <li>SLA breach detection</li>
+                        <li>Audit trail for every AI interaction ¹</li>
+                    </ul>
+                </div>
+            </div>
+
+             <!-- Card 4 -->
+             <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-bullhorn"></i>
+                    <h4>Social Media Early Warning</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>Cross-reference social sentiment with complaints</li>
+                        <li>Reputation risk alerts</li>
+                        <li>Social sentiment as leading indicator for complaint trends</li>
+                    </ul>
+                </div>
+            </div>
+
+             <!-- Card 5 -->
+             <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-chart-simple"></i>
+                    <h4>Operational Analytics</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>SLA compliance monitoring</li>
+                        <li>Channel escalation analysis</li>
+                        <li>Resolution time statistics</li>
+                        <li>CDD remediation tracking</li>
+                    </ul>
+                </div>
+            </div>
+
+             <!-- Card 6 -->
+             <div class="cap-card">
+                <div class="cap-header">
+                    <i class="fa-solid fa-microscope"></i>
+                    <h4>Deep Research</h4>
+                </div>
+                <div class="cap-body">
+                    <ul class="cap-list">
+                        <li>Multi-step investigation</li>
+                        <li>Investigate if card outage complaints correlate with customer churn</li>
+                        <li>AI reasons autonomously</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="watermark">JourneyWorks Strategy</div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#4F46E5",
+    "primaryTextColor": "#FFFFFF",
+    "primaryBorderColor": "#3730A3",
+    "secondaryColor": "#F0FDF4",
+    "secondaryTextColor": "#166534",
+    "secondaryBorderColor": "#86EFAC",
+    "tertiaryColor": "#FFF7ED",
+    "tertiaryTextColor": "#9A3412",
+    "tertiaryBorderColor": "#FDBA74",
+    "lineColor": "#6366F1",
+    "textColor": "#1E293B",
+    "fontSize": "15px",
+    "fontFamily": "Inter, Segoe UI, Helvetica, Arial, sans-serif"
+  },
+  "flowchart": {
+    "curve": "basis",
+    "padding": 20,
+    "nodeSpacing": 50,
+    "rankSpacing": 60,
+    "htmlLabels": true,
+    "useMaxWidth": false
+  }
+}}%%
+
+graph TB
+    %% ── Data Sources ──
+    subgraph INGEST["📥  DATA INGESTION  —  30,000+ communications / month"]
+        direction LR
+        COMMS["📧 Email, Phone,<br/>Chat, Letters"]
+        SOCIAL["📡 Social Media<br/>X · Reddit · Trustpilot"]
+        LETTERS["📄 Scanned Letters<br/>OCR Digitised"]
+    end
+
+    %% ── Auto-Classification ──
+    CLASSIFY["⚡ AI Auto-Classification<br/>Sentiment · Category · Product · Severity · Regulatory Tags"]
+
+    %% ── Four AI Engines ──
+    subgraph ENGINES["🧠  FOUR AI ENGINES"]
+        direction LR
+
+        subgraph RAG_BOX["  "]
+            RAG_ICON["1️⃣  RAG Engine"]
+            RAG_DESC["Retrieval-Augmented Generation<br/>━━━━━━━━━━━━━━━━━<br/>✦ Hybrid search: dense + sparse vectors<br/>✦ Contextual chunking with LLM prefixes<br/>✦ Cross-encoder reranking for precision<br/>✦ Finds the right evidence before answering"]
+        end
+
+        subgraph RRG_BOX["  "]
+            RRG_ICON["2️⃣  NL Query Engine"]
+            RRG_DESC["Natural Language → Database Query<br/>━━━━━━━━━━━━━━━━━<br/>✦ Plain English to Elasticsearch DSL<br/>✦ Domain glossary with synonyms<br/>✦ Aggregation & statistical intent<br/>✦ Iterative query refinement"]
+        end
+
+        subgraph AGENT_BOX["  "]
+            AGENT_ICON["3️⃣  ReAct Agent"]
+            AGENT_DESC["Autonomous Multi-Step Reasoning<br/>━━━━━━━━━━━━━━━━━<br/>✦ Think → Act → Observe → Repeat<br/>✦ 16 specialist analysis tools<br/>✦ Confidence scoring per answer<br/>✦ Full reasoning trace visible to user"]
+        end
+
+        subgraph STATS_BOX["  "]
+            STATS_ICON["4️⃣  Statistical Engine"]
+            STATS_DESC["Python-Powered Numerical Analysis<br/>━━━━━━━━━━━━━━━━━<br/>✦ Outlier & anomaly detection<br/>✦ Correlation analysis (Pearson)<br/>✦ Trend & change-point detection<br/>✦ Mathematical rigour for LLM context"]
+        end
+    end
+
+    %% ── LLM Layer ──
+    subgraph LLM_LAYER["🔗  LLM PROVIDERS  —  Automatic Failover"]
+        direction LR
+        CLAUDE["🟣 Anthropic Claude<br/>Primary"]
+        GPT["🟢 OpenAI GPT-4o<br/>Fallback"]
+    end
+
+    %% ── Analyst Experience ──
+    subgraph ANALYST["👤  ANALYST EXPERIENCE"]
+        direction LR
+        ASK["💬 Ask Any Question<br/>in Plain English"]
+        EVIDENCE["📎 Evidence-Backed<br/>Answers with Citations"]
+        REASONING["🔍 Visible Reasoning<br/>Steps & Tool Calls"]
+        CONFIDENCE["📊 Confidence Scores<br/>High · Medium · Low"]
+    end
+
+    %% ── Connections ──
+    COMMS --> CLASSIFY
+    SOCIAL --> CLASSIFY
+    LETTERS --> CLASSIFY
+
+    CLASSIFY --> RAG_ICON
+    CLASSIFY --> RRG_ICON
+
+    RAG_ICON --> RAG_DESC
+    RRG_ICON --> RRG_DESC
+    AGENT_ICON --> AGENT_DESC
+    STATS_ICON --> STATS_DESC
+
+    RAG_ICON --> AGENT_ICON
+    RRG_ICON --> AGENT_ICON
+    STATS_ICON --> AGENT_ICON
+
+    AGENT_ICON --> LLM_LAYER
+    CLAUDE ~~~ GPT
+
+    LLM_LAYER --> ASK
+    ASK --> EVIDENCE
+    EVIDENCE --> REASONING
+    REASONING --> CONFIDENCE
+
+    %% ── Styles ──
+    classDef ingestStyle fill:#EEF2FF,stroke:#6366F1,stroke-width:2px,color:#3730A3,font-weight:bold
+    classDef classifyStyle fill:#4F46E5,stroke:#3730A3,stroke-width:2px,color:#FFFFFF,font-weight:bold
+    classDef engineTitle fill:#7C3AED,stroke:#5B21B6,stroke-width:2px,color:#FFFFFF,font-weight:bold
+    classDef engineDesc fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1px,color:#4C1D95,text-align:left
+    classDef llmStyle fill:#ECFDF5,stroke:#34D399,stroke-width:2px,color:#065F46,font-weight:bold
+    classDef analystStyle fill:#FFF7ED,stroke:#FB923C,stroke-width:2px,color:#9A3412,font-weight:bold
+
+    class COMMS,SOCIAL,LETTERS ingestStyle
+    class CLASSIFY classifyStyle
+    class RAG_ICON,RRG_ICON,AGENT_ICON,STATS_ICON engineTitle
+    class RAG_DESC,RRG_DESC,AGENT_DESC,STATS_DESC engineDesc
+    class CLAUDE,GPT llmStyle
+    class ASK,EVIDENCE,REASONING,CONFIDENCE analystStyle
+
+    style INGEST fill:#F8FAFC,stroke:#6366F1,stroke-width:2px,color:#4338CA,font-weight:bold
+    style ENGINES fill:#FAF5FF,stroke:#7C3AED,stroke-width:3px,color:#5B21B6,font-weight:bold
+    style LLM_LAYER fill:#F0FDF4,stroke:#34D399,stroke-width:2px,color:#065F46,font-weight:bold
+    style ANALYST fill:#FFFBEB,stroke:#F59E0B,stroke-width:2px,color:#92400E,font-weight:bold
+    style RAG_BOX fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1px
+    style RRG_BOX fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1px
+    style AGENT_BOX fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1px
+    style STATS_BOX fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1px
