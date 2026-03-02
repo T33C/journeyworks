@@ -299,6 +299,7 @@ export class AnalysisApiService {
                 thought: r.thought || '',
                 action: r.action || 'Analyse',
                 observation: r.observation,
+                llmPrompt: r.llmPrompt,
               }),
             ),
             confidence: response.confidence || 0.8,

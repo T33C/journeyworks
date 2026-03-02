@@ -208,6 +208,67 @@
                     <span class="step-action">{{ step.action }}</span>
                   </div>
                   <div class="step-thought">{{ step.thought }}</div>
+                  @if (step.llmPrompt) {
+                    <div class="llm-prompt-section">
+                      <button
+                        class="prompt-expand-btn"
+                        (click)="
+                          togglePrompt(step.step); $event.stopPropagation()
+                        "
+                        [class.active]="expandedPrompts().has(step.step)"
+                        title="View LLM prompt"
+                      >
+                        <mat-icon>psychology</mat-icon>
+                        <span>LLM Prompt</span>
+                        <mat-icon class="prompt-chevron">{{
+                          expandedPrompts().has(step.step)
+                            ? "expand_less"
+                            : "expand_more"
+                        }}</mat-icon>
+                      </button>
+                      @if (expandedPrompts().has(step.step)) {
+                        <div class="llm-prompt-panel">
+                          <div class="llm-prompt-header">
+                            <mat-icon class="prompt-icon">psychology</mat-icon>
+                            <span>Prompt sent to LLM</span>
+                            <span class="prompt-size">{{
+                              formatPromptSize(step.llmPrompt!)
+                            }}</span>
+                            <div class="prompt-header-actions">
+                              <button
+                                class="prompt-action-btn"
+                                (click)="
+                                  copyPrompt(step.llmPrompt!);
+                                  $event.stopPropagation()
+                                "
+                                title="Copy to clipboard"
+                              >
+                                <mat-icon>{{
+                                  copySuccess() ? "check" : "content_copy"
+                                }}</mat-icon>
+                              </button>
+                              <button
+                                class="prompt-action-btn"
+                                (click)="
+                                  openFullscreenPrompt(
+                                    step.step,
+                                    step.llmPrompt!
+                                  );
+                                  $event.stopPropagation()
+                                "
+                                title="View fullscreen"
+                              >
+                                <mat-icon>open_in_full</mat-icon>
+                              </button>
+                            </div>
+                          </div>
+                          <pre class="llm-prompt-content">{{
+                            step.llmPrompt
+                          }}</pre>
+                        </div>
+                      }
+                    </div>
+                  }
                   @if (step.observation) {
                     <div class="step-observation">
                       <mat-icon>check_circle_outline</mat-icon>
@@ -273,6 +334,61 @@
                     }
                   </div>
                   <div class="step-thought">{{ step.thought }}</div>
+                  @if (step.llmPrompt) {
+                    <div class="llm-prompt-section">
+                      <button
+                        class="prompt-expand-btn"
+                        (click)="togglePrompt(step.step)"
+                        [class.active]="expandedPrompts().has(step.step)"
+                        title="View LLM prompt"
+                      >
+                        <mat-icon>psychology</mat-icon>
+                        <span>LLM Prompt</span>
+                        <mat-icon class="prompt-chevron">{{
+                          expandedPrompts().has(step.step)
+                            ? "expand_less"
+                            : "expand_more"
+                        }}</mat-icon>
+                      </button>
+                      @if (expandedPrompts().has(step.step)) {
+                        <div class="llm-prompt-panel">
+                          <div class="llm-prompt-header">
+                            <mat-icon class="prompt-icon">psychology</mat-icon>
+                            <span>Prompt sent to LLM</span>
+                            <span class="prompt-size">{{
+                              formatPromptSize(step.llmPrompt!)
+                            }}</span>
+                            <div class="prompt-header-actions">
+                              <button
+                                class="prompt-action-btn"
+                                (click)="copyPrompt(step.llmPrompt!)"
+                                title="Copy to clipboard"
+                              >
+                                <mat-icon>{{
+                                  copySuccess() ? "check" : "content_copy"
+                                }}</mat-icon>
+                              </button>
+                              <button
+                                class="prompt-action-btn"
+                                (click)="
+                                  openFullscreenPrompt(
+                                    step.step,
+                                    step.llmPrompt!
+                                  )
+                                "
+                                title="View fullscreen"
+                              >
+                                <mat-icon>open_in_full</mat-icon>
+                              </button>
+                            </div>
+                          </div>
+                          <pre class="llm-prompt-content">{{
+                            step.llmPrompt
+                          }}</pre>
+                        </div>
+                      }
+                    </div>
+                  }
                   @if (
                     step.status === "tool-running" && currentToolCall();
                     as tool
@@ -396,6 +512,9 @@
               <app-reasoning-summary
                 [steps]="msg.reasoningSteps!"
                 [streaming]="false"
+                (promptRequested)="
+                  openFullscreenPrompt($event.step, $event.text)
+                "
               />
             }
             <div
@@ -444,6 +563,9 @@
                 [liveSteps]="liveReasoningSteps()"
                 [streaming]="true"
                 [streamStatus]="streamStatus()"
+                (promptRequested)="
+                  openFullscreenPrompt($event.step, $event.text)
+                "
               />
             }
           </div>
@@ -472,3 +594,36 @@
     </div>
   </div>
 </div>
+
+<!-- Fullscreen Prompt Overlay -->
+@if (fullscreenPrompt()) {
+  <div class="prompt-overlay" (click)="closeFullscreenPrompt()">
+    <div class="prompt-overlay-panel" (click)="$event.stopPropagation()">
+      <div class="prompt-overlay-header">
+        <div class="prompt-overlay-title">
+          <mat-icon>psychology</mat-icon>
+          <span>LLM Prompt — Step {{ fullscreenPrompt()!.step }}</span>
+          <span class="prompt-size">{{
+            formatPromptSize(fullscreenPrompt()!.text)
+          }}</span>
+        </div>
+        <div class="prompt-overlay-actions">
+          <button
+            class="prompt-action-btn"
+            (click)="copyPrompt(fullscreenPrompt()!.text)"
+          >
+            <mat-icon>{{ copySuccess() ? "check" : "content_copy" }}</mat-icon>
+            <span>{{ copySuccess() ? "Copied" : "Copy" }}</span>
+          </button>
+          <button
+            class="prompt-action-btn close-btn"
+            (click)="closeFullscreenPrompt()"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      </div>
+      <pre class="prompt-overlay-content">{{ fullscreenPrompt()!.text }}</pre>
+    </div>
+  </div>
+}

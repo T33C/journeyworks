@@ -265,6 +265,36 @@
   flex-shrink: 0;
 }
 
+// Prompt peek button (small icon in step row)
+.prompt-peek-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba($ai-primary, 0.2);
+  border-radius: 3px;
+  background: rgba($ai-primary, 0.06);
+  color: $ai-primary;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+
+  mat-icon {
+    font-size: 12px;
+    width: 12px;
+    height: 12px;
+  }
+
+  &:hover {
+    opacity: 1;
+    background: rgba($ai-primary, 0.14);
+    border-color: rgba($ai-primary, 0.3);
+  }
+}
+
 // Live Steps (compact, during streaming)
 .live-steps-compact {
   margin-top: $spacing-xs + 2px;

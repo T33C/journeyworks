@@ -314,6 +314,9 @@ export class ResearchPanelComponent implements OnInit, AfterViewChecked {
 
   private loadInsight(context: AnalysisContext) {
     this.isLoading.set(true);
+    // Reset prompt viewer state when loading a new insight
+    this.expandedPrompts.set(new Set());
+    this.closeFullscreenPrompt();
     this.dataService.getInsight(context).subscribe({
       next: (data) => {
         this.insight.set(data);
@@ -627,6 +630,60 @@ export class ResearchPanelComponent implements OnInit, AfterViewChecked {
 
   getStepStatusClass(step: LiveReasoningStep): string {
     return `step-${step.status}`;
+  }
+
+  // ---- LLM Prompt viewer state & methods ----
+
+  expandedPrompts = signal<Set<number>>(new Set());
+  fullscreenPrompt = signal<{ step: number; text: string } | null>(null);
+  copySuccess = signal(false);
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.fullscreenPrompt()) {
+      this.closeFullscreenPrompt();
+    }
+  }
+
+  togglePrompt(stepNumber: number): void {
+    this.expandedPrompts.update((set) => {
+      const next = new Set(set);
+      next.has(stepNumber) ? next.delete(stepNumber) : next.add(stepNumber);
+      return next;
+    });
+  }
+
+  openFullscreenPrompt(stepNumber: number, text: string): void {
+    this.fullscreenPrompt.set({ step: stepNumber, text });
+  }
+
+  closeFullscreenPrompt(): void {
+    this.fullscreenPrompt.set(null);
+    this.copySuccess.set(false);
+  }
+
+  async copyPrompt(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copySuccess.set(true);
+      setTimeout(() => this.copySuccess.set(false), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      this.copySuccess.set(true);
+      setTimeout(() => this.copySuccess.set(false), 2000);
+    }
+  }
+
+  formatPromptSize(prompt: string | undefined): string {
+    if (!prompt) return '0 B';
+    const bytes = new Blob([prompt]).size;
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
   }
 
   getEvidenceIcon(type: string): string {

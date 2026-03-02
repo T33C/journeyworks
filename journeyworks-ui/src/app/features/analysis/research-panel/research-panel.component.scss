@@ -1,5 +1,6 @@
 @use "styles/variables" as *;
 @use "styles/mixins" as *;
+@use "styles/prompt-viewer" as *;
 
 // Animations - must be defined in component scope
 @keyframes fadeSlideIn {
@@ -584,6 +585,11 @@ mat-divider {
   font-weight: 500;
   animation: fadeSlideIn 0.2s ease-out;
 }
+
+// ---- LLM Prompt Section ----
+@include prompt-viewer-inline(300px);
+
+// ---- Fullscreen Prompt Overlay (styles in global styles.scss) ----
 
 .live-badge {
   display: inline-flex;

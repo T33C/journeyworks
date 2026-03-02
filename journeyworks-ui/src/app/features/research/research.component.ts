@@ -6,7 +6,9 @@ import {
   ViewChild,
   ElementRef,
   AfterViewChecked,
+  HostListener,
   effect,
+  signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -91,6 +93,11 @@ export class ResearchComponent implements OnInit, OnDestroy, AfterViewChecked {
   showReasoning = false;
   currentThinking = '';
 
+  // LLM Prompt viewer state
+  expandedPrompts = signal<Set<number>>(new Set());
+  fullscreenPrompt = signal<{ step: number; text: string } | null>(null);
+  copySuccess = signal(false);
+
   private shouldScroll = false;
 
   constructor() {
@@ -130,6 +137,10 @@ export class ResearchComponent implements OnInit, OnDestroy, AfterViewChecked {
     // Add user message to shared state
     this.researchService.addUserMessage(query);
     this.shouldScroll = true;
+
+    // Reset prompt viewer state for new query
+    this.expandedPrompts.set(new Set());
+    this.closeFullscreenPrompt();
 
     // Use WebSocket streaming if reasoning is visible, otherwise HTTP
     if (this.showReasoning && this.wsConnected()) {
@@ -218,6 +229,67 @@ export class ResearchComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   getStepStatusClass(step: LiveReasoningStep): string {
     return `step-${step.status}`;
+  }
+
+  // ---- LLM Prompt viewer methods ----
+
+  /** Close fullscreen overlay on Escape key */
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.fullscreenPrompt()) {
+      this.closeFullscreenPrompt();
+    }
+  }
+
+  /** Toggle inline LLM prompt panel for a specific reasoning step */
+  togglePrompt(stepNumber: number): void {
+    this.expandedPrompts.update((set) => {
+      const next = new Set(set);
+      if (next.has(stepNumber)) {
+        next.delete(stepNumber);
+      } else {
+        next.add(stepNumber);
+      }
+      return next;
+    });
+  }
+
+  /** Open prompt in fullscreen overlay */
+  openFullscreenPrompt(stepNumber: number, text: string): void {
+    this.fullscreenPrompt.set({ step: stepNumber, text });
+  }
+
+  /** Close fullscreen overlay */
+  closeFullscreenPrompt(): void {
+    this.fullscreenPrompt.set(null);
+    this.copySuccess.set(false);
+  }
+
+  /** Copy prompt text to clipboard */
+  async copyPrompt(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copySuccess.set(true);
+      setTimeout(() => this.copySuccess.set(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      this.copySuccess.set(true);
+      setTimeout(() => this.copySuccess.set(false), 2000);
+    }
+  }
+
+  /** Format prompt size for display (e.g., "2.4 KB") */
+  formatPromptSize(prompt: string | undefined): string {
+    if (!prompt) return '0 B';
+    const bytes = new Blob([prompt]).size;
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
   }
 
   private loadInitialSuggestions(): void {

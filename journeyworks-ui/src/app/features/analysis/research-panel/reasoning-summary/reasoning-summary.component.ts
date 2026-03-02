@@ -1,4 +1,4 @@
-import { Component, input, signal, computed } from '@angular/core';
+import { Component, input, signal, computed, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -45,6 +45,9 @@ export class ReasoningSummaryComponent {
 
   /** Whether the summary is expanded to show individual steps */
   isExpanded = signal(false);
+
+  /** Event emitted when user wants to view a step's LLM prompt */
+  promptRequested = output<{ step: number; text: string }>();
 
   /** Resolved step list — prefers live steps while streaming, falls back to static */
   readonly resolvedSteps = computed(() => {
@@ -123,6 +126,24 @@ export class ReasoningSummaryComponent {
   toggleExpanded(): void {
     if (!this.streaming() && this.stepCount() > 0) {
       this.isExpanded.update((v) => !v);
+    }
+  }
+
+  /** Check if a step has an LLM prompt */
+  hasPrompt(
+    step: InsightReasoningStep | ReasoningStep | LiveReasoningStep,
+  ): boolean {
+    return !!step.llmPrompt;
+  }
+
+  /** Request to view a step's LLM prompt (emits to parent) */
+  viewPrompt(
+    step: InsightReasoningStep | ReasoningStep | LiveReasoningStep,
+    event: MouseEvent,
+  ): void {
+    event.stopPropagation();
+    if (step.llmPrompt) {
+      this.promptRequested.emit({ step: step.step, text: step.llmPrompt });
     }
   }
 }

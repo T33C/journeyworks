@@ -53,6 +53,15 @@
               @if (isLiveStep(step) && step.toolDuration) {
                 <span class="step-duration">{{ step.toolDuration }}ms</span>
               }
+              @if (hasPrompt(step)) {
+                <button
+                  class="prompt-peek-btn"
+                  (click)="viewPrompt(step, $event)"
+                  title="View LLM prompt"
+                >
+                  <mat-icon>psychology</mat-icon>
+                </button>
+              }
             </div>
           </div>
         }

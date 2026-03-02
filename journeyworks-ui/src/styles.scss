@@ -4,6 +4,7 @@
 @use "@angular/material" as mat;
 @use "styles/variables" as *;
 @use "styles/mixins" as *;
+@use "styles/prompt-viewer" as *;
 
 // Include the common styles for Angular Material
 @include mat.core();
@@ -195,3 +196,6 @@ h6 {
   --mdc-switch-unselected-focus-track-color: #{$grey-4};
   --mdc-switch-unselected-pressed-track-color: #{$grey-5};
 }
+
+// ---- Global fullscreen prompt overlay (shared by research components) ----
+@include prompt-viewer-overlay();

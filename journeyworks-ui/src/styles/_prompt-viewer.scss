@@ -1,0 +1,286 @@
+/**
+ * Shared LLM Prompt Viewer Styles
+ *
+ * Used by research.component and research-panel.component
+ * for the inline expand panel and fullscreen overlay.
+ *
+ * Usage: @include prompt-viewer-inline(); inside a parent selector
+ *        @include prompt-viewer-overlay(); at root level
+ */
+
+@use "variables" as *;
+
+// ---- Inline expand + panel (nest inside a parent) ----
+@mixin prompt-viewer-inline($max-content-height: 400px) {
+  .llm-prompt-section {
+    margin-top: 6px;
+  }
+
+  .prompt-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px $spacing-sm;
+    border: 1px solid rgba($ai-primary, 0.2);
+    border-radius: $border-radius-sm;
+    background: rgba($ai-primary, 0.06);
+    color: $ai-primary;
+    font-size: $font-size-xs;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.85;
+
+    &:hover {
+      opacity: 1;
+      background: rgba($ai-primary, 0.12);
+      border-color: rgba($ai-primary, 0.3);
+    }
+
+    &.active {
+      opacity: 1;
+      background: rgba($ai-primary, 0.12);
+      border-color: rgba($ai-primary, 0.3);
+    }
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  .prompt-chevron {
+    font-size: 14px !important;
+    width: 14px !important;
+    height: 14px !important;
+    margin-left: 2px;
+  }
+
+  .llm-prompt-panel {
+    margin-top: 6px;
+    border: 1px solid rgba($ai-primary, 0.15);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba($ai-primary, 0.04);
+    font-size: 11px;
+    padding: $spacing-sm 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .llm-prompt-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: $ai-primary;
+    font-size: 11px;
+  }
+
+  .prompt-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .prompt-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 5px;
+    border: 1px solid rgba($ai-primary, 0.2);
+    border-radius: $border-radius-sm;
+    background: rgba($ai-primary, 0.06);
+    color: $ai-primary;
+    font-size: $font-size-xs;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.8;
+
+    mat-icon {
+      font-size: 13px;
+      width: 13px;
+      height: 13px;
+    }
+
+    &:hover {
+      opacity: 1;
+      background: rgba($ai-primary, 0.14);
+      border-color: rgba($ai-primary, 0.35);
+    }
+  }
+
+  .prompt-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    color: $ai-primary;
+  }
+
+  .prompt-size {
+    font-size: $font-size-xs;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba($ai-primary, 0.1);
+    color: $ai-primary;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .llm-prompt-content {
+    margin: 0;
+    padding: $spacing-sm;
+    background: $bg-surface;
+    border-radius: $border-radius-sm;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: $text-secondary;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: $max-content-height;
+    overflow-y: auto;
+  }
+}
+
+// ---- Fullscreen overlay (use at root level) ----
+@mixin prompt-viewer-overlay() {
+  .prompt-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: overlayFadeIn 0.15s ease;
+  }
+
+  @keyframes overlayFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .prompt-overlay-panel {
+    width: 90vw;
+    max-width: 1000px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    border: 1px solid rgba($ai-primary, 0.25);
+    background: $bg-card;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    animation: panelSlideIn 0.2s ease;
+  }
+
+  @keyframes panelSlideIn {
+    from {
+      transform: scale(0.95) translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .prompt-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $spacing-sm + 4px $spacing-md;
+    border-bottom: 1px solid rgba($ai-primary, 0.15);
+    background: rgba($ai-primary, 0.04);
+    border-radius: 10px 10px 0 0;
+  }
+
+  .prompt-overlay-title {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    color: $ai-primary;
+    font-weight: 600;
+    font-size: 13px;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    .prompt-size {
+      font-size: $font-size-xs;
+      font-weight: 500;
+      padding: 1px 6px;
+      border-radius: $border-radius-sm;
+      background: rgba($ai-primary, 0.1);
+      color: $ai-primary;
+    }
+  }
+
+  .prompt-overlay-actions {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+
+    .prompt-action-btn {
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+      padding: $spacing-xs 10px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: $ai-primary;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      opacity: 0.8;
+
+      mat-icon {
+        font-size: 15px;
+        width: 15px;
+        height: 15px;
+      }
+
+      &:hover {
+        opacity: 1;
+        background: rgba($ai-primary, 0.1);
+        border-color: rgba($ai-primary, 0.2);
+      }
+    }
+
+    .close-btn {
+      color: $text-secondary;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.06);
+        color: $text-primary;
+        border-color: $border-default;
+      }
+    }
+  }
+
+  .prompt-overlay-content {
+    margin: 0;
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: $font-size-sm;
+    line-height: 1.6;
+    color: $text-secondary;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}

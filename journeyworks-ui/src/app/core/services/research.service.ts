@@ -244,6 +244,7 @@ export class ResearchService implements OnDestroy {
         observation: event.step.observation,
         timestamp: event.timestamp,
         status: event.step.action === 'Final Answer' ? 'complete' : 'thinking',
+        llmPrompt: event.step.llmPrompt,
       };
       this._liveReasoningSteps.update((steps) => [...steps, step]);
       this._streamStatus.set(
@@ -383,6 +384,7 @@ export class ResearchService implements OnDestroy {
             response.answer,
             response.sources,
             response.charts,
+            response.reasoning,
           );
         },
         error: (err) => {
@@ -736,6 +738,8 @@ export interface ReasoningStep {
   thought: string;
   action: string;
   observation?: string;
+  /** The full prompt sent to the LLM for this reasoning iteration */
+  llmPrompt?: string;
 }
 
 export interface ResearchStreamEvent {
@@ -775,6 +779,8 @@ export interface LiveReasoningStep {
   status: 'thinking' | 'tool-running' | 'complete' | 'error';
   toolDuration?: number;
   toolSuccess?: boolean;
+  /** The full prompt sent to the LLM for this reasoning iteration */
+  llmPrompt?: string;
 }
 
 export interface LiveToolCall {

@@ -100,6 +100,8 @@ export interface InsightReasoningStep {
   thought: string;
   action: string;
   observation?: string;
+  /** The full prompt sent to the LLM for this reasoning iteration */
+  llmPrompt?: string;
 }
 
 // AI Research Panel content

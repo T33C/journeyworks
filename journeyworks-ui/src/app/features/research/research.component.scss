@@ -1,5 +1,6 @@
 @use "styles/variables" as *;
 @use "styles/mixins" as *;
+@use "styles/prompt-viewer" as *;
 
 // Animations - must be defined in component scope
 @keyframes fadeSlideIn {
@@ -785,6 +786,9 @@
     }
   }
 
+  // ---- LLM Prompt Section (inline expand + panel) ----
+  @include prompt-viewer-inline(400px);
+
   // ---- Empty state ----
 
   .reasoning-empty {
@@ -928,6 +932,8 @@
     color: $status-closed;
   }
 }
+
+// ---- Fullscreen Prompt Overlay (styles in global styles.scss) ----
 
 // Pulse animation for live indicators
 @keyframes pulse {
