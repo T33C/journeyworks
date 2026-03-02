@@ -57,6 +57,18 @@ export class AgentTools {
   }
 
   /**
+   * Get tools filtered to a specific set of names.
+   * If `enabledTools` is undefined or empty, returns ALL tools.
+   */
+  getFilteredTools(enabledTools?: string[]): AgentTool[] {
+    if (!enabledTools || enabledTools.length === 0) {
+      return this.getTools();
+    }
+    const allowed = new Set(enabledTools);
+    return this.getTools().filter((t) => allowed.has(t.name));
+  }
+
+  /**
    * Get a specific tool by name
    */
   getTool(name: string): AgentTool | undefined {
@@ -64,10 +76,19 @@ export class AgentTools {
   }
 
   /**
-   * Get tool descriptions for the agent prompt
+   * Get all registered tool names
    */
-  getToolDescriptions(): string {
-    return this.getTools()
+  getToolNames(): string[] {
+    return Array.from(this.tools.keys());
+  }
+
+  /**
+   * Get tool descriptions for the agent prompt.
+   * If `enabledTools` is provided, only those tools are included.
+   */
+  getToolDescriptions(enabledTools?: string[]): string {
+    const tools = this.getFilteredTools(enabledTools);
+    return tools
       .map((tool) => {
         const params = Object.entries(tool.parameters.properties)
           .map(([key, prop]) => {
@@ -79,6 +100,41 @@ export class AgentTools {
         return `${tool.name}: ${tool.description}\n  Parameters:\n${params}`;
       })
       .join('\n\n');
+  }
+
+  /**
+   * Format tool output as an LLM-friendly observation string.
+   *
+   * If the tool has a custom `formatObservation` callback, it is used to
+   * produce a concise, structured text representation — preserving all
+   * semantically relevant information without relying on raw JSON dumps
+   * that risk blind character-level truncation.
+   *
+   * Falls back to compact JSON for tools without a custom formatter.
+   */
+  formatToolObservation(toolName: string, output: any): string {
+    const tool = this.tools.get(toolName);
+    if (tool?.formatObservation) {
+      try {
+        return tool.formatObservation(output);
+      } catch (e) {
+        this.logger.warn(
+          `Custom observation formatter failed for ${toolName}: ${e.message}`,
+        );
+        // Fall through to generic formatting
+      }
+    }
+
+    // Generic fallback: compact JSON (no pretty-printing to save tokens)
+    if (typeof output === 'string') return output;
+    const json = JSON.stringify(output);
+    if (json.length > 8000) {
+      this.logger.warn(
+        `Tool ${toolName} observation truncated (${json.length} chars) — consider adding a formatObservation callback`,
+      );
+      return json.substring(0, 7997) + '...';
+    }
+    return json;
   }
 
   /**
@@ -222,6 +278,20 @@ export class AgentTools {
           metadata: r.document.metadata,
         }));
       },
+      formatObservation: (output: any[]) => {
+        if (!Array.isArray(output) || output.length === 0)
+          return 'No results found.';
+        const lines = output.map((r, i) => {
+          const m = r.metadata || {};
+          const tags =
+            m.tags && m.tags.length > 0 ? ` [${m.tags.join(', ')}]` : '';
+          const safeContent = (r.content || '')
+            .replace(/\n/g, ' ')
+            .replace(/"/g, "'");
+          return `${i + 1}. [${m.customerId || 'unknown'}, ${m.customerName || 'unknown'}] (${m.channel || '?'}, ${(m.timestamp || '').substring(0, 10)}, ${m.sentiment || '?'}${tags}): "${safeContent}"`;
+        });
+        return `Found ${output.length} results:\n${lines.join('\n')}`;
+      },
     });
 
     // RAG Q&A Tool
@@ -298,6 +368,36 @@ export class AgentTools {
           dsl: result.query,
           explanation: result.explanation,
         };
+      },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        // Non-executed: show DSL explanation
+        if (output.dsl) return `DSL explanation: ${output.explanation}`;
+        // Executed: summarise results concisely
+        const parts = [`Total: ${output.total}`];
+        if (output.summary) parts.push(output.summary);
+        if (output.aggregations) {
+          // Compact representation, capped to avoid oversized observations
+          const aggsJson = JSON.stringify(output.aggregations);
+          parts.push(
+            'Aggregations: ' +
+              (aggsJson.length > 2000
+                ? aggsJson.substring(0, 1997) + '...'
+                : aggsJson),
+          );
+        }
+        if (output.sampleDocuments?.length) {
+          parts.push(
+            `Sample docs (${output.sampleDocuments.length}): ` +
+              output.sampleDocuments
+                .map(
+                  (d: any) =>
+                    `[${d.id || '?'}] ${d.summary || d.subject || d.content?.substring(0, 120) || '(no content)'}`,
+                )
+                .join(' | '),
+          );
+        }
+        return parts.join('\n');
       },
     });
 
@@ -422,6 +522,31 @@ export class AgentTools {
           insights: result.insights.slice(0, 3),
         };
       },
+      formatObservation: (output: any) => {
+        const parts: string[] = [];
+        if (output.summary) parts.push(output.summary);
+        if (output.topTopics?.length) {
+          const topics = output.topTopics
+            .slice(0, 15)
+            .map(
+              (t: any) =>
+                `${t.topic || t.name || t.key} (${t.count || t.doc_count || '?'})`,
+            );
+          parts.push('Top topics: ' + topics.join(', '));
+          if (output.topTopics.length > 15) {
+            parts.push(`  ... and ${output.topTopics.length - 15} more topics`);
+          }
+        }
+        if (output.insights?.length) {
+          parts.push(
+            'Insights:\n' +
+              output.insights
+                .map((ins: any, i: number) => `  ${i + 1}. ${ins}`)
+                .join('\n'),
+          );
+        }
+        return parts.join('\n');
+      },
     });
 
     // Risk Assessment Tool
@@ -508,6 +633,23 @@ export class AgentTools {
           relationshipSummary: summary,
         };
       },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [
+          `Customer: ${output.customerName} (${output.customerId}), Total comms: ${output.totalCommunications}`,
+        ];
+        if (output.recentCommunications?.length) {
+          const lines = output.recentCommunications.map(
+            (c: any) =>
+              `  - (${(c.date || '').substring(0, 10)}, ${c.channel}, ${c.sentiment}): ${c.summary}`,
+          );
+          parts.push('Recent communications:\n' + lines.join('\n'));
+        }
+        if (output.relationshipSummary) {
+          parts.push(`Relationship summary: ${output.relationshipSummary}`);
+        }
+        return parts.join('\n');
+      },
     });
 
     // Find Similar Communications Tool
@@ -542,6 +684,17 @@ export class AgentTools {
           customer: r.document.metadata.customerName,
           channel: r.document.metadata.channel,
         }));
+      },
+      formatObservation: (output: any[]) => {
+        if (!Array.isArray(output) || output.length === 0)
+          return 'No similar communications found.';
+        const lines = output.map((r, i) => {
+          const safeContent = (r.content || '')
+            .replace(/\n/g, ' ')
+            .replace(/"/g, "'");
+          return `${i + 1}. [${r.customer || 'unknown'}] (${r.channel || '?'}, similarity=${typeof r.similarity === 'number' ? r.similarity.toFixed(2) : '?'}): "${safeContent}"`;
+        });
+        return `Found ${output.length} similar communications:\n${lines.join('\n')}`;
       },
     });
 
@@ -684,6 +837,29 @@ export class AgentTools {
           return { error: `Query failed: ${error.message}` };
         }
       },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [`Total escalations: ${output.totalEscalations}`];
+        if (output.dailyBreakdown?.length) {
+          const items = output.dailyBreakdown;
+          const fmt = (d: any) => `${d.date?.substring(0, 10)}=${d.count}`;
+          if (items.length > 30) {
+            parts.push(
+              `Daily (${items.length} days, first/last 5): ${items.slice(0, 5).map(fmt).join(', ')} ... ${items.slice(-5).map(fmt).join(', ')}`,
+            );
+          } else {
+            parts.push(
+              `Daily (${items.length} days): ${items.map(fmt).join(', ')}`,
+            );
+          }
+        }
+        if (output.timeRange?.from) {
+          parts.push(
+            `Time range: ${output.timeRange.from} to ${output.timeRange.to}`,
+          );
+        }
+        return parts.join('\n');
+      },
     });
 
     // CDD Cases Analysis Tool
@@ -783,6 +959,53 @@ export class AgentTools {
         } catch (error) {
           return { error: `Query failed: ${error.message}` };
         }
+      },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [`Total CDD cases: ${output.totalCases}`];
+        if (output.byReason?.length) {
+          parts.push(
+            'By reason: ' +
+              output.byReason
+                .map((r: any) => `${r.reason} (${r.count})`)
+                .join(', '),
+          );
+        }
+        if (output.byStatus?.length) {
+          parts.push(
+            'By status: ' +
+              output.byStatus
+                .map((s: any) => `${s.status} (${s.count})`)
+                .join(', '),
+          );
+        }
+        if (output.byChannel?.length) {
+          parts.push(
+            'By channel: ' +
+              output.byChannel
+                .map((c: any) => `${c.channel} (${c.count})`)
+                .join(', '),
+          );
+        }
+        if (output.dailyVolume?.length) {
+          const items = output.dailyVolume;
+          const fmt = (d: any) => `${d.date?.substring(0, 10)}=${d.count}`;
+          if (items.length > 30) {
+            parts.push(
+              `Daily volume (${items.length} days, first/last 5): ${items.slice(0, 5).map(fmt).join(', ')} ... ${items.slice(-5).map(fmt).join(', ')}`,
+            );
+          } else {
+            parts.push(
+              `Daily volume (${items.length} days): ${items.map(fmt).join(', ')}`,
+            );
+          }
+        }
+        if (output.timeRange?.from) {
+          parts.push(
+            `Time range: ${output.timeRange.from} to ${output.timeRange.to}`,
+          );
+        }
+        return parts.join('\n');
       },
     });
 
@@ -898,6 +1121,29 @@ export class AgentTools {
         } catch (error) {
           return { error: `Query failed: ${error.message}` };
         }
+      },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [`Total: ${output.total}, Avg/day: ${output.avgPerDay}`];
+        if (output.daily?.length) {
+          const items = output.daily;
+          const fmt = (d: any) => `${d.date?.substring(0, 10)}=${d.count}`;
+          if (items.length > 30) {
+            parts.push(
+              `Daily (${items.length} days, first/last 5): ${items.slice(0, 5).map(fmt).join(', ')} ... ${items.slice(-5).map(fmt).join(', ')}`,
+            );
+          } else {
+            parts.push(
+              `Daily (${items.length} days): ${items.map(fmt).join(', ')}`,
+            );
+          }
+        }
+        if (output.timeRange?.from) {
+          parts.push(
+            `Time range: ${output.timeRange.from} to ${output.timeRange.to}`,
+          );
+        }
+        return parts.join('\n');
       },
     });
 
@@ -1171,6 +1417,30 @@ export class AgentTools {
           return { error: `Query failed: ${error.message}` };
         }
       },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [`Total: ${output.total}`];
+        if (output.byCategory?.length) {
+          const cats = output.byCategory.map((c: any) => {
+            let line = `${c.category} (${c.count})`;
+            if (c.subcategories?.length) {
+              line +=
+                ': ' +
+                c.subcategories
+                  .map((s: any) => `${s.name}=${s.count}`)
+                  .join(', ');
+            }
+            return line;
+          });
+          parts.push('Categories:\n  ' + cats.join('\n  '));
+        }
+        if (output.timeRange?.from) {
+          parts.push(
+            `Time range: ${output.timeRange.from} to ${output.timeRange.to}`,
+          );
+        }
+        return parts.join('\n');
+      },
     });
 
     // Issue Detection Tool
@@ -1216,6 +1486,39 @@ export class AgentTools {
           insights: result.insights?.slice(0, 5),
           recommendations: result.recommendations,
         };
+      },
+      formatObservation: (output: any) => {
+        const parts: string[] = [];
+        if (output.summary) parts.push(output.summary);
+        parts.push(
+          `Issues: ${output.issueCount ?? '?'}, Problematic: ${output.problematicCount ?? '?'}, Total comms: ${output.totalCommunications ?? '?'}`,
+        );
+        if (output.insights?.length) {
+          parts.push(
+            'Insights:\n' +
+              output.insights
+                .map((ins: any, i: number) => `  ${i + 1}. ${ins}`)
+                .join('\n'),
+          );
+        }
+        if (output.recommendations?.length) {
+          const recs = Array.isArray(output.recommendations)
+            ? output.recommendations.slice(0, 5)
+            : [output.recommendations];
+          parts.push(
+            'Recommendations:\n' +
+              recs
+                .map((rec: any, i: number) => `  ${i + 1}. ${rec}`)
+                .join('\n'),
+          );
+          if (
+            Array.isArray(output.recommendations) &&
+            output.recommendations.length > 5
+          ) {
+            parts.push(`  ... and ${output.recommendations.length - 5} more`);
+          }
+        }
+        return parts.join('\n');
       },
     });
 
@@ -1449,6 +1752,21 @@ export class AgentTools {
         } catch (error) {
           return { error: `Anomaly detection failed: ${error.message}` };
         }
+      },
+      formatObservation: (output: any) => {
+        if (output.error) return `Error: ${output.error}`;
+        const parts = [
+          output.summary,
+          `Method: ${output.method}, Threshold: ${output.threshold}, Analysed: ${output.totalAnalysed}`,
+        ];
+        if (output.anomalies?.length) {
+          const anomalyLines = output.anomalies.map(
+            (a: any, i: number) =>
+              `  ${i + 1}. [${a.severity}] ${a.field}: ${a.description}`,
+          );
+          parts.push('Anomalies:\n' + anomalyLines.join('\n'));
+        }
+        return parts.join('\n');
       },
     });
 

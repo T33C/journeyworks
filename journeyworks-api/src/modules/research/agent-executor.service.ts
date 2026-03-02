@@ -12,6 +12,7 @@ import {
   PromptTemplateService,
 } from '../../infrastructure/llm';
 import { AgentTools } from './agent-tools.service';
+import { SkillManagerService } from './skill-manager.service';
 import {
   ResearchRequest,
   ResearchResponse,
@@ -26,8 +27,6 @@ import {
 const AGENT_CONFIG = {
   /** Default maximum iterations for the agent loop */
   DEFAULT_MAX_ITERATIONS: 10,
-  /** Maximum characters for observation truncation */
-  MAX_OBSERVATION_LENGTH: 4000,
   /** Minimum characters for follow-up question */
   MIN_FOLLOWUP_LENGTH: 10,
   /** Timeout for LLM calls in milliseconds (60 seconds) */
@@ -38,6 +37,8 @@ const AGENT_CONFIG = {
   MAX_SUMMARY_LENGTH: 500,
   /** Minimum iterations before allowing Final Answer without tool calls (safety valve) */
   MIN_TOOL_FORCE_ITERATIONS: 5,
+  /** Maximum number of parallel tool calls per iteration */
+  MAX_PARALLEL_ACTIONS: 5,
 } as const;
 
 /** Confidence calculation weights */
@@ -99,6 +100,7 @@ export class AgentExecutor {
     private readonly llmClient: LlmClientService,
     private readonly promptTemplate: PromptTemplateService,
     private readonly tools: AgentTools,
+    private readonly skillManager: SkillManagerService,
   ) {
     this.defaultMaxIterations =
       this.configService.get<number>('agent.maxIterations') ||
@@ -150,7 +152,7 @@ export class AgentExecutor {
 
     const totalTime = Date.now() - startTime;
 
-    // Generate follow-up questions
+    // Generate follow-up questions (async) while computing sync fields below
     const followUpQuestions = await this.generateFollowUpQuestions(
       request,
       state,
@@ -252,7 +254,7 @@ export class AgentExecutor {
 
     const totalTime = Date.now() - startTime;
 
-    // Generate follow-up questions
+    // Generate follow-up questions (async) while computing sync fields below
     const followUpQuestions = await this.generateFollowUpQuestions(
       request,
       state,
@@ -289,6 +291,7 @@ export class AgentExecutor {
   /**
    * Run a single streaming iteration of the agent loop.
    * Emits reasoning-step, tool-call, and tool-result events.
+   * Supports parallel execution when the LLM outputs multiple Action blocks.
    */
   private async runStreamingIteration(
     request: ResearchRequest,
@@ -308,19 +311,33 @@ export class AgentExecutor {
       { rateLimitKey: 'llm:agent' },
     );
 
-    // Parse the response
+    // Parse the response (may contain multiple actions)
     const parsed = this.parseAgentResponse(response);
+    const firstAction = parsed.actions[0];
 
-    // Create the reasoning step
+    // Create the reasoning step (include the full LLM prompt for transparency)
     const step: ReasoningStep = {
       step: state.iteration,
       thought: parsed.thought,
-      action: parsed.action,
-      actionInput: parsed.actionInput,
+      action: firstAction?.action,
+      actionInput: firstAction?.actionInput,
+      parallelActions: parsed.actions.length > 1 ? parsed.actions : undefined,
+      llmPrompt: prompt,
     };
 
     // Check for final answer
-    if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
+    if (firstAction?.action === 'Final Answer' || parsed.finalAnswer) {
+      // Log if the LLM also included tool actions alongside Final Answer
+      if (parsed.actions.length > 1) {
+        const droppedTools = parsed.actions
+          .filter((a) => a.action !== 'Final Answer')
+          .map((a) => a.action);
+        if (droppedTools.length > 0) {
+          this.logger.warn(
+            `[Streaming] Iteration ${state.iteration}: Dropping ${droppedTools.length} tool call(s) (${droppedTools.join(', ')}) because Final Answer was also present`,
+          );
+        }
+      }
       const isMeta = this.isMetaQuestion(request.query);
       if (
         state.actions.length === 0 &&
@@ -351,7 +368,7 @@ export class AgentExecutor {
           );
         }
         state.isDone = true;
-        state.finalAnswer = parsed.finalAnswer || parsed.actionInput;
+        state.finalAnswer = parsed.finalAnswer || firstAction?.actionInput;
         state.steps.push(step);
 
         // Emit the final reasoning step
@@ -366,7 +383,7 @@ export class AgentExecutor {
     }
 
     // Guard: no action parsed
-    if (!parsed.action) {
+    if (parsed.actions.length === 0) {
       this.logger.warn(
         `[Streaming] Iteration ${state.iteration}: No parseable Action - redirecting`,
       );
@@ -383,7 +400,7 @@ export class AgentExecutor {
       return;
     }
 
-    // Emit reasoning step (before tool call)
+    // Emit reasoning step (before tool calls)
     onEvent({
       type: 'reasoning-step',
       timestamp: timestamp(),
@@ -391,61 +408,101 @@ export class AgentExecutor {
       step: { ...step }, // snapshot before observation is added
     });
 
-    // Emit tool-call event
-    onEvent({
-      type: 'tool-call',
-      timestamp: timestamp(),
-      sessionId,
-      tool: parsed.action,
-      input: parsed.actionInput,
-      iteration: state.iteration,
-    });
-
-    // Execute the action
-    const actionStart = Date.now();
-    let output: any;
-    let success = true;
-    let error: string | undefined;
-
-    try {
-      const result = await this.tools.executeTool(
-        parsed.action,
-        parsed.actionInput,
-      );
-      output = result.output;
-      state.sources.push(...result.sources);
-    } catch (e) {
-      success = false;
-      error = e.message;
-      output = { error: e.message };
+    // Emit tool-call events for all actions
+    for (const pa of parsed.actions) {
+      onEvent({
+        type: 'tool-call',
+        timestamp: timestamp(),
+        sessionId,
+        tool: pa.action,
+        input: pa.actionInput,
+        iteration: state.iteration,
+      });
     }
 
-    const duration = Date.now() - actionStart;
+    // Cap parallel actions to prevent runaway tool calls
+    let actionsToRun = parsed.actions;
+    if (actionsToRun.length > AGENT_CONFIG.MAX_PARALLEL_ACTIONS) {
+      this.logger.warn(
+        `[Streaming] Capping parallel actions from ${actionsToRun.length} to ${AGENT_CONFIG.MAX_PARALLEL_ACTIONS}`,
+      );
+      actionsToRun = actionsToRun.slice(0, AGENT_CONFIG.MAX_PARALLEL_ACTIONS);
+    }
 
-    const action: AgentAction = {
-      tool: parsed.action,
-      input: parsed.actionInput,
-      output,
-      duration,
-      success,
-      error,
-    };
-    state.actions.push(action);
+    // Execute actions in parallel
+    const isParallel = actionsToRun.length > 1;
+    if (isParallel) {
+      this.logger.log(
+        `[Streaming] Executing ${actionsToRun.length} tools in parallel: ${actionsToRun.map((a) => a.action).join(', ')}`,
+      );
+    }
 
-    step.observation = this.formatObservation(output);
+    const results = await Promise.all(
+      actionsToRun.map(async (pa) => {
+        const actionStart = Date.now();
+        let output: any;
+        let success = true;
+        let error: string | undefined;
+        let sources: any[] = [];
+
+        try {
+          const result = await this.tools.executeTool(
+            pa.action,
+            pa.actionInput,
+          );
+          output = result.output;
+          sources = result.sources;
+        } catch (e) {
+          success = false;
+          error = e.message;
+          output = { error: e.message };
+        }
+
+        return {
+          pa,
+          output,
+          success,
+          error,
+          sources,
+          duration: Date.now() - actionStart,
+        };
+      }),
+    );
+
+    // Record actions and build combined observation
+    // (sources collected here to avoid concurrent array mutation)
+    const observations: string[] = [];
+    for (const r of results) {
+      state.sources.push(...r.sources);
+
+      const actionRecord: AgentAction = {
+        tool: r.pa.action,
+        input: r.pa.actionInput,
+        output: r.output,
+        duration: r.duration,
+        success: r.success,
+        error: r.error,
+      };
+      state.actions.push(actionRecord);
+
+      const obs = this.tools.formatToolObservation(r.pa.action, r.output);
+      observations.push(isParallel ? `[${r.pa.action}] ${obs}` : obs);
+
+      // Emit tool-result event for each action
+      onEvent({
+        type: 'tool-result',
+        timestamp: timestamp(),
+        sessionId,
+        tool: r.pa.action,
+        success: r.success,
+        duration: r.duration,
+        outputSummary: this.summarizeToolOutput(r.output),
+        error: r.error,
+      });
+    }
+
+    step.observation = observations.join('\n\n');
     state.steps.push(step);
-
-    // Emit tool-result event
-    onEvent({
-      type: 'tool-result',
-      timestamp: timestamp(),
-      sessionId,
-      tool: parsed.action,
-      success,
-      duration,
-      outputSummary: this.summarizeToolOutput(output),
-      error,
-    });
   }
 
   /**
@@ -772,7 +829,8 @@ export class AgentExecutor {
   }
 
   /**
-   * Run a single iteration of the agent loop
+   * Run a single iteration of the agent loop.
+   * Supports parallel execution when the LLM outputs multiple Action blocks.
    */
   private async runIteration(
     request: ResearchRequest,
@@ -788,19 +846,33 @@ export class AgentExecutor {
       { rateLimitKey: 'llm:agent' },
     );
 
-    // Parse the response
+    // Parse the response (may contain multiple actions)
     const parsed = this.parseAgentResponse(response);
+    const firstAction = parsed.actions[0];
 
-    // Create the reasoning step
+    // Create the reasoning step (include the full LLM prompt for transparency)
     const step: ReasoningStep = {
       step: state.iteration,
       thought: parsed.thought,
-      action: parsed.action,
-      actionInput: parsed.actionInput,
+      action: firstAction?.action,
+      actionInput: firstAction?.actionInput,
+      parallelActions: parsed.actions.length > 1 ? parsed.actions : undefined,
+      llmPrompt: prompt,
     };
 
     // Check if the agent is done
-    if (parsed.action === 'Final Answer' || parsed.finalAnswer) {
+    if (firstAction?.action === 'Final Answer' || parsed.finalAnswer) {
+      // Log if the LLM also included tool actions alongside Final Answer
+      if (parsed.actions.length > 1) {
+        const droppedTools = parsed.actions
+          .filter((a) => a.action !== 'Final Answer')
+          .map((a) => a.action);
+        if (droppedTools.length > 0) {
+          this.logger.warn(
+            `Iteration ${state.iteration}: Dropping ${droppedTools.length} tool call(s) (${droppedTools.join(', ')}) because Final Answer was also present`,
+          );
+        }
+      }
       // Prevent premature Final Answer - require at least one tool call
       // Allow Final Answer after MIN_TOOL_FORCE_ITERATIONS to prevent infinite loops
       // EXCEPTION: Meta questions about capabilities can be answered immediately
@@ -831,7 +903,7 @@ export class AgentExecutor {
           );
         }
         state.isDone = true;
-        state.finalAnswer = parsed.finalAnswer || parsed.actionInput;
+        state.finalAnswer = parsed.finalAnswer || firstAction?.actionInput;
         state.steps.push(step);
         return;
       }
@@ -839,7 +911,7 @@ export class AgentExecutor {
 
     // Guard: if no action was parsed, the LLM response didn't follow the ReAct format.
     // Inject feedback to redirect the agent back to tool use.
-    if (!parsed.action) {
+    if (parsed.actions.length === 0) {
       this.logger.warn(
         `Iteration ${state.iteration}: Agent response contained no parseable Action - redirecting to tool use`,
       );
@@ -849,37 +921,76 @@ export class AgentExecutor {
       return;
     }
 
-    // Execute the action
-    const actionStart = Date.now();
-    let output: any;
-    let success = true;
-    let error: string | undefined;
-
-    try {
-      const result = await this.tools.executeTool(
-        parsed.action,
-        parsed.actionInput,
+    // Cap parallel actions to prevent runaway tool calls
+    let actionsToRun = parsed.actions;
+    if (actionsToRun.length > AGENT_CONFIG.MAX_PARALLEL_ACTIONS) {
+      this.logger.warn(
+        `Capping parallel actions from ${actionsToRun.length} to ${AGENT_CONFIG.MAX_PARALLEL_ACTIONS}`,
       );
-      output = result.output;
-      state.sources.push(...result.sources);
-    } catch (e) {
-      success = false;
-      error = e.message;
-      output = { error: e.message };
+      actionsToRun = actionsToRun.slice(0, AGENT_CONFIG.MAX_PARALLEL_ACTIONS);
     }
 
-    const action: AgentAction = {
-      tool: parsed.action,
-      input: parsed.actionInput,
-      output,
-      duration: Date.now() - actionStart,
-      success,
-      error,
-    };
+    // Execute actions in parallel
+    const isParallel = actionsToRun.length > 1;
+    if (isParallel) {
+      this.logger.log(
+        `Executing ${actionsToRun.length} tools in parallel: ${actionsToRun.map((a) => a.action).join(', ')}`,
+      );
+    }
 
-    state.actions.push(action);
-    step.observation = this.formatObservation(output);
+    const results = await Promise.all(
+      actionsToRun.map(async (pa) => {
+        const actionStart = Date.now();
+        let output: any;
+        let success = true;
+        let error: string | undefined;
+        let sources: any[] = [];
 
+        try {
+          const result = await this.tools.executeTool(
+            pa.action,
+            pa.actionInput,
+          );
+          output = result.output;
+          sources = result.sources;
+        } catch (e) {
+          success = false;
+          error = e.message;
+          output = { error: e.message };
+        }
+
+        return {
+          pa,
+          output,
+          success,
+          error,
+          sources,
+          duration: Date.now() - actionStart,
+        };
+      }),
+    );
+
+    // Record actions and build combined observation
+    // (sources collected here to avoid concurrent array mutation)
+    const observations: string[] = [];
+    for (const r of results) {
+      state.sources.push(...r.sources);
+
+      const actionRecord: AgentAction = {
+        tool: r.pa.action,
+        input: r.pa.actionInput,
+        output: r.output,
+        duration: r.duration,
+        success: r.success,
+        error: r.error,
+      };
+      state.actions.push(actionRecord);
+
+      const obs = this.tools.formatToolObservation(r.pa.action, r.output);
+      observations.push(isParallel ? `[${r.pa.action}] ${obs}` : obs);
+    }
+
+    step.observation = observations.join('\n\n');
     state.steps.push(step);
   }
 
@@ -998,10 +1109,14 @@ export class AgentExecutor {
   }
 
   /**
-   * Build the prompt for the agent
+   * Build the prompt for the agent.
+   * Uses enabledTools from the request to filter both tool parameter
+   * descriptions and the "Your Capabilities" section (loaded from .skill.md files).
    */
   private buildPrompt(request: ResearchRequest, state: AgentState): string {
-    const toolDescriptions = this.tools.getToolDescriptions();
+    const toolDescriptions = this.tools.getToolDescriptions(
+      request.enabledTools,
+    );
     const scratchpad = this.buildScratchpad(state.steps);
 
     const conversationContext = request.conversationHistory
@@ -1010,8 +1125,14 @@ export class AgentExecutor {
           .join('\n')
       : '';
 
+    // Build the capabilities section from skill definitions
+    const capabilities = this.skillManager.formatCapabilitiesPrompt(
+      request.enabledTools,
+    );
+
     return this.promptTemplate.renderNamed('agent:react', {
       tools: toolDescriptions,
+      capabilities,
       question: request.query,
       context: request.context || '',
       conversationHistory: conversationContext,
@@ -1021,7 +1142,9 @@ export class AgentExecutor {
   }
 
   /**
-   * Build the scratchpad from previous steps
+   * Build the scratchpad from previous steps.
+   * For parallel-action steps, replays all Action blocks so the LLM
+   * sees the same multi-action format it produced.
    */
   private buildScratchpad(steps: ReasoningStep[]): string {
     if (steps.length === 0) {
@@ -1031,8 +1154,13 @@ export class AgentExecutor {
     return steps
       .map((step) => {
         let text = `Thought: ${step.thought}`;
-        if (step.action) {
-          // Use JSON Action format to match the prompt template instructions
+        if (step.parallelActions && step.parallelActions.length > 1) {
+          // Replay all parallel actions so the LLM sees the multi-action format
+          for (const pa of step.parallelActions) {
+            text += `\nAction: ${JSON.stringify({ tool: pa.action, input: pa.actionInput || {} })}`;
+          }
+        } else if (step.action) {
+          // Single action — standard format
           text += `\nAction: ${JSON.stringify({ tool: step.action, input: step.actionInput || {} })}`;
         }
         if (step.observation) {
@@ -1044,15 +1172,15 @@ export class AgentExecutor {
   }
 
   /**
-   * Parse the agent's response into structured components
-   * Supports both formats:
+   * Parse the agent's response into structured components.
+   * Supports single and multi-action responses:
    *   - JSON: Action: {"tool": "tool_name", "input": {...}}
    *   - Plain: Action: tool_name\nAction Input: {...}
+   *   - Multiple: Action: {...}\nAction: {...}  (parallel)
    */
   private parseAgentResponse(response: string): {
     thought: string;
-    action?: string;
-    actionInput?: any;
+    actions: Array<{ action: string; actionInput: any }>;
     finalAnswer?: string;
   } {
     // Try to extract thought
@@ -1066,38 +1194,50 @@ export class AgentExecutor {
     if (finalAnswerMatch) {
       return {
         thought,
-        action: 'Final Answer',
+        actions: [{ action: 'Final Answer', actionInput: undefined }],
         finalAnswer: finalAnswerMatch[1].trim(),
       };
     }
 
-    // Try JSON format: Action: {"tool": "name", "input": {...}}
-    // Use brace-matching to correctly handle nested objects
-    const jsonStart = response.search(/Action:\s*\{/i);
-    if (jsonStart !== -1) {
-      const braceStart = response.indexOf('{', jsonStart);
+    // Find ALL Action: blocks (supports parallel multi-action)
+    const actions: Array<{ action: string; actionInput: any }> = [];
+
+    // Find all JSON-format actions: Action: {"tool": "...", "input": {...}}
+    const actionRegex = /Action:\s*\{/gi;
+    let match: RegExpExecArray | null;
+    while ((match = actionRegex.exec(response)) !== null) {
+      const braceStart = response.indexOf('{', match.index);
       const jsonStr = this.extractJsonObject(response, braceStart);
       if (jsonStr) {
         try {
           const actionJson = JSON.parse(jsonStr);
           if (actionJson.tool) {
-            return {
-              thought,
+            actions.push({
               action: actionJson.tool,
               actionInput: actionJson.input || {},
-            };
+            });
           }
         } catch {
           this.logger.debug(
             `Failed to parse JSON action: ${jsonStr.substring(0, 100)}`,
           );
-          // Fall through to plain format
         }
+        // Advance past this JSON block to avoid re-matching
+        actionRegex.lastIndex = braceStart + (jsonStr?.length || 1);
       }
     }
 
-    // Try plain format: Action: tool_name\nAction Input: {...}
-    const actionMatch = response.match(/Action:\s*(\w+)/i);
+    if (actions.length > 0) {
+      if (actions.length > 1) {
+        this.logger.log(
+          `Parsed ${actions.length} parallel actions: ${actions.map((a) => a.action).join(', ')}`,
+        );
+      }
+      return { thought, actions };
+    }
+
+    // Fallback: Try plain format: Action: tool_name\nAction Input: {...}
+    const plainMatch = response.match(/Action:\s*(\w+)/i);
     const actionInputMatch = response.match(
       /Action Input:\s*([\s\S]*?)(?=Thought:|Observation:|$)/i,
     );
@@ -1108,16 +1248,19 @@ export class AgentExecutor {
       try {
         actionInput = JSON.parse(inputText);
       } catch {
-        // Try to parse as a simple value
         actionInput = { query: inputText };
       }
     }
 
-    return {
-      thought,
-      action: actionMatch?.[1],
-      actionInput,
-    };
+    if (plainMatch?.[1]) {
+      return {
+        thought,
+        actions: [{ action: plainMatch[1], actionInput }],
+      };
+    }
+
+    // No actions parsed
+    return { thought, actions: [] };
   }
 
   /**
@@ -1161,23 +1304,6 @@ export class AgentExecutor {
     }
 
     return null; // Unbalanced braces
-  }
-
-  /**
-   * Format observation from tool output
-   */
-  private formatObservation(output: any): string {
-    const maxLength = AGENT_CONFIG.MAX_OBSERVATION_LENGTH;
-
-    if (typeof output === 'string') {
-      return output.substring(0, maxLength);
-    }
-
-    const formatted = JSON.stringify(output, null, 2);
-    if (formatted.length > maxLength) {
-      return formatted.substring(0, maxLength - 3) + '...';
-    }
-    return formatted;
   }
 
   /**

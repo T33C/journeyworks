@@ -84,12 +84,16 @@ export interface ReasoningStep {
   step: number;
   /** Thought content */
   thought: string;
-  /** Action decided */
+  /** Action decided (first action for backward compat; see parallelActions) */
   action?: string;
-  /** Action input */
+  /** Action input (first action for backward compat) */
   actionInput?: any;
+  /** All actions when multiple tools ran in parallel */
+  parallelActions?: Array<{ action: string; actionInput: any }>;
   /** Observation from action */
   observation?: string;
+  /** The full prompt sent to the LLM for this reasoning iteration */
+  llmPrompt?: string;
 }
 
 /**
@@ -138,6 +142,13 @@ export interface AgentTool {
   parameters: ToolParameters;
   /** Function to execute the tool */
   execute: (input: any) => Promise<any>;
+  /**
+   * Optional formatter that converts raw tool output into a concise,
+   * LLM-friendly observation string.  When provided, the agent executor
+   * uses this instead of the generic JSON serialiser — avoiding blind
+   * character-level truncation that can produce broken JSON.
+   */
+  formatObservation?: (output: any) => string;
 }
 
 /**
