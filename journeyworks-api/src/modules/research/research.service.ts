@@ -870,6 +870,11 @@ export class ResearchService {
   /**
    * Generate insight using LLM with real aggregated data
    * Optionally includes statistical analysis from Python service
+   *
+   * Uses parallel LLM calls: one for the core analysis (summary, drivers,
+   * reasoning, actions, follow-up) and one for generating contextual
+   * follow-up questions. Both receive the same data context but have
+   * independent prompts, so they can execute concurrently.
    */
   private async generateLlmInsightWithData(
     context: AnalysisContext,
@@ -884,6 +889,109 @@ export class ResearchService {
     }
 
     // Build comprehensive prompt with real data
+    const systemPrompt = this.buildInsightSystemPrompt(statisticalAnalysis);
+
+    // Build prompt, including statistical analysis if available
+    let dataContext = this.buildEnhancedPromptDataSection(
+      context,
+      data,
+      question,
+    );
+    if (statisticalAnalysis) {
+      dataContext += this.formatStatisticalAnalysis(statisticalAnalysis);
+    }
+
+    // Build the core analysis prompt (everything except suggestedQuestions)
+    const coreUserPrompt =
+      dataContext + this.buildCoreAnalysisOutputFormat(context, data);
+
+    // Build the follow-up questions prompt (lighter, independent task)
+    const questionsUserPrompt = this.buildFollowUpQuestionsPrompt(
+      context,
+      data,
+      question,
+    );
+
+    try {
+      this.logger.log(
+        `Generating LLM insight with parallel calls${statisticalAnalysis ? ' + statistical analysis' : ''}`,
+      );
+
+      // Execute both LLM calls in parallel (concurrency 2)
+      const [coreResponse, questionsResponse] =
+        await this.llmClient.parallelPrompt(
+          [
+            { userMessage: coreUserPrompt, systemPrompt },
+            {
+              userMessage: questionsUserPrompt,
+              systemPrompt:
+                'You are an expert customer experience analyst. Generate insightful follow-up questions based on the data provided.',
+            },
+          ],
+          { rateLimitKey: 'llm:insight' },
+          2,
+        );
+
+      if (!coreResponse) {
+        throw new Error('Core analysis LLM call failed');
+      }
+
+      // Parse the core analysis JSON response
+      const jsonMatch = coreResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in core analysis response');
+      }
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Parse follow-up questions from the parallel call (best-effort)
+      let suggestedQuestions: string[] = [];
+      if (questionsResponse) {
+        try {
+          const qMatch = questionsResponse.match(/\[[\s\S]*\]/);
+          if (qMatch) {
+            const parsedQuestions = JSON.parse(qMatch[0]);
+            if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
+              suggestedQuestions = parsedQuestions
+                .filter((q: unknown) => typeof q === 'string' && q.length > 10)
+                .slice(0, 3);
+            }
+          }
+        } catch {
+          this.logger.debug(
+            'Failed to parse parallel questions response, returning empty questions',
+          );
+        }
+      }
+
+      // Combine real evidence
+      const evidence: InsightEvidence[] = [
+        ...data.communications,
+        ...data.socialMentions,
+      ];
+
+      return {
+        summary: parsed.summary,
+        confidence: parsed.confidence || 'medium',
+        keyDrivers: parsed.keyDrivers || [],
+        evidence,
+        timelineReasoning: parsed.timelineReasoning || '',
+        suggestedActions: parsed.suggestedActions || [],
+        suggestedQuestions,
+        suggestedFollowUp: parsed.suggestedFollowUp,
+      };
+    } catch (parseError) {
+      this.logger.warn(`Failed to parse LLM response: ${parseError.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Build the system prompt for insight analysis.
+   * Extracted for reuse across parallel calls.
+   */
+  private buildInsightSystemPrompt(
+    statisticalAnalysis?: StatisticalAnalysisResult | null,
+  ): string {
     let systemPrompt = `You are an expert customer experience analyst for a financial services company.
 You analyze customer feedback, complaints, and social media sentiment to provide actionable insights.
 Always focus on NPS (Net Promoter Score) trends, Detractor/Promoter conversion, and early warning signals.
@@ -919,7 +1027,6 @@ When reviewing the data provided (especially daily trends, NPS scores, and volum
 If outliers exist, call them out clearly in your summary and keyDrivers with the ⚠️ prefix and quantify the deviation.
 If no anomalies are present, do not mention them — only flag when genuinely unusual.`;
 
-    // Add statistical analysis context to system prompt if available
     if (statisticalAnalysis) {
       systemPrompt += `
 
@@ -929,106 +1036,117 @@ When answering statistical questions, prioritize the precise numbers from this a
 Explain the statistical findings in business terms the user can understand.`;
     }
 
-    // Build prompt, including statistical analysis if available
-    let userPrompt = this.buildEnhancedPrompt(context, data, question);
-    if (statisticalAnalysis) {
-      userPrompt += this.formatStatisticalAnalysis(statisticalAnalysis);
-    }
-
-    try {
-      this.logger.log(
-        `Generating LLM insight with real data${statisticalAnalysis ? ' + statistical analysis' : ''}`,
-      );
-      const response = await this.llmClient.prompt(userPrompt, systemPrompt, {
-        rateLimitKey: 'llm:insight',
-      });
-
-      // Parse the JSON response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
-      }
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      // Combine real evidence
-      const evidence: InsightEvidence[] = [
-        ...data.communications,
-        ...data.socialMentions,
-      ];
-
-      return {
-        summary: parsed.summary,
-        confidence: parsed.confidence || 'medium',
-        keyDrivers: parsed.keyDrivers || [],
-        evidence,
-        timelineReasoning: parsed.timelineReasoning || '',
-        suggestedActions: parsed.suggestedActions || [],
-        suggestedQuestions: parsed.suggestedQuestions || [],
-        suggestedFollowUp: parsed.suggestedFollowUp,
-      };
-    } catch (parseError) {
-      this.logger.warn(`Failed to parse LLM response: ${parseError.message}`);
-      return null;
-    }
+    return systemPrompt;
   }
 
   /**
-   * Build enhanced prompt with real aggregated data
+   * Build a condensed data summary (context, metrics, themes, journey).
+   * Shared by buildEnhancedPromptDataSection (full prompt) and
+   * buildFollowUpQuestionsPrompt (lightweight prompt) to eliminate duplication.
+   *
+   * @param verbose  When true, includes all metrics and full journey detail.
+   *                 When false, emits a compact subset suitable for the
+   *                 questions-only prompt (fewer tokens).
    */
-  private buildEnhancedPrompt(
+  private buildCondensedDataSummary(
+    context: AnalysisContext,
+    data: AggregatedInsightData,
+    verbose: boolean,
+  ): string[] {
+    const parts: string[] = [];
+
+    // Context description
+    parts.push(verbose ? '## Analysis Context' : '## Context');
+    parts.push(this.buildContextDescription(context));
+
+    // Key metrics — verbose includes the full breakdown
+    parts.push('\n## Key Metrics');
+    if (verbose) {
+      parts.push(
+        `- Total Communications Analyzed: ${data.summary.totalCommunications}`,
+      );
+      parts.push(
+        `- Total Social Mentions: ${data.summary.totalSocialMentions}`,
+      );
+      parts.push(
+        `- Average Sentiment: ${data.summary.avgSentiment.toFixed(2)}`,
+      );
+      parts.push(`- NPS Score: ${data.summary.avgNps}`);
+      parts.push(`- Promoters: ${data.summary.promoterPct.toFixed(1)}%`);
+      parts.push(`- Passives: ${data.summary.passivePct.toFixed(1)}%`);
+      parts.push(`- Detractors: ${data.summary.detractorPct.toFixed(1)}%`);
+    } else {
+      parts.push(`- NPS Score: ${data.summary.avgNps}`);
+      parts.push(
+        `- Average Sentiment: ${data.summary.avgSentiment.toFixed(2)}`,
+      );
+      parts.push(`- Communications: ${data.summary.totalCommunications}`);
+      parts.push(
+        `- Promoters: ${data.summary.promoterPct.toFixed(1)}%, Detractors: ${data.summary.detractorPct.toFixed(1)}%`,
+      );
+    }
+
+    // Top themes — verbose shows all; condensed shows top 3
+    const themesToShow = verbose
+      ? data.summary.topThemes
+      : data.summary.topThemes.slice(0, 3);
+    if (themesToShow.length > 0) {
+      parts.push(verbose ? '\n### Top Issues/Themes' : '\n## Top Themes');
+      themesToShow.forEach((t, i) => {
+        parts.push(
+          verbose
+            ? `${i + 1}. ${t.theme}: ${t.count} occurrences`
+            : `- ${t.theme}: ${t.count} occurrences`,
+        );
+      });
+    }
+
+    // Resolution journey
+    if (data.resolutionJourney.length > 0) {
+      if (verbose) {
+        parts.push(
+          '\n## Resolution Journey (Critical for CX Improvement Analysis)',
+        );
+        data.resolutionJourney.forEach((stage) => {
+          parts.push(
+            `- ${stage.label}: NPS ${stage.avgNps}, Sentiment ${stage.avgSentiment.toFixed(2)}, ${stage.communicationCount} communications`,
+          );
+        });
+
+        const initial = data.resolutionJourney[0];
+        const final = data.resolutionJourney[data.resolutionJourney.length - 1];
+        if (initial && final) {
+          const npsImprovement = final.avgNps - initial.avgNps;
+          parts.push(
+            `\n**Journey NPS Improvement: ${npsImprovement > 0 ? '+' : ''}${npsImprovement} points**`,
+          );
+          parts.push(
+            `**Promoter Conversion Rate: ${final.promoterConversionRate.toFixed(1)}%**`,
+          );
+        }
+      } else {
+        const initial = data.resolutionJourney[0];
+        const final = data.resolutionJourney[data.resolutionJourney.length - 1];
+        if (initial && final) {
+          parts.push('\n## Resolution Journey');
+          parts.push(`- NPS: ${initial.avgNps} → ${final.avgNps}`);
+        }
+      }
+    }
+
+    return parts;
+  }
+
+  /**
+   * Build the data/context section of the insight prompt (without the output format).
+   * Uses the verbose data summary plus evidence, trends, and user question.
+   */
+  private buildEnhancedPromptDataSection(
     context: AnalysisContext,
     data: AggregatedInsightData,
     question?: string,
   ): string {
-    const parts: string[] = [];
-
-    // Context description
-    parts.push('## Analysis Context');
-    parts.push(this.buildContextDescription(context));
-
-    // Summary metrics
-    parts.push('\n## Key Metrics');
-    parts.push(
-      `- Total Communications Analyzed: ${data.summary.totalCommunications}`,
-    );
-    parts.push(`- Total Social Mentions: ${data.summary.totalSocialMentions}`);
-    parts.push(`- Average Sentiment: ${data.summary.avgSentiment.toFixed(2)}`);
-    parts.push(`- NPS Score: ${data.summary.avgNps}`);
-    parts.push(`- Promoters: ${data.summary.promoterPct.toFixed(1)}%`);
-    parts.push(`- Passives: ${data.summary.passivePct.toFixed(1)}%`);
-    parts.push(`- Detractors: ${data.summary.detractorPct.toFixed(1)}%`);
-
-    if (data.summary.topThemes.length > 0) {
-      parts.push('\n### Top Issues/Themes');
-      data.summary.topThemes.forEach((t, i) => {
-        parts.push(`${i + 1}. ${t.theme}: ${t.count} occurrences`);
-      });
-    }
-
-    // Resolution Journey (most important for CX improvement)
-    if (data.resolutionJourney.length > 0) {
-      parts.push(
-        '\n## Resolution Journey (Critical for CX Improvement Analysis)',
-      );
-      data.resolutionJourney.forEach((stage) => {
-        parts.push(
-          `- ${stage.label}: NPS ${stage.avgNps}, Sentiment ${stage.avgSentiment.toFixed(2)}, ${stage.communicationCount} communications`,
-        );
-      });
-
-      // Calculate journey improvement
-      const initial = data.resolutionJourney[0];
-      const final = data.resolutionJourney[data.resolutionJourney.length - 1];
-      if (initial && final) {
-        const npsImprovement = final.avgNps - initial.avgNps;
-        parts.push(
-          `\n**Journey NPS Improvement: ${npsImprovement > 0 ? '+' : ''}${npsImprovement} points**`,
-        );
-        parts.push(
-          `**Promoter Conversion Rate: ${final.promoterConversionRate.toFixed(1)}%**`,
-        );
-      }
-    }
+    const parts: string[] = this.buildCondensedDataSummary(context, data, true);
 
     // Event correlations (before/after analysis)
     if (data.eventCorrelations.length > 0) {
@@ -1086,6 +1204,18 @@ Explain the statistical findings in business terms the user can understand.`;
       parts.push(`\n## User Question\n${question}`);
     }
 
+    return parts.join('\n');
+  }
+
+  /**
+   * Build the output format section for the core analysis prompt.
+   * Requests summary, drivers, reasoning, actions, and follow-up — but NOT suggestedQuestions
+   * (those are generated by a parallel LLM call for speed).
+   */
+  private buildCoreAnalysisOutputFormat(
+    context: AnalysisContext,
+    data: AggregatedInsightData,
+  ): string {
     // Calculate final NPS to guide the LLM response
     const finalNps =
       data.resolutionJourney.length > 0
@@ -1115,8 +1245,7 @@ Explain the statistical findings in business terms the user can understand.`;
       cxGuidance = `Start with "No" - NPS ends at ${finalNps} (negative) with only ${npsImprovement} point improvement. This indicates systemic CX problems.`;
     }
 
-    // Output format
-    parts.push(`\n## Required Output Format
+    return `\n## Required Output Format
 Provide your analysis in the following JSON format:
 {
   "summary": "2-3 sentence executive summary with specific numbers from the data",
@@ -1124,20 +1253,41 @@ Provide your analysis in the following JSON format:
   "keyDrivers": ["driver 1 with specific metric", "driver 2 with specific metric", "driver 3", "driver 4"],
   "timelineReasoning": "Explain temporal patterns, resolution journey improvement, and any early warning signals from social media",
   "suggestedActions": ["specific action 1", "specific action 2", "specific action 3"],
-  "suggestedQuestions": [
-    "A relevant follow-up question the analyst might want to explore next",
-    "Another insightful question based on the data patterns",
-    "A question about potential root causes or improvements"
-  ],
   "suggestedFollowUp": {
     "question": "Did we improve the customer experience?",
     "answer": "${cxGuidance}. Include: 1) Resolution Journey NPS (from ${initialNps ?? 'N/A'} to ${finalNps ?? 'N/A'}), 2) What's still broken if NPS is negative, 3) Specific actions to achieve positive outcomes"
   }
 }
 
-IMPORTANT for suggestedQuestions: Generate 3 contextual follow-up questions that would help the analyst dig deeper into the specific issue. Questions should be specific to the data patterns, events, or customer feedback observed.
+Return ONLY valid JSON, no markdown code blocks or extra text.`;
+  }
 
-Return ONLY valid JSON, no markdown code blocks or extra text.`);
+  /**
+   * Build the prompt for the parallel follow-up questions LLM call.
+   * Uses the condensed (non-verbose) data summary to keep tokens low
+   * while providing enough context for relevant question generation.
+   */
+  private buildFollowUpQuestionsPrompt(
+    context: AnalysisContext,
+    data: AggregatedInsightData,
+    question?: string,
+  ): string {
+    const parts: string[] = this.buildCondensedDataSummary(
+      context,
+      data,
+      false,
+    );
+
+    if (question) {
+      parts.push(`\n## Current Question\n${question}`);
+    }
+
+    parts.push(`\n## Task
+Generate exactly 3 contextual follow-up questions that would help the analyst dig deeper into the specific issue.
+Questions should be specific to the data patterns, events, or customer feedback observed.
+
+Return ONLY a JSON array of 3 strings, no markdown code blocks or extra text.
+Example: ["Question 1?", "Question 2?", "Question 3?"]`);
 
     return parts.join('\n');
   }
