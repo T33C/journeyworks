@@ -17,6 +17,7 @@ import {
   LlmCompletionWithToolsResponse,
   LlmMessage,
 } from './llm.types';
+import { Semaphore } from '../../shared/utils/semaphore';
 
 export interface LlmClientOptions {
   preferredProvider?: 'anthropic' | 'openai';
@@ -412,6 +413,147 @@ export class LlmClientService {
   estimateTokens(text: string): number {
     // Rough estimate: ~4 characters per token for English text
     return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Execute multiple prompt calls in parallel with concurrency limiting.
+   *
+   * Uses a Semaphore to cap in-flight LLM requests, preventing rate-limit
+   * storms while still achieving significant wall-clock speedup over
+   * sequential execution.
+   *
+   * Each request is independent — failures in one do not cancel others.
+   * Failed requests resolve to `null` with a warning log.
+   *
+   * @param requests  Array of prompt requests to execute
+   * @param options   LlmClientOptions applied to every request
+   * @param maxConcurrency  Max parallel in-flight calls (default 3)
+   * @returns Array of results in the same order as `requests` (null for failures)
+   */
+  async parallelPrompt(
+    requests: Array<{ userMessage: string; systemPrompt?: string }>,
+    options: LlmClientOptions = {},
+    maxConcurrency = 3,
+  ): Promise<Array<string | null>> {
+    if (requests.length === 0) return [];
+    if (requests.length === 1) {
+      try {
+        const result = await this.prompt(
+          requests[0].userMessage,
+          requests[0].systemPrompt,
+          options,
+        );
+        return [result];
+      } catch (error) {
+        this.logger.warn(
+          `parallelPrompt single request failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [null];
+      }
+    }
+
+    const semaphore = new Semaphore(maxConcurrency);
+
+    this.logger.log(
+      `Starting parallel prompt: ${requests.length} requests, concurrency=${maxConcurrency}`,
+    );
+
+    const results = await Promise.allSettled(
+      requests.map((req, index) =>
+        semaphore.run(async () => {
+          this.logger.debug(
+            `Parallel prompt [${index + 1}/${requests.length}] starting`,
+          );
+          return this.prompt(req.userMessage, req.systemPrompt, options);
+        }),
+      ),
+    );
+
+    const mapped = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        this.logger.debug(
+          `Parallel prompt [${index + 1}/${requests.length}] completed`,
+        );
+        return result.value;
+      }
+      this.logger.warn(
+        `Parallel prompt [${index + 1}/${requests.length}] failed: ${result.reason?.message || result.reason}`,
+      );
+      return null;
+    });
+
+    const succeeded = mapped.filter((r) => r !== null).length;
+    this.logger.log(
+      `Parallel prompt finished: ${succeeded}/${requests.length} succeeded`,
+    );
+
+    return mapped;
+  }
+
+  /**
+   * Execute multiple completion requests in parallel with concurrency limiting.
+   *
+   * Like `parallelPrompt` but uses the full `complete()` API, returning
+   * `LlmCompletionResponse` objects with token usage metadata.
+   *
+   * @param requests  Array of completion requests to execute
+   * @param options   LlmClientOptions applied to every request
+   * @param maxConcurrency  Max parallel in-flight calls (default 3)
+   * @returns Array of results in the same order as `requests` (null for failures)
+   */
+  async parallelComplete(
+    requests: LlmCompletionRequest[],
+    options: LlmClientOptions = {},
+    maxConcurrency = 3,
+  ): Promise<Array<LlmCompletionResponse | null>> {
+    if (requests.length === 0) return [];
+    if (requests.length === 1) {
+      try {
+        return [await this.complete(requests[0], options)];
+      } catch (error) {
+        this.logger.warn(
+          `parallelComplete single request failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [null];
+      }
+    }
+
+    const semaphore = new Semaphore(maxConcurrency);
+
+    this.logger.log(
+      `Starting parallel complete: ${requests.length} requests, concurrency=${maxConcurrency}`,
+    );
+
+    const results = await Promise.allSettled(
+      requests.map((req, index) =>
+        semaphore.run(async () => {
+          this.logger.debug(
+            `Parallel complete [${index + 1}/${requests.length}] starting`,
+          );
+          return this.complete(req, options);
+        }),
+      ),
+    );
+
+    const mapped = results.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        this.logger.debug(
+          `Parallel complete [${index + 1}/${requests.length}] completed`,
+        );
+        return result.value;
+      }
+      this.logger.warn(
+        `Parallel complete [${index + 1}/${requests.length}] failed: ${result.reason?.message || result.reason}`,
+      );
+      return null;
+    });
+
+    const succeeded = mapped.filter((r) => r !== null).length;
+    this.logger.log(
+      `Parallel complete finished: ${succeeded}/${requests.length} succeeded`,
+    );
+
+    return mapped;
   }
 
   /**
