@@ -11,6 +11,7 @@ import { ResearchController } from './research.controller';
 import { ResearchGateway } from './research.gateway';
 import { AgentExecutor } from './agent-executor.service';
 import { AgentTools } from './agent-tools.service';
+import { SkillManagerService } from './skill-manager.service';
 import { InsightDataService } from './insight-data.service';
 import { RagModule } from '../rag';
 import { RrgModule } from '../rrg';
@@ -33,6 +34,7 @@ import { ElasticsearchModule } from '../../infrastructure/elasticsearch';
     ResearchService,
     AgentExecutor,
     AgentTools,
+    SkillManagerService,
     InsightDataService,
     ResearchGateway,
   ],
