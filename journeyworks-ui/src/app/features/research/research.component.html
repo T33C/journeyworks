@@ -205,12 +205,25 @@
           } @else {
             <span
               class="ws-status disconnected"
-              matTooltip="WebSocket disconnected - using HTTP fallback"
+              matTooltip="WebSocket disconnected - reconnecting for live reasoning (then HTTP fallback)"
             >
               <mat-icon>sensors_off</mat-icon>
             </span>
           }
         </div>
+
+        @if (isStreaming() && liveReasoningSteps().length === 0) {
+          <div class="live-reasoning-timeline">
+            <mat-progress-bar
+              mode="indeterminate"
+              class="thinking-progress"
+            ></mat-progress-bar>
+            <div class="reasoning-empty">
+              <mat-icon>hourglass_top</mat-icon>
+              <p>{{ streamStatus() || "Agent is thinking..." }}</p>
+            </div>
+          </div>
+        }
 
         <!-- Live streaming timeline (shown during active research) -->
         @if (isStreaming() && liveReasoningSteps().length > 0) {

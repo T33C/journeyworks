@@ -375,9 +375,32 @@ export class ResearchService implements OnDestroy {
 
   /** Send a query via WebSocket for streaming response */
   sendMessageStreaming(query: string, context?: ResearchContext): void {
-    if (!this.socket?.connected) {
-      // Fall back to HTTP if WebSocket isn't connected
+    this.resetLatestResultState();
+
+    // Reset streaming state
+    this._liveReasoningSteps.set([]);
+    this._currentToolCall.set(null);
+    this._currentThinkingState.set(null);
+    this._isStreaming.set(true);
+    this._isLoading.set(true);
+    this._streamStatus.set('Starting research...');
+
+    const emitStreamingQuery = () => {
+      this._streamStatus.set('Starting research...');
+
+      // Emit the research query via WebSocket
+      this.socket?.emit('startResearch', {
+        query,
+        sessionId: this._sessionId(),
+        context: context || this._currentContext(),
+      });
+    };
+
+    const fallbackToHttp = () => {
       console.warn('[WS] Not connected, falling back to HTTP');
+      this._isStreaming.set(false);
+      this._streamStatus.set('');
+
       this.sendMessage(query, context).subscribe({
         next: (response) => {
           this.addAssistantMessage(
@@ -393,23 +416,52 @@ export class ResearchService implements OnDestroy {
           );
         },
       });
+    };
+
+    if (this.socket?.connected) {
+      emitStreamingQuery();
       return;
     }
 
-    // Reset streaming state
-    this._liveReasoningSteps.set([]);
-    this._currentToolCall.set(null);
-    this._currentThinkingState.set(null);
-    this._isStreaming.set(true);
-    this._isLoading.set(true);
-    this._streamStatus.set('Starting research...');
+    this._streamStatus.set('Connecting for live reasoning...');
+    this.connectWebSocket();
 
-    // Emit the research query via WebSocket
-    this.socket.emit('startResearch', {
-      query,
-      sessionId: this._sessionId(),
-      context: context || this._currentContext(),
-    });
+    if (this.socket?.connected) {
+      emitStreamingQuery();
+      return;
+    }
+
+    const socket = this.socket;
+    if (!socket) {
+      fallbackToHttp();
+      return;
+    }
+
+    let settled = false;
+    const cleanup = () => {
+      socket.off('connect', onConnect);
+      window.clearTimeout(connectTimeout);
+    };
+
+    const onConnect = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      emitStreamingQuery();
+    };
+
+    const connectTimeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fallbackToHttp();
+    }, 1500);
+
+    socket.on('connect', onConnect);
+
+    if (socket.connected) {
+      onConnect();
+    }
   }
 
   /** Cancel the currently running streaming research */
@@ -427,6 +479,12 @@ export class ResearchService implements OnDestroy {
   /** Format a tool name for display (snake_case → Title Case) */
   private formatToolName(name: string): string {
     return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /** Clear prior result state before starting a new query */
+  private resetLatestResultState(): void {
+    this._lastReasoningSteps.set([]);
+    this._lastSources.set([]);
   }
 
   // ============================================================================
@@ -472,6 +530,7 @@ export class ResearchService implements OnDestroy {
     query: string,
     context?: ResearchContext,
   ): Observable<ResearchResponse> {
+    this.resetLatestResultState();
     this._isLoading.set(true);
 
     return this.http

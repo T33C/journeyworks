@@ -375,82 +375,31 @@ export class ResearchPanelComponent implements OnInit, AfterViewChecked {
     // Show typing indicator
     this.isTyping.set(true);
 
-    // Prefer WebSocket streaming for live reasoning steps
-    if (this.wsConnected()) {
-      // Build context for the research service
-      const researchContext = ctx
-        ? {
-            event: ctx.event
-              ? {
-                  id: ctx.event.id,
-                  type: ctx.event.type,
-                  label: ctx.event.label,
-                }
-              : undefined,
-            timeWindow: ctx.timeWindow
-              ? {
-                  start: ctx.timeWindow.start.toISOString(),
-                  end: ctx.timeWindow.end.toISOString(),
-                }
-              : undefined,
-            journeyStage: ctx.journeyStage?.stage,
-            quadrant: ctx.quadrant,
-          }
-        : undefined;
+    // Prefer streaming path for live reasoning (service handles reconnect/fallback)
+    const researchContext = ctx
+      ? {
+          event: ctx.event
+            ? {
+                id: ctx.event.id,
+                type: ctx.event.type,
+                label: ctx.event.label,
+              }
+            : undefined,
+          timeWindow: ctx.timeWindow
+            ? {
+                start: ctx.timeWindow.start.toISOString(),
+                end: ctx.timeWindow.end.toISOString(),
+              }
+            : undefined,
+          journeyStage: ctx.journeyStage?.stage,
+          quadrant: ctx.quadrant,
+        }
+      : undefined;
 
-      // Streaming — service handles isStreaming, liveReasoningSteps,
-      // and auto-adds the assistant message on 'complete' event.
-      // The effect in the constructor clears isTyping when streaming finishes.
-      this.researchService.sendMessageStreaming(userMessage, researchContext);
-    } else if (ctx) {
-      // Fallback: HTTP path when WebSocket is not connected
-      this.dataService.askFollowUpQuestion(ctx, userMessage).subscribe({
-        next: (insight) => {
-          this.isTyping.set(false);
-          // Format the response from the insight
-          const response = this.formatInsightAsResponse(insight, userMessage);
-
-          // Add to shared ResearchService state with reasoning steps
-          this.researchService.addAssistantMessage(
-            response,
-            undefined,
-            undefined,
-            insight.reasoningSteps,
-          );
-
-          this.shouldScrollToBottom = true;
-          // Update suggested questions from the new response
-          if (insight.suggestedQuestions?.length) {
-            this.insight.update((current) =>
-              current
-                ? { ...current, suggestedQuestions: insight.suggestedQuestions }
-                : current,
-            );
-            // Also update shared suggestions
-            this.researchService.setSuggestions(insight.suggestedQuestions);
-          }
-        },
-        error: (err) => {
-          console.error('Follow-up question failed:', err);
-          this.isTyping.set(false);
-          // Fallback to generated response on error
-          const response = this.generateChatResponse(userMessage);
-          // Add to shared state
-          this.researchService.addAssistantMessage(response);
-          this.shouldScrollToBottom = true;
-        },
-      });
-    } else {
-      // No context and no WebSocket - use fallback response
-      const thinkTime = 500 + Math.random() * 500;
-      setTimeout(() => {
-        this.isTyping.set(false);
-        const response = this.generateChatResponse(userMessage);
-        // Add to shared state
-        this.researchService.addAssistantMessage(response);
-        this.shouldScrollToBottom = true;
-      }, thinkTime);
-    }
+    // Streaming — service handles isStreaming, liveReasoningSteps,
+    // and auto-adds the assistant message on 'complete' event.
+    // The effect in the constructor clears isTyping when streaming finishes.
+    this.researchService.sendMessageStreaming(userMessage, researchContext);
   }
 
   /**

@@ -142,8 +142,8 @@ export class ResearchComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.expandedPrompts.set(new Set());
     this.closeFullscreenPrompt();
 
-    // Use WebSocket streaming if reasoning is visible, otherwise HTTP
-    if (this.showReasoning && this.wsConnected()) {
+    // Use streaming path whenever reasoning is visible (service handles reconnect/fallback)
+    if (this.showReasoning) {
       this.currentThinking = 'Starting research...';
       this.researchService.sendMessageStreaming(query);
     } else {
