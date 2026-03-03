@@ -59,9 +59,13 @@ export class ResearchService {
   private readonly logger = new Logger(ResearchService.name);
 
   // Configuration constants
-  private static readonly INSIGHT_CACHE_TTL = 600; // 10 minutes
+  private static readonly INSIGHT_CACHE_TTL = 3600; // 1 hour
   private static readonly CONVERSATION_CACHE_TTL = 3600; // 1 hour
   private static readonly CONVERSATION_CACHE_PREFIX = 'research:conversation:';
+  private static readonly FOLLOW_UP_CACHE_TTL = 3600; // 1 hour
+  private static readonly FOLLOW_UP_CACHE_PREFIX = 'research:followup:';
+  private static readonly SHARED_FOLLOW_UP_CACHE_PREFIX =
+    'research:followup:shared:';
   private static readonly MAX_CONVERSATION_HISTORY = 20; // Max turns to keep
   private static readonly QUICK_QUESTION_MAX_ITERATIONS = 3;
   private static readonly CUSTOMER_RESEARCH_MAX_ITERATIONS = 5;
@@ -127,9 +131,50 @@ export class ResearchService {
     const history = await this.getConversationHistory(conversationId);
 
     // Build context string from AnalysisContext if provided
-    let contextStr = options?.context
-      ? this.buildContextDescription(options.context)
+    const contextStr = options?.context
+      ? this.formatAnalysisContext(options.context)
       : undefined;
+    const contextSignature = options?.context
+      ? this.getFollowUpContextSignature(options.context)
+      : undefined;
+
+    const { conversationKey, sharedKey } = this.buildFollowUpCacheKeys(
+      conversationId,
+      query,
+      contextStr,
+      contextSignature,
+      options?.customerId,
+      options?.maxIterations,
+    );
+
+    const conversationScopedCachedResponse =
+      await this.getCachedFollowUpResponseByKey(conversationKey);
+    if (conversationScopedCachedResponse) {
+      this.appendConversationTurns(
+        history,
+        query,
+        conversationScopedCachedResponse.answer,
+      );
+      await this.saveConversationHistory(conversationId, history);
+      return conversationScopedCachedResponse;
+    }
+
+    const sharedCachedResponse =
+      await this.getCachedFollowUpResponseByKey(sharedKey);
+    if (sharedCachedResponse) {
+      this.logger.debug(`Follow-up shared cache hit: ${sharedKey}`);
+      await this.cacheFollowUpResponseByKey(
+        conversationKey,
+        sharedCachedResponse,
+      );
+      this.appendConversationTurns(history, query, sharedCachedResponse.answer);
+      await this.saveConversationHistory(conversationId, history);
+      return sharedCachedResponse;
+    }
+
+    this.logger.debug(
+      `Follow-up cache miss (conversation + shared): ${conversationKey} | ${sharedKey}`,
+    );
 
     // Build request with context
     const request: ResearchRequest = {
@@ -144,29 +189,154 @@ export class ResearchService {
     // Execute research
     const response = await this.research(request);
 
+    await Promise.all([
+      this.cacheFollowUpResponseByKey(conversationKey, response),
+      this.cacheFollowUpResponseByKey(sharedKey, response),
+    ]);
+
     // Update conversation history
-    history.push({
-      role: 'user',
-      content: query,
-      timestamp: new Date().toISOString(),
-    });
-    history.push({
-      role: 'assistant',
-      content: response.answer,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Keep only last N turns
-    if (history.length > ResearchService.MAX_CONVERSATION_HISTORY) {
-      history.splice(
-        0,
-        history.length - ResearchService.MAX_CONVERSATION_HISTORY,
-      );
-    }
-
+    this.appendConversationTurns(history, query, response.answer);
     await this.saveConversationHistory(conversationId, history);
 
     return response;
+  }
+
+  /**
+   * Format AnalysisContext into a canonical string used by both REST and WS
+   * paths so follow-up cache keys are transport-agnostic.
+   */
+  formatAnalysisContext(context: AnalysisContext): string {
+    return this.buildContextDescription(context);
+  }
+
+  /**
+   * Build a stable context signature for follow-up caching.
+   * Unlike free-form context text, this is resilient to minor formatting changes.
+   */
+  getFollowUpContextSignature(context: AnalysisContext): string {
+    const toHour = (value?: string): string | undefined => {
+      if (!value) {
+        return undefined;
+      }
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        return undefined;
+      }
+      return date.toISOString().slice(0, 13);
+    };
+
+    const signature = {
+      product: context.product || null,
+      channel: context.channel || null,
+      eventId: context.event?.id || null,
+      eventType: context.event?.type || null,
+      journeyStage:
+        context.journeyStage?.stage || context.journeyStage?.label || null,
+      quadrant: context.quadrant || null,
+      timeStartHour: toHour(context.timeWindow?.start),
+      timeEndHour: toHour(context.timeWindow?.end),
+    };
+
+    return JSON.stringify(signature);
+  }
+
+  /**
+   * Preview follow-up cache keys for diagnostics/tracing.
+   * Useful for correlating cache behavior from gateway logs.
+   */
+  getFollowUpCacheKeys(
+    conversationId: string,
+    query: string,
+    options?: {
+      context?: string;
+      contextSignature?: string;
+      customerId?: string;
+      maxIterations?: number;
+    },
+  ): { conversationKey: string; sharedKey: string } {
+    return this.buildFollowUpCacheKeys(
+      conversationId,
+      query,
+      options?.context,
+      options?.contextSignature,
+      options?.customerId,
+      options?.maxIterations,
+    );
+  }
+
+  /**
+   * Get a cached follow-up response for a conversation turn
+   */
+  async getCachedFollowUpResponse(
+    conversationId: string,
+    query: string,
+    options?: {
+      context?: string;
+      contextSignature?: string;
+      customerId?: string;
+      maxIterations?: number;
+    },
+  ): Promise<ResearchResponse | null> {
+    const { conversationKey, sharedKey } = this.buildFollowUpCacheKeys(
+      conversationId,
+      query,
+      options?.context,
+      options?.contextSignature,
+      options?.customerId,
+      options?.maxIterations,
+    );
+
+    const conversationScopedCachedResponse =
+      await this.getCachedFollowUpResponseByKey(conversationKey);
+    if (conversationScopedCachedResponse) {
+      return conversationScopedCachedResponse;
+    }
+
+    const sharedCachedResponse =
+      await this.getCachedFollowUpResponseByKey(sharedKey);
+    if (sharedCachedResponse) {
+      this.logger.debug(`Follow-up shared cache hit: ${sharedKey}`);
+      await this.cacheFollowUpResponseByKey(
+        conversationKey,
+        sharedCachedResponse,
+      );
+      return sharedCachedResponse;
+    }
+
+    this.logger.debug(
+      `Follow-up cache miss (conversation + shared): ${conversationKey} | ${sharedKey}`,
+    );
+
+    return null;
+  }
+
+  /**
+   * Cache a follow-up response for a conversation turn
+   */
+  async cacheFollowUpResponse(
+    conversationId: string,
+    query: string,
+    response: ResearchResponse,
+    options?: {
+      context?: string;
+      contextSignature?: string;
+      customerId?: string;
+      maxIterations?: number;
+    },
+  ): Promise<void> {
+    const { conversationKey, sharedKey } = this.buildFollowUpCacheKeys(
+      conversationId,
+      query,
+      options?.context,
+      options?.contextSignature,
+      options?.customerId,
+      options?.maxIterations,
+    );
+
+    await Promise.all([
+      this.cacheFollowUpResponseByKey(conversationKey, response),
+      this.cacheFollowUpResponseByKey(sharedKey, response),
+    ]);
   }
 
   /**
@@ -235,6 +405,16 @@ export class ResearchService {
   ): Promise<void> {
     const history = await this.getConversationHistory(conversationId);
 
+    this.appendConversationTurns(history, query, response.answer);
+
+    await this.saveConversationHistory(conversationId, history);
+  }
+
+  private appendConversationTurns(
+    history: ConversationTurn[],
+    query: string,
+    answer: string,
+  ): void {
     history.push({
       role: 'user',
       content: query,
@@ -242,19 +422,95 @@ export class ResearchService {
     });
     history.push({
       role: 'assistant',
-      content: response.answer,
+      content: answer,
       timestamp: new Date().toISOString(),
     });
 
-    // Keep only last N turns
     if (history.length > ResearchService.MAX_CONVERSATION_HISTORY) {
       history.splice(
         0,
         history.length - ResearchService.MAX_CONVERSATION_HISTORY,
       );
     }
+  }
 
-    await this.saveConversationHistory(conversationId, history);
+  private buildFollowUpCacheKeys(
+    conversationId: string,
+    query: string,
+    context?: string,
+    contextSignature?: string,
+    customerId?: string,
+    maxIterations?: number,
+  ): { conversationKey: string; sharedKey: string } {
+    const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizedContext = contextSignature
+      ? contextSignature.trim().toLowerCase().replace(/\s+/g, ' ')
+      : this.normalizeFollowUpContext(context);
+    const normalizedCustomerId = (customerId || '').trim().toLowerCase();
+    const iterations = maxIterations ?? '';
+
+    const keySuffix = [
+      normalizedQuery,
+      normalizedContext,
+      normalizedCustomerId,
+      iterations,
+    ].join(':');
+
+    return {
+      conversationKey: `${ResearchService.FOLLOW_UP_CACHE_PREFIX}${conversationId}:${keySuffix}`,
+      sharedKey: `${ResearchService.SHARED_FOLLOW_UP_CACHE_PREFIX}${keySuffix}`,
+    };
+  }
+
+  private normalizeFollowUpContext(context?: string): string {
+    if (!context) {
+      return '';
+    }
+
+    let normalized = context.trim().toLowerCase().replace(/\s+/g, ' ');
+
+    // Normalize ISO timestamps down to hour granularity so minor
+    // minute/second drift still hits cache without conflating whole days.
+    normalized = normalized.replace(
+      /(\d{4}-\d{2}-\d{2})t(\d{2}):\d{2}:\d{2}(?:\.\d+)?z?/g,
+      '$1t$2:00z',
+    );
+
+    // Normalize common date-time forms to hour granularity
+    normalized = normalized.replace(
+      /(\d{4}-\d{2}-\d{2})\s+(\d{2}):\d{2}:\d{2}/g,
+      '$1 $2:00',
+    );
+
+    return normalized;
+  }
+
+  private async getCachedFollowUpResponseByKey(
+    key: string,
+  ): Promise<ResearchResponse | null> {
+    try {
+      const cached = await this.cache.get<ResearchResponse>(key);
+      if (cached) {
+        this.logger.debug(`Follow-up cache hit: ${key}`);
+      }
+      return cached;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to read follow-up response from cache: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  private async cacheFollowUpResponseByKey(
+    key: string,
+    response: ResearchResponse,
+  ): Promise<void> {
+    try {
+      await this.cache.set(key, response, ResearchService.FOLLOW_UP_CACHE_TTL);
+    } catch (error) {
+      this.logger.warn(`Failed to cache follow-up response: ${error.message}`);
+    }
   }
 
   /**
@@ -771,7 +1027,7 @@ export class ResearchService {
     const { context, question, useCache = true } = request;
     const cacheKey = this.buildInsightCacheKey(context);
 
-    // Check cache first (10 minute TTL)
+    // Check cache first (1 hour TTL)
     if (useCache) {
       const cached = await this.cache.get<ResearchInsight>(cacheKey);
       if (cached) {
@@ -833,7 +1089,7 @@ export class ResearchService {
         llmInsight.totalCommunications =
           context.selectedBubble?.volume ??
           insightData.summary.totalCommunications;
-        // Cache the result for 10 minutes
+        // Cache the result for 1 hour
         await this.cache.set(
           cacheKey,
           llmInsight,

@@ -119,13 +119,45 @@ export class ResearchGateway
       const conversationHistory =
         await this.researchService.getConversation(sessionId);
 
+      const contextString = context
+        ? this.researchService.formatAnalysisContext(context)
+        : undefined;
+      const contextSignature = context
+        ? this.researchService.getFollowUpContextSignature(context)
+        : undefined;
+
+      const cachedResponse =
+        await this.researchService.getCachedFollowUpResponse(sessionId, query, {
+          context: contextString,
+          contextSignature,
+          customerId,
+          maxIterations,
+        });
+
+      if (cachedResponse) {
+        client.emit('complete', {
+          type: 'complete',
+          timestamp: new Date().toISOString(),
+          sessionId,
+          response: cachedResponse,
+        });
+
+        await this.researchService.addConversationTurn(
+          sessionId,
+          query,
+          cachedResponse,
+        );
+
+        return;
+      }
+
       // Build the research request
       const request: ResearchRequest = {
         query,
         conversationHistory,
         customerId,
         maxIterations,
-        context: context ? this.buildContextString(context) : undefined,
+        context: contextString,
       };
 
       // Execute with streaming - events are emitted to the client in real-time
@@ -146,6 +178,18 @@ export class ResearchGateway
       );
 
       // Store the conversation turn in Redis for history
+      await this.researchService.cacheFollowUpResponse(
+        sessionId,
+        query,
+        response,
+        {
+          context: contextString,
+          contextSignature,
+          customerId,
+          maxIterations,
+        },
+      );
+
       await this.researchService.addConversationTurn(
         sessionId,
         query,
@@ -176,45 +220,5 @@ export class ResearchGateway
       this.logger.log(`[WS] Research cancelled by client ${client.id}`);
       session.aborted = true;
     }
-  }
-
-  /**
-   * Build a context string from the analysis context object
-   * (mirrors what the REST controller does via researchService)
-   */
-  private buildContextString(context: AnalysisContext): string {
-    const parts: string[] = [];
-
-    if (context.product) {
-      parts.push(`Product: ${context.product}`);
-    }
-    if (context.channel) {
-      parts.push(`Channel: ${context.channel}`);
-    }
-    if (context.timeWindow) {
-      parts.push(
-        `Time window: ${context.timeWindow.start} to ${context.timeWindow.end}`,
-      );
-    }
-    if (context.event) {
-      parts.push(
-        `Related event: ${context.event.label} (${context.event.type}) on ${context.event.date}`,
-      );
-    }
-    if (context.journeyStage) {
-      parts.push(
-        `Journey stage: ${context.journeyStage.label} (sentiment: ${context.journeyStage.sentiment})`,
-      );
-    }
-    if (context.quadrant) {
-      parts.push(`Quadrant: ${context.quadrant}`);
-    }
-    if (context.selectedBubble) {
-      parts.push(
-        `Selected bubble: ${context.selectedBubble.date} (themes: ${context.selectedBubble.themes?.join(', ')})`,
-      );
-    }
-
-    return parts.length > 0 ? `Dashboard context:\n${parts.join('\n')}` : '';
   }
 }
