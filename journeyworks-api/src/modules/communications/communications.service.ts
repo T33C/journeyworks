@@ -69,6 +69,7 @@ export class CommunicationsService {
       messages: dto.messages as any,
       threadId: dto.threadId,
       relatedEventId: dto.relatedEventId,
+      topics: dto.topics,
       createdAt: now,
       updatedAt: now,
     };
@@ -110,6 +111,7 @@ export class CommunicationsService {
       messages: dto.messages as any,
       threadId: dto.threadId,
       relatedEventId: dto.relatedEventId,
+      topics: dto.topics,
       createdAt: now,
       updatedAt: now,
     }));
@@ -571,6 +573,32 @@ export class CommunicationsService {
     }
 
     await this.repository.updateById(id, updatePayload);
+
+    // Invalidate cache
+    await this.cache.delete(`${this.CACHE_PREFIX}${id}`);
+
+    return this.findById(id);
+  }
+
+  /**
+   * Assign communication to a user
+   */
+  async assignTo(
+    id: string,
+    userId: string,
+  ): Promise<CommunicationResponseDto> {
+    const existing = await this.findById(id); // ensure it exists
+
+    const metadata = {
+      ...((existing.metadata as Record<string, unknown>) || {}),
+      assignedTo: userId,
+      assignedAt: new Date().toISOString(),
+    };
+
+    await this.repository.updateById(id, {
+      metadata,
+      updatedAt: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await this.cache.delete(`${this.CACHE_PREFIX}${id}`);

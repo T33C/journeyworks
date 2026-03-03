@@ -29,6 +29,20 @@ import {
 } from '../utils/random.util';
 import { PRODUCT_SLUGS, findProductBySlug } from '../data/products';
 
+// Topic pools for event-linked communications (module-level for efficiency)
+const EVENT_TOPIC_MAP: Record<string, string[]> = {
+  incident: [
+    'Service Disruption',
+    'System Outage',
+    'Fraud Prevention',
+    'Security',
+  ],
+  maintenance: ['Planned Maintenance', 'Digital Banking', 'Online Portal'],
+  promotion: ['Product Offers', 'Loyalty Programme', 'Cross-sell'],
+  regulatory: ['Compliance Checks', 'Regulatory Change', 'Consumer Duty'],
+  product_launch: ['New Products', 'Digital Banking', 'Mobile App'],
+};
+
 // ─── Event-Specific Communication Templates ─────────────────────────────────
 // Each event type has templates for different channels and sentiments.
 // Templates use {event_label}, {event_description}, {product}, {name} placeholders.
@@ -522,6 +536,7 @@ export class EventCommunicationGenerator {
         resolved: sentimentLabel !== 'negative' || Math.random() > 0.6,
       },
       aiClassification,
+      topics: aiClassification.topics,
       relatedEventId: event.id,
     };
   }
@@ -582,7 +597,19 @@ export class EventCommunicationGenerator {
       rootCause: `Related to ${event.label}`,
       suggestedAction: this.getSuggestedAction(event.type, sentiment),
       regulatoryFlags,
+      topics: this.generateEventTopics(event.type),
     };
+  }
+
+  /**
+   * Generate topics relevant to an event-linked communication
+   */
+  private generateEventTopics(eventType: string): string[] {
+    const pool = EVENT_TOPIC_MAP[eventType] || [
+      'Customer Service',
+      'General Enquiry',
+    ];
+    return randomSubset(pool, 1, 2);
   }
 
   private generateStatus(

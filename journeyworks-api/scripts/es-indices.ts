@@ -27,6 +27,12 @@ import {
 const ES_URL = process.env.ELASTICSEARCH_URL || 'http://localhost:9200';
 const ES_USERNAME = process.env.ELASTICSEARCH_USERNAME;
 const ES_PASSWORD = process.env.ELASTICSEARCH_PASSWORD;
+const ES_INDEX_PREFIX = process.env.ES_INDEX_PREFIX || '';
+
+/** Apply prefix to an index name (e.g. 'journeyworks' + 'communications' → 'journeyworks_communications') */
+function prefixedName(name: string): string {
+  return ES_INDEX_PREFIX ? `${ES_INDEX_PREFIX}_${name}` : name;
+}
 
 // Colors for terminal output
 const colors = {
@@ -93,46 +99,49 @@ async function createIndex(
     return false;
   }
 
+  const esName = prefixedName(name);
+
   try {
-    const exists = await client.indices.exists({ index: name });
+    const exists = await client.indices.exists({ index: esName });
 
     if (exists) {
       if (force) {
-        await client.indices.delete({ index: name });
-        warn(`Deleted existing index: ${name}`);
+        await client.indices.delete({ index: esName });
+        warn(`Deleted existing index: ${esName}`);
       } else {
-        info(`Index already exists: ${name}`);
+        info(`Index already exists: ${esName}`);
         return true;
       }
     }
 
     await client.indices.create({
-      index: name,
+      index: esName,
       settings: config.settings as any,
       mappings: config.mappings as any,
     });
 
-    success(`Created index: ${name}`);
+    success(`Created index: ${esName}`);
     return true;
   } catch (err: any) {
-    error(`Failed to create index ${name}: ${err.message}`);
+    error(`Failed to create index ${esName}: ${err.message}`);
     return false;
   }
 }
 
 async function deleteIndex(client: Client, name: string): Promise<boolean> {
+  const esName = prefixedName(name);
   try {
-    const exists = await client.indices.exists({ index: name });
+    const exists = await client.indices.exists({ index: esName });
     if (!exists) {
-      info(`Index does not exist: ${name}`);
+      info(`Index does not exist: ${esName}`);
       return true;
     }
 
-    await client.indices.delete({ index: name });
-    success(`Deleted index: ${name}`);
+    await client.indices.delete({ index: esName });
+    success(`Deleted index: ${esName}`);
     return true;
   } catch (err: any) {
-    error(`Failed to delete index ${name}: ${err.message}`);
+    error(`Failed to delete index ${esName}: ${err.message}`);
     return false;
   }
 }
@@ -144,10 +153,12 @@ async function getIndexStatus(client: Client, name: string): Promise<void> {
     return;
   }
 
+  const esName = prefixedName(name);
+
   try {
-    const exists = await client.indices.exists({ index: name });
+    const exists = await client.indices.exists({ index: esName });
     if (!exists) {
-      console.log(`  ${name}:`);
+      console.log(`  ${esName}:`);
       console.log(
         `    ${colors.dim}Status:${colors.reset} ${colors.yellow}Not Created${colors.reset}`,
       );
@@ -160,13 +171,13 @@ async function getIndexStatus(client: Client, name: string): Promise<void> {
       return;
     }
 
-    const stats = await client.indices.stats({ index: name });
-    const indexStats = stats.indices?.[name];
+    const stats = await client.indices.stats({ index: esName });
+    const indexStats = stats.indices?.[esName];
     const docCount = indexStats?.primaries?.docs?.count ?? 0;
     const sizeBytes = indexStats?.primaries?.store?.size_in_bytes ?? 0;
     const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2);
 
-    console.log(`  ${name}:`);
+    console.log(`  ${esName}:`);
     console.log(
       `    ${colors.dim}Status:${colors.reset} ${colors.green}Active${colors.reset}`,
     );
@@ -234,6 +245,7 @@ ${colors.yellow}Environment Variables:${colors.reset}
   ELASTICSEARCH_URL       Elasticsearch URL (default: http://localhost:9200)
   ELASTICSEARCH_USERNAME  Elasticsearch username (optional)
   ELASTICSEARCH_PASSWORD  Elasticsearch password (optional)
+  ES_INDEX_PREFIX         Index name prefix (e.g. 'journeyworks' → 'journeyworks_communications')
 `);
 }
 

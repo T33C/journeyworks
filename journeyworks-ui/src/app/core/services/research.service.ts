@@ -551,6 +551,11 @@ export class ResearchService implements OnDestroy {
 
   /**
    * Stream research response for real-time updates
+   *
+   * TODO: The backend does not yet expose a `GET /api/research/stream` SSE endpoint.
+   * Streaming is currently handled via WebSocket (see `sendMessageStreaming()`).
+   * This method will fail until an SSE endpoint is added to ResearchController.
+   * Prefer `sendMessageStreaming()` for real-time streaming.
    */
   streamQuery(request: ResearchRequest): Observable<ResearchStreamEvent> {
     const subject = new Subject<ResearchStreamEvent>();

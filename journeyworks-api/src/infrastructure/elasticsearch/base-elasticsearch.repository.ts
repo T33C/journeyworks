@@ -448,13 +448,24 @@ export class BaseElasticsearchRepository<T = unknown> {
     }));
 
     const result = await this.bulk(this.indexName, operations);
-    const failed = result.errors
-      ? result.items.filter((i) => i.index?.error).length
-      : 0;
+    const failedItems = result.errors
+      ? result.items.filter((i) => i.index?.error)
+      : [];
+
+    if (failedItems.length > 0) {
+      const sample = failedItems.slice(0, 3).map((i) => ({
+        id: i.index?._id,
+        error: i.index?.error,
+      }));
+      console.error(
+        `[bulkIndex] ${failedItems.length} failures in ${this.indexName}. Sample:`,
+        JSON.stringify(sample, null, 2),
+      );
+    }
 
     return {
-      created: documents.length - failed,
-      failed,
+      created: documents.length - failedItems.length,
+      failed: failedItems.length,
     };
   }
 

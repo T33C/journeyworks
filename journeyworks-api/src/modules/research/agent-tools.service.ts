@@ -733,11 +733,22 @@ export class AgentTools {
           product,
           timeRange,
         });
+        // Extract daily volume data from visualizations if available
+        const volumeViz = result.visualizations?.find(
+          (v) => v.title === 'Communication Volume Over Time',
+        );
+        const dailyVolume = Array.isArray(volumeViz?.data)
+          ? volumeViz.data.map((d: any) => ({
+              date: d.date,
+              count: d.volume ?? d.count ?? 0,
+            }))
+          : [];
         return {
           summary: result.summary,
           trendDirection: result.metrics.trendDirection,
           dailyAverage: result.metrics.dailyAverageVolume,
           dateRange: result.metrics.dateRange,
+          dailyVolume,
         };
       },
     });
@@ -802,7 +813,7 @@ export class AgentTools {
 
           if (input.category) {
             filter.push({
-              term: { 'aiClassification.category.keyword': input.category },
+              term: { 'aiClassification.category': input.category },
             });
           }
 
@@ -895,9 +906,7 @@ export class AgentTools {
             ? this.parseTimeRange(input.timeRange)
             : null; // null = no date filter (all time)
 
-          const filter: any[] = [
-            { term: { 'category.keyword': 'CDD Remediation' } },
-          ];
+          const filter: any[] = [{ term: { category: 'CDD Remediation' } }];
 
           // Only add date filter if timeRange was specified
           if (timeRange) {
@@ -911,16 +920,16 @@ export class AgentTools {
           }
 
           const aggs: any = {
-            by_reason: { terms: { field: 'subcategory.keyword', size: 15 } },
+            by_reason: { terms: { field: 'subcategory', size: 15 } },
             daily: {
               date_histogram: { field: 'createdAt', calendar_interval: 'day' },
             },
-            by_status: { terms: { field: 'status.keyword' } },
+            by_status: { terms: { field: 'status' } },
           };
 
           // Add channel breakdown if requested
           if (input.includeChannelBreakdown) {
-            aggs.by_channel = { terms: { field: 'channel.keyword', size: 10 } };
+            aggs.by_channel = { terms: { field: 'channel', size: 10 } };
           }
 
           const response = await client.search({
@@ -1074,8 +1083,8 @@ export class AgentTools {
           if (input.category) {
             const catField =
               input.dataType === 'cases'
-                ? 'category.keyword'
-                : 'aiClassification.category.keyword';
+                ? 'category'
+                : 'aiClassification.category';
             filter.push({ term: { [catField]: input.category } });
           }
           if (input.status) filter.push({ term: { status: input.status } });
@@ -1180,7 +1189,7 @@ export class AgentTools {
             });
           }
           if (input.category) {
-            filter.push({ term: { 'category.keyword': input.category } });
+            filter.push({ term: { category: input.category } });
           }
 
           const response = await client.search({
@@ -1266,7 +1275,7 @@ export class AgentTools {
             });
           }
           if (input.category) {
-            filter.push({ term: { 'category.keyword': input.category } });
+            filter.push({ term: { category: input.category } });
           }
 
           const response = await client.search({
@@ -1277,7 +1286,7 @@ export class AgentTools {
               aggs: {
                 sla_status: { terms: { field: 'slaBreached' } },
                 by_category: {
-                  terms: { field: 'category.keyword' },
+                  terms: { field: 'category' },
                   aggs: { breach_rate: { terms: { field: 'slaBreached' } } },
                 },
               },
@@ -1351,8 +1360,8 @@ export class AgentTools {
             input.dataType === 'cases' ? 'createdAt' : 'timestamp';
           const catField =
             input.dataType === 'cases'
-              ? 'category.keyword'
-              : 'aiClassification.category.keyword';
+              ? 'category'
+              : 'aiClassification.category';
 
           const filterClauses: any[] = [];
           if (timeRange) {
@@ -1389,7 +1398,7 @@ export class AgentTools {
                     input.dataType === 'cases'
                       ? {
                           by_subcategory: {
-                            terms: { field: 'subcategory.keyword', size: 10 },
+                            terms: { field: 'subcategory', size: 10 },
                           },
                         }
                       : {},
@@ -1577,7 +1586,7 @@ export class AgentTools {
             });
           }
           if (product) {
-            must.push({ term: { 'product.keyword': product } });
+            must.push({ term: { product: product } });
           }
 
           const client = this.getElasticClient();

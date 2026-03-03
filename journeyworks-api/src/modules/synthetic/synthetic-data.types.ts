@@ -54,6 +54,7 @@ export interface SyntheticAIClassification {
   rootCause: string;
   suggestedAction: string;
   regulatoryFlags: string[];
+  topics: string[];
 }
 
 export interface SyntheticCommunicationMessage {
@@ -104,6 +105,7 @@ export interface SyntheticCommunication {
   };
   // AI-enhanced fields
   aiClassification?: SyntheticAIClassification;
+  topics: string[]; // Top-level topics for analysis service
   messages?: SyntheticCommunicationMessage[];
   threadId?: string;
   relatedEventId?: string;

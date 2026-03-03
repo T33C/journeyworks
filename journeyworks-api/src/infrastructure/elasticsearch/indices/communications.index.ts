@@ -54,8 +54,8 @@ export const COMMUNICATIONS_INDEX: IndexDefinition = {
       content: { type: 'text', analyzer: 'english' },
       contentSummary: { type: 'text' },
 
-      // AI Classification
-      classification: {
+      // AI Classification (field name aligns with code's aiClassification property)
+      aiClassification: {
         type: 'object',
         properties: {
           product: { type: 'keyword' },
@@ -68,15 +68,7 @@ export const COMMUNICATIONS_INDEX: IndexDefinition = {
           rootCause: { type: 'text' },
           suggestedAction: { type: 'text' },
           topics: { type: 'keyword' },
-          regulatoryFlags: {
-            type: 'nested',
-            properties: {
-              type: { type: 'keyword' },
-              description: { type: 'text' },
-              severity: { type: 'keyword' },
-              requiresEscalation: { type: 'boolean' },
-            },
-          },
+          regulatoryFlags: { type: 'keyword' },
           entities: {
             type: 'nested',
             properties: {
@@ -92,6 +84,9 @@ export const COMMUNICATIONS_INDEX: IndexDefinition = {
           classifiedAt: { type: 'date' },
         },
       },
+
+      // Top-level topics (mirrored from aiClassification for analysis service)
+      topics: { type: 'keyword' },
 
       // Sentiment analysis
       sentiment: {

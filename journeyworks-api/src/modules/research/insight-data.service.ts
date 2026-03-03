@@ -295,7 +295,7 @@ export class InsightDataService {
         );
         if (normalizedProduct) {
           filter.push({
-            term: { 'aiClassification.product.keyword': normalizedProduct },
+            term: { 'aiClassification.product': normalizedProduct },
           });
         }
       }
@@ -303,7 +303,7 @@ export class InsightDataService {
       if (context.channel) {
         this.logger.debug(`Channel filter: "${context.channel}"`);
         filter.push({
-          term: { 'channel.keyword': context.channel },
+          term: { channel: context.channel },
         });
       }
     } else {
@@ -317,7 +317,7 @@ export class InsightDataService {
     // Themes are used for display/context but not for filtering evidence
 
     if (context.event) {
-      // Get communications around the event date (±3 days)
+      // Get communications around the event date (±3 days before, +7 days after)
       const eventDate = new Date(context.event.date);
       const isValidDate = !isNaN(eventDate.getTime());
       this.logger.debug(
@@ -329,30 +329,41 @@ export class InsightDataService {
         const endDate = new Date(eventDate);
         endDate.setDate(endDate.getDate() + 7);
 
-        this.logger.debug(
-          `Event date range: ${startDate.toISOString()} to ${endDate.toISOString()}`,
-        );
-        filter.push({
-          range: {
-            timestamp: {
-              gte: startDate.toISOString(),
-              lte: endDate.toISOString(),
+        // Only add event date range if no timeWindow already constrains timestamp
+        if (!context.timeWindow) {
+          this.logger.debug(
+            `Event date range: ${startDate.toISOString()} to ${endDate.toISOString()}`,
+          );
+          filter.push({
+            range: {
+              timestamp: {
+                gte: startDate.toISOString(),
+                lte: endDate.toISOString(),
+              },
             },
-          },
-        });
+          });
+        } else {
+          this.logger.debug(
+            `Skipping event date range filter — timeWindow already constrains timestamp`,
+          );
+        }
       }
 
-      // If event has product info, filter by it
-      if (context.event.product) {
+      // Only add event product filter if context.product didn't already add one
+      if (context.event.product && !context.product) {
         const normalizedProduct = this.normalizeProduct(context.event.product);
         this.logger.debug(
           `Event product mapping: "${context.event.product}" -> "${normalizedProduct}"`,
         );
         if (normalizedProduct) {
           filter.push({
-            term: { 'aiClassification.product.keyword': normalizedProduct },
+            term: { 'aiClassification.product': normalizedProduct },
           });
         }
+      } else if (context.event.product && context.product) {
+        this.logger.debug(
+          `Skipping event product filter — context.product already applied`,
+        );
       }
     }
 
@@ -550,7 +561,7 @@ export class InsightDataService {
       const normalizedProduct = this.normalizeProduct(context.product);
       if (normalizedProduct) {
         filter.push({
-          term: { 'aiClassification.product.keyword': normalizedProduct },
+          term: { 'aiClassification.product': normalizedProduct },
         });
       }
     }
@@ -991,7 +1002,7 @@ export class InsightDataService {
       const normalizedProduct = this.normalizeProduct(context.product);
       if (normalizedProduct) {
         filter.push({
-          term: { 'aiClassification.product.keyword': normalizedProduct },
+          term: { 'aiClassification.product': normalizedProduct },
         });
       }
     }
@@ -1017,10 +1028,10 @@ export class InsightDataService {
               },
             },
             top_categories: {
-              terms: { field: 'aiClassification.category.keyword', size: 5 },
+              terms: { field: 'aiClassification.category', size: 5 },
             },
             top_products: {
-              terms: { field: 'aiClassification.product.keyword', size: 5 },
+              terms: { field: 'aiClassification.product', size: 5 },
             },
           },
         },

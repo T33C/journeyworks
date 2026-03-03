@@ -34,6 +34,7 @@ import {
   PaginatedCommunicationsDto,
   CommunicationAggregationsDto,
   UpdateStatusDto,
+  AssignCommunicationDto,
   CommunicationStatsDto,
 } from './dto';
 
@@ -241,6 +242,22 @@ export class CommunicationsController {
     @Body() dto: UpdateStatusDto,
   ): Promise<CommunicationResponseDto> {
     return this.service.updateStatus(id, dto.status, dto.note);
+  }
+
+  @Patch(':id/assign')
+  @ApiOperation({ summary: 'Assign communication to a user' })
+  @ApiParam({ name: 'id', description: 'Communication ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Communication assigned',
+    type: CommunicationResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Communication not found' })
+  async assignTo(
+    @Param('id') id: string,
+    @Body() dto: AssignCommunicationDto,
+  ): Promise<CommunicationResponseDto> {
+    return this.service.assignTo(id, dto.userId);
   }
 
   @Delete(':id')

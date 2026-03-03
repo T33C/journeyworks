@@ -1,7 +1,27 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
+
+/**
+ * Lightweight interface mirroring the backend AnalysisResult envelope.
+ * Used to unwrap API responses into the specific shapes the UI needs.
+ */
+interface AnalysisResultEnvelope {
+  type: string;
+  summary: string;
+  confidence: number;
+  insights: Array<{
+    category: string;
+    text: string;
+    severity: string;
+    evidence?: string[];
+  }>;
+  metrics: Record<string, any>;
+  visualizations?: Array<{ type: string; title: string; data: any[] }>;
+  recommendations?: string[];
+  processingTime: number;
+}
 
 @Injectable({
   providedIn: 'root',
@@ -17,63 +37,170 @@ export class AnalysisService {
     communicationId: string,
   ): Observable<CommunicationAnalysis> {
     return this.http.post<CommunicationAnalysis>(
-      `${this.baseUrl}/communication/${communicationId}`,
+      `${environment.apiUrl}/communications/${communicationId}/analyze`,
       {},
     );
   }
 
   /**
-   * Get sentiment trends over time
+   * Get sentiment trends over time.
+   * The backend returns an AnalysisResult; we extract the sentiment
+   * visualization data into the SentimentTrend[] shape the UI expects.
    */
   getSentimentTrends(params: TrendParams): Observable<SentimentTrend[]> {
-    return this.http.get<SentimentTrend[]>(`${this.baseUrl}/trends/sentiment`, {
-      params: params as any,
-    });
+    return this.http
+      .get<AnalysisResultEnvelope>(`${this.baseUrl}/trends/sentiment`, {
+        params: params as any,
+      })
+      .pipe(
+        map((result) => {
+          const viz = result.visualizations?.find((v) =>
+            v.title?.toLowerCase().includes('sentiment'),
+          );
+          if (viz?.data?.length) {
+            return viz.data.map((d: any) => ({
+              date: d.date,
+              positive: d.positive || 0,
+              neutral: d.neutral || 0,
+              negative: d.negative || 0,
+              average: d.average ?? (d.positive || 0) - (d.negative || 0),
+            }));
+          }
+          return [];
+        }),
+      );
   }
 
   /**
-   * Get topic distribution
+   * Get topic distribution.
+   * Extracts topic data from the AnalysisResult metrics.
    */
   getTopicDistribution(params?: TrendParams): Observable<TopicDistribution> {
-    return this.http.get<TopicDistribution>(`${this.baseUrl}/topics`, {
-      params: params as any,
-    });
+    return this.http
+      .get<AnalysisResultEnvelope>(`${this.baseUrl}/topics`, {
+        params: params as any,
+      })
+      .pipe(
+        map((result) => {
+          const topTopics: Array<{ topic: string; count: number }> =
+            result.metrics?.['topTopics'] || [];
+          const totalCount = topTopics.reduce((s, t) => s + t.count, 0) || 1;
+          return {
+            topics: topTopics.map((t) => ({
+              name: t.topic,
+              count: t.count,
+              percentage: Math.round((t.count / totalCount) * 100),
+            })),
+            trending: [],
+            emerging: [],
+          };
+        }),
+      );
   }
 
   /**
-   * Get volume trends
+   * Get volume trends.
+   * Extracts the volume visualization data from the AnalysisResult.
    */
   getVolumeTrends(params: TrendParams): Observable<VolumeTrend[]> {
-    return this.http.get<VolumeTrend[]>(`${this.baseUrl}/trends/volume`, {
-      params: params as any,
-    });
+    return this.http
+      .get<AnalysisResultEnvelope>(`${this.baseUrl}/trends/volume`, {
+        params: params as any,
+      })
+      .pipe(
+        map((result) => {
+          const viz = result.visualizations?.find((v) =>
+            v.title?.toLowerCase().includes('volume'),
+          );
+          if (viz?.data?.length) {
+            return viz.data.map((d: any) => ({
+              date: d.date,
+              total: d.volume ?? d.count ?? 0,
+              byChannel: d.byChannel || {},
+            }));
+          }
+          return [];
+        }),
+      );
   }
 
   /**
-   * Get risk assessment for customers
+   * Get risk assessment for customers.
+   * Wraps the AnalysisResult risk metrics into a RiskAssessment array.
    */
   getRiskAssessment(customerId?: string): Observable<RiskAssessment[]> {
     const url = customerId
       ? `${this.baseUrl}/risk/${customerId}`
       : `${this.baseUrl}/risk`;
-    return this.http.get<RiskAssessment[]>(url);
+    return this.http.get<AnalysisResultEnvelope>(url).pipe(
+      map((result) => {
+        const m = result.metrics || {};
+        return [
+          {
+            customerId: customerId || 'overview',
+            customerName: m['customerName'] || 'All Customers',
+            riskScore: m['riskScore'] ?? 0,
+            riskLevel: m['riskLevel'] ?? 'low',
+            factors: (m['factors'] || []).map((f: any) => ({
+              name: f.factor || f.name || 'Unknown',
+              severity: f.impact === 'high' ? 3 : f.impact === 'medium' ? 2 : 1,
+              description: f.description || '',
+            })),
+            trend: 'stable' as const,
+            recommendations: result.recommendations || m['mitigations'] || [],
+          },
+        ];
+      }),
+    );
   }
 
   /**
-   * Get executive summary / dashboard KPIs
+   * Get executive summary / dashboard KPIs.
+   * Extracts combined metrics from the dashboard endpoint.
    */
   getDashboardSummary(): Observable<DashboardSummary> {
-    return this.http.get<DashboardSummary>(`${this.baseUrl}/dashboard`);
+    return this.http
+      .get<AnalysisResultEnvelope>(`${this.baseUrl}/dashboard`)
+      .pipe(
+        map((result) => {
+          const sentiment = result.metrics?.['sentiment'] || {};
+          const trends = result.metrics?.['trends'] || {};
+          return {
+            kpis: {
+              totalCommunications: trends.totalCommunications ?? 0,
+              totalCommunicationsChange: 0,
+              openCases: 0,
+              openCasesChange: 0,
+              avgSentiment: sentiment.averageScore ?? 0,
+              avgSentimentChange: 0,
+              avgResponseTime: 0,
+              avgResponseTimeChange: 0,
+              atRiskCustomers: 0,
+              atRiskCustomersChange: 0,
+            },
+            recentActivity: [],
+            alerts: result.insights
+              .filter((i) => i.severity === 'high' || i.severity === 'critical')
+              .map((i) => ({
+                severity:
+                  i.severity === 'critical'
+                    ? ('critical' as const)
+                    : ('warning' as const),
+                message: i.text,
+                timestamp: new Date().toISOString(),
+              })),
+          };
+        }),
+      );
   }
 
   /**
    * Generate data card for a dataset
    */
   generateDataCard(datasetId: string): Observable<DataCard> {
-    return this.http.post<DataCard>(
-      `${this.baseUrl}/datacard/${datasetId}`,
-      {},
-    );
+    return this.http.post<DataCard>(`${this.baseUrl}/data-card`, {
+      targetId: datasetId,
+    });
   }
 }
 

@@ -115,15 +115,7 @@ export const INDEX_MAPPINGS: Record<string, object> = {
             rootCause: { type: 'text' },
             suggestedAction: { type: 'text' },
             topics: { type: 'keyword' },
-            regulatoryFlags: {
-              type: 'nested',
-              properties: {
-                type: { type: 'keyword' },
-                description: { type: 'text' },
-                severity: { type: 'keyword' },
-                requiresEscalation: { type: 'boolean' },
-              },
-            },
+            regulatoryFlags: { type: 'keyword' },
             entities: {
               type: 'nested',
               properties: {

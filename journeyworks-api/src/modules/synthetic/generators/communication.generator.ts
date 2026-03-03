@@ -525,6 +525,61 @@ const REGULATORY_FLAGS = [
   'KYC-Update-Required',
 ];
 
+// Topic pools for generating realistic topics per category
+const TOPICS_BY_CATEGORY: Record<string, string[]> = {
+  'account-opening': [
+    'Account Setup',
+    'Card Delivery',
+    'ID Verification',
+    'Credit Assessment',
+    'Application Process',
+    'Switching Service',
+  ],
+  'call-handling': [
+    'Wait Times',
+    'Agent Behaviour',
+    'Communication Quality',
+    'Callback Requests',
+    'Transfer Issues',
+    'First Contact Resolution',
+  ],
+  'cdd-remediation': [
+    'KYC Reviews',
+    'Document Requests',
+    'Account Restrictions',
+    'Compliance Checks',
+    'Identity Verification',
+    'Account Closure Risk',
+  ],
+  'fees-charges': [
+    'Service Fees',
+    'Overdraft Charges',
+    'Foreign Exchange Rates',
+    'Hidden Fees',
+    'Interest Rates',
+    'Fee Refunds',
+  ],
+  'payment-processing': [
+    'Online Payments',
+    'Standing Orders',
+    'Direct Debits',
+    'International Transfers',
+    'Payment Failures',
+    'Faster Payments',
+  ],
+};
+
+const CROSS_CUTTING_TOPICS = [
+  'Digital Banking',
+  'Mobile App',
+  'Customer Service',
+  'Branch Experience',
+  'Security',
+  'Fraud Prevention',
+  'Online Portal',
+  'Accessibility',
+];
+
 @Injectable()
 export class CommunicationGenerator {
   private readonly bankName: string;
@@ -657,6 +712,7 @@ export class CommunicationGenerator {
         resolved: Math.random() > 0.3,
       },
       aiClassification,
+      topics: aiClassification.topics, // Top-level for analysis service
       messages,
       threadId,
     };
@@ -775,6 +831,11 @@ export class CommunicationGenerator {
       if (Math.random() > 0.9) regulatoryFlags.push('Financial-Ombudsman-Risk');
     }
 
+    // Generate topics from category-specific and cross-cutting pools
+    const categoryTopics = TOPICS_BY_CATEGORY[category] || [];
+    const topicPool = [...categoryTopics, ...CROSS_CUTTING_TOPICS];
+    const topics = randomSubset(topicPool, 1, 3);
+
     return {
       category: category as SyntheticAIClassification['category'],
       confidence: 0.75 + Math.random() * 0.24,
@@ -784,6 +845,7 @@ export class CommunicationGenerator {
       rootCause: randomChoice(rootCauses),
       suggestedAction: randomChoice(suggestedActions),
       regulatoryFlags,
+      topics,
     };
   }
 

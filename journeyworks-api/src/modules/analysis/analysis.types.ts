@@ -16,6 +16,8 @@ export interface AnalysisRequest {
   query?: string;
   /** Filter by product slug (e.g., 'advance-account', 'credit-card') */
   product?: string;
+  /** Filter by communication channel (e.g., 'email', 'phone', 'chat') */
+  channel?: string;
   /** Time range for analysis */
   timeRange?: {
     from?: string;

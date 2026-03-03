@@ -20,6 +20,7 @@ export default () => ({
     username: process.env.ELASTICSEARCH_USERNAME,
     password: process.env.ELASTICSEARCH_PASSWORD,
     indices: {
+      customers: process.env.ES_INDEX_CUSTOMERS || 'journeyworks_customers',
       communications:
         process.env.ES_INDEX_COMMUNICATIONS || 'journeyworks_communications',
       chunks: process.env.ES_INDEX_CHUNKS || 'journeyworks_chunks',

@@ -1060,6 +1060,7 @@ export class AnalysisService {
       startDate: request.timeRange?.from,
       endDate: request.timeRange?.to,
       product: request.product,
+      channels: request.channel ? [request.channel as any] : undefined,
       from: 0,
       size: limit,
     });
@@ -1299,7 +1300,7 @@ export class AnalysisService {
       ];
 
       const productFilter = this.buildProductFilter(
-        'aiClassification.product.keyword',
+        'aiClassification.product',
         normalizedProducts,
       );
       if (productFilter) {
@@ -1307,7 +1308,7 @@ export class AnalysisService {
       }
 
       if (filter.channel) {
-        filters.push({ term: { 'channel.keyword': filter.channel } });
+        filters.push({ term: { channel: filter.channel } });
       }
 
       // Build survey filters before queries so we can fire all in parallel
@@ -1349,17 +1350,17 @@ export class AnalysisService {
                   avg_sentiment: { avg: { field: 'sentiment.score' } },
                   top_categories: {
                     terms: {
-                      field: 'aiClassification.category.keyword',
+                      field: 'aiClassification.category',
                       size: 5,
                     },
                   },
                   top_product: {
                     terms: {
-                      field: 'aiClassification.product.keyword',
+                      field: 'aiClassification.product',
                       size: 1,
                     },
                   },
-                  channels: { terms: { field: 'channel.keyword', size: 3 } },
+                  channels: { terms: { field: 'channel', size: 3 } },
                 },
               },
             },
@@ -1619,7 +1620,7 @@ export class AnalysisService {
       }
 
       const productFilter = this.buildProductFilter(
-        'aiClassification.product.keyword',
+        'aiClassification.product',
         normalizedProducts,
       );
       if (productFilter) {
@@ -1627,7 +1628,7 @@ export class AnalysisService {
       }
 
       if (filter.channel) {
-        filters.push({ term: { 'channel.keyword': filter.channel } });
+        filters.push({ term: { channel: filter.channel } });
       }
 
       // Aggregate by category
@@ -1640,11 +1641,11 @@ export class AnalysisService {
             : { match_all: {} },
           aggs: {
             by_category: {
-              terms: { field: 'aiClassification.category.keyword', size: 20 },
+              terms: { field: 'aiClassification.category', size: 20 },
               aggs: {
                 avg_sentiment: { avg: { field: 'sentiment.score' } },
                 top_product: {
-                  terms: { field: 'aiClassification.product.keyword', size: 1 },
+                  terms: { field: 'aiClassification.product', size: 1 },
                 },
               },
             },

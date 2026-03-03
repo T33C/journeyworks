@@ -66,7 +66,9 @@ export interface CommunicationDocument {
     rootCause: string;
     suggestedAction: string;
     regulatoryFlags?: string[];
+    topics?: string[];
   };
+  topics?: string[]; // Top-level topics for analysis service
   messages?: Array<{
     id: string;
     timestamp: string;
@@ -156,11 +158,11 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     }
 
     if (filters?.customerId) {
-      filter.push({ term: { 'customerId.keyword': filters.customerId } });
+      filter.push({ term: { customerId: filters.customerId } });
     }
 
     if (filters?.caseId) {
-      filter.push({ term: { 'caseId.keyword': filters.caseId } });
+      filter.push({ term: { caseId: filters.caseId } });
     }
 
     if (filters?.tags?.length) {
@@ -221,7 +223,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
 
     if (filters?.customerId) {
       filterClauses.push({
-        term: { 'customerId.keyword': filters.customerId },
+        term: { customerId: filters.customerId },
       });
     }
 
@@ -264,7 +266,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
 
     if (filters?.customerId) {
       filterClauses.push({
-        term: { 'customerId.keyword': filters.customerId },
+        term: { customerId: filters.customerId },
       });
     }
 
@@ -313,7 +315,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     options: SearchOptions = {},
   ): Promise<SearchResult<CommunicationDocument>> {
     return this.searchIndex(
-      { bool: { filter: [{ term: { 'customerId.keyword': customerId } }] } },
+      { bool: { filter: [{ term: { customerId: customerId } }] } },
       { ...options, sort: [{ timestamp: 'desc' }] },
     );
   }
@@ -326,7 +328,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
     options: SearchOptions = {},
   ): Promise<SearchResult<CommunicationDocument>> {
     return this.searchIndex(
-      { bool: { filter: [{ term: { 'caseId.keyword': caseId } }] } },
+      { bool: { filter: [{ term: { caseId: caseId } }] } },
       { ...options, sort: [{ timestamp: 'asc' }] },
     );
   }
@@ -344,7 +346,7 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
 
     if (filters?.customerId) {
       filterClauses.push({
-        term: { 'customerId.keyword': filters.customerId },
+        term: { customerId: filters.customerId },
       });
     }
 

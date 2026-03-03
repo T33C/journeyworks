@@ -12,6 +12,7 @@ import {
   IsDateString,
   IsNumber,
   IsBoolean,
+  IsNotEmpty,
   ValidateNested,
   Min,
   Max,
@@ -196,6 +197,12 @@ export class AIClassificationDto {
   @IsArray()
   @IsString({ each: true })
   regulatoryFlags?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  topics?: string[];
 }
 
 export enum MessageSender {
@@ -337,6 +344,15 @@ export class CreateCommunicationDto {
   @IsOptional()
   @IsString()
   relatedEventId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Top-level topics for analysis',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  topics?: string[];
 }
 
 // Update DTO
@@ -653,6 +669,14 @@ export class UpdateStatusDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+// Assign Communication DTO
+export class AssignCommunicationDto {
+  @ApiProperty({ description: 'ID of the user to assign to' })
+  @IsString()
+  @IsNotEmpty({ message: 'userId must not be empty' })
+  userId: string;
 }
 
 // Communication Stats Response

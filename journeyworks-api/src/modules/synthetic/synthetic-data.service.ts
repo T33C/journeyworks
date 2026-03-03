@@ -207,6 +207,7 @@ export class SyntheticDataService {
         aiClassification: comm.aiClassification as any,
         messages: comm.messages as any,
         threadId: comm.threadId,
+        topics: comm.topics,
       }),
     );
 
@@ -307,38 +308,7 @@ export class SyntheticDataService {
     await this.surveysService.bulkIndexSurveys(allSurveys);
     this.logger.log(`Stored ${allSurveys.length} surveys`);
 
-    // 6. Generate and store social mentions
-    this.logger.log('Generating social mentions...');
-    const generatedMentions = this.socialMentionGenerator.generateMany(
-      mergedConfig.socialMentionsCount,
-      mergedConfig.sentimentDistribution,
-      dateRange,
-    );
-    this.logger.log(`Generated ${generatedMentions.length} social mentions`);
-
-    // Store social mentions in Elasticsearch
-    this.logger.log('Storing social mentions in Elasticsearch...');
-    const socialDocs = generatedMentions.map((m) => ({
-      id: m.id,
-      platform: m.platform,
-      author: m.author,
-      authorHandle: m.authorHandle,
-      content: m.content,
-      timestamp: m.timestamp,
-      sentiment: m.sentiment,
-      engagement: m.engagement,
-      url: m.url,
-      mentionedProducts: m.mentionedProducts,
-      tags: m.tags,
-      requiresResponse: m.requiresResponse,
-      responded: m.responded,
-      linkedCustomerId: m.linkedCustomerId,
-    }));
-    const socialResult =
-      await this.socialMentionsService.createBulk(socialDocs);
-    this.logger.log(`Stored ${socialResult.created} social mentions`);
-
-    // 7. Store events in Elasticsearch (already generated for survey correlation)
+    // 6. Store events in Elasticsearch (already generated for survey correlation)
     this.logger.log('Storing events in Elasticsearch...');
     const eventDocs = generatedEvents.map((e) => ({
       id: e.id,
@@ -362,7 +332,7 @@ export class SyntheticDataService {
     const eventsResult = await this.eventsService.createBulk(eventDocs);
     this.logger.log(`Stored ${eventsResult.created} events`);
 
-    // 7b. Generate and store event-correlated communications
+    // 7. Generate and store event-correlated communications
     // These are communications explicitly linked to events with matching products,
     // relevant content, and dates clustered around the event date.
     this.logger.log('Generating event-correlated communications...');
@@ -395,6 +365,7 @@ export class SyntheticDataService {
       messages: comm.messages as any,
       threadId: comm.threadId,
       relatedEventId: comm.relatedEventId,
+      topics: comm.topics,
     }));
 
     let eventCommStoredCount = 0;
@@ -409,7 +380,48 @@ export class SyntheticDataService {
     allCommunications.push(...eventComms);
     storedCount += eventCommStoredCount;
 
-    // 8. Generate and store chunks from communications
+    // 8. Generate and store social mentions
+    // Generated AFTER event-correlated comms so date range extends to match
+    // the latest communication (event comms can exceed dateRange.end by several days)
+    this.logger.log('Generating social mentions...');
+    const latestCommTs = allCommunications.reduce((max, c) => {
+      const t = new Date(c.timestamp).getTime();
+      return t > max ? t : max;
+    }, dateRange.end.getTime());
+    const socialDateRange = {
+      start: dateRange.start,
+      end: new Date(latestCommTs),
+    };
+    const generatedMentions = this.socialMentionGenerator.generateMany(
+      mergedConfig.socialMentionsCount,
+      mergedConfig.sentimentDistribution,
+      socialDateRange,
+    );
+    this.logger.log(`Generated ${generatedMentions.length} social mentions`);
+
+    // Store social mentions in Elasticsearch
+    this.logger.log('Storing social mentions in Elasticsearch...');
+    const socialDocs = generatedMentions.map((m) => ({
+      id: m.id,
+      platform: m.platform,
+      author: m.author,
+      authorHandle: m.authorHandle,
+      content: m.content,
+      timestamp: m.timestamp,
+      sentiment: m.sentiment,
+      engagement: m.engagement,
+      url: m.url,
+      mentionedProducts: m.mentionedProducts,
+      tags: m.tags,
+      requiresResponse: m.requiresResponse,
+      responded: m.responded,
+      linkedCustomerId: m.linkedCustomerId,
+    }));
+    const socialResult =
+      await this.socialMentionsService.createBulk(socialDocs);
+    this.logger.log(`Stored ${socialResult.created} social mentions`);
+
+    // 9. Generate and store chunks from communications
     this.logger.log('Generating chunks from communications...');
     const generatedChunks =
       this.chunkGenerator.generateFromCommunications(allCommunications);

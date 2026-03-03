@@ -26,6 +26,8 @@ export class AnalysisApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/analysis`;
   private readonly researchUrl = `${environment.apiUrl}/research`;
+  private followUpConversationId: string | null = null;
+  private followUpContextSignature: string | null = null;
 
   /**
    * Get timeline events from API
@@ -228,8 +230,21 @@ export class AnalysisApiService {
     question: string,
     sessionId?: string,
   ): Observable<ResearchInsight> {
+    const contextSignature = this.buildFollowUpContextSignature(context);
+
     // Use or create a conversation ID for multi-turn context
-    const conversationId = sessionId || `followup_${crypto.randomUUID()}`;
+    if (sessionId) {
+      this.followUpConversationId = sessionId;
+      this.followUpContextSignature = contextSignature;
+    } else if (
+      !this.followUpConversationId ||
+      this.followUpContextSignature !== contextSignature
+    ) {
+      this.followUpConversationId = `followup_${crypto.randomUUID()}`;
+      this.followUpContextSignature = contextSignature;
+    }
+
+    const conversationId = this.followUpConversationId;
 
     // Transform context for the conversation endpoint
     const requestBody = {
@@ -311,6 +326,39 @@ export class AnalysisApiService {
           throw err;
         }),
       );
+  }
+
+  resetFollowUpConversation(): void {
+    this.followUpConversationId = null;
+    this.followUpContextSignature = null;
+  }
+
+  private buildFollowUpContextSignature(context: AnalysisContext): string {
+    const toHour = (value?: Date): string | undefined => {
+      if (!value) {
+        return undefined;
+      }
+      const date = value instanceof Date ? value : new Date(value);
+      if (isNaN(date.getTime())) {
+        return undefined;
+      }
+      return date.toISOString().slice(0, 13);
+    };
+
+    const signature = {
+      product: context.product || null,
+      channel: context.channel || null,
+      eventId: context.event?.id || null,
+      eventType: context.event?.type || null,
+      journeyStage: context.journeyStage?.stage || null,
+      quadrant: context.quadrant || null,
+      selectedBubbleId: context.selectedBubble?.id || null,
+      selectedItems: [...(context.selectedItems || [])].sort(),
+      timeStartHour: toHour(context.timeWindow?.start),
+      timeEndHour: toHour(context.timeWindow?.end),
+    };
+
+    return JSON.stringify(signature);
   }
 
   // =========================================================================

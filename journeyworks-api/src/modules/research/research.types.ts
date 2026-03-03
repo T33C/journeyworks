@@ -188,6 +188,14 @@ export interface AgentState {
   finalAnswer?: string;
   /** Error if failed */
   error?: string;
+  /** Whether a timeout retry has been used (internal) */
+  _timeoutRetried?: boolean;
+  /** Internal ReAct process metrics */
+  _reactMetrics?: {
+    firstTurnInvalid: number;
+    firstTurnRepairSuccess: number;
+    firstTurnRepairFailed: number;
+  };
 }
 
 /**

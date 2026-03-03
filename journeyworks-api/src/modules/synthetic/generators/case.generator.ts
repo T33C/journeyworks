@@ -184,7 +184,77 @@ export class CaseGenerator {
       }
     }
 
+    // Ensure a minimum percentage of CDD Remediation cases for meaningful analysis
+    // Build customer lookup so we can regenerate titles/descriptions for converted cases
+    const customerMap = new Map<string, SyntheticCustomer>();
+    for (const { customer } of customersWithComms) {
+      customerMap.set(customer.id, customer);
+    }
+    this.ensureMinimumCddCases(cases, customerMap);
+
     return cases;
+  }
+
+  /**
+   * Ensure at least 20% of cases are CDD Remediation.
+   * If under-represented, reassign randomly selected non-CDD cases,
+   * regenerating title and description to match the new category.
+   */
+  private ensureMinimumCddCases(
+    cases: SyntheticCase[],
+    customerMap: Map<string, SyntheticCustomer>,
+  ): void {
+    const MIN_CDD_PERCENTAGE = 0.2;
+    const CDD_CATEGORY = 'CDD Remediation';
+    const CDD_SUBCATEGORIES = [
+      'Account closed unexpectedly',
+      'Cannot provide documents',
+      'Communication tone concern',
+      'Account restrictions applied',
+      'CDD review delays',
+      'Disagree with decision',
+    ];
+
+    const cddCount = cases.filter((c) => c.category === CDD_CATEGORY).length;
+    const targetCount = Math.ceil(cases.length * MIN_CDD_PERCENTAGE);
+
+    if (cddCount >= targetCount) return;
+
+    // Collect indices of non-CDD cases we can reassign
+    const nonCddIndices = cases
+      .map((c, i) => (c.category !== CDD_CATEGORY ? i : -1))
+      .filter((i) => i !== -1);
+
+    // Shuffle and pick enough to meet the target
+    for (let i = nonCddIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nonCddIndices[i], nonCddIndices[j]] = [
+        nonCddIndices[j],
+        nonCddIndices[i],
+      ];
+    }
+
+    const toConvert = Math.min(targetCount - cddCount, nonCddIndices.length);
+
+    for (let i = 0; i < toConvert; i++) {
+      const idx = nonCddIndices[i];
+      const c = cases[idx];
+      const customer = customerMap.get(c.customerId);
+
+      c.category = CDD_CATEGORY;
+      c.subcategory = randomChoice(CDD_SUBCATEGORIES);
+
+      // Regenerate title and description to match the new category
+      if (customer) {
+        c.title = this.generateTitle(CDD_CATEGORY, customer);
+        c.description = this.generateDescription(CDD_CATEGORY, customer);
+      }
+
+      // Add compliance tag if not present
+      if (!c.tags.includes('compliance')) {
+        c.tags.push('compliance');
+      }
+    }
   }
 
   /**

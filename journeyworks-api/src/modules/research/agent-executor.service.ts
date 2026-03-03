@@ -21,6 +21,7 @@ import {
   AgentAction,
   AgentState,
   StreamEventCallback,
+  InsightChart,
 } from './research.types';
 
 /** Agent configuration constants */
@@ -29,8 +30,8 @@ const AGENT_CONFIG = {
   DEFAULT_MAX_ITERATIONS: 10,
   /** Minimum characters for follow-up question */
   MIN_FOLLOWUP_LENGTH: 10,
-  /** Timeout for LLM calls in milliseconds (60 seconds) */
-  LLM_TIMEOUT_MS: 60_000,
+  /** Timeout for LLM calls in milliseconds (90 seconds) */
+  LLM_TIMEOUT_MS: 90_000,
   /** Maximum number of follow-up questions */
   MAX_FOLLOWUP_COUNT: 3,
   /** Maximum characters for final answer summary in follow-up generation */
@@ -39,6 +40,10 @@ const AGENT_CONFIG = {
   MIN_TOOL_FORCE_ITERATIONS: 5,
   /** Maximum number of parallel tool calls per iteration */
   MAX_PARALLEL_ACTIONS: 5,
+  /** Maximum retries for a timed-out iteration */
+  MAX_TIMEOUT_RETRIES: 1,
+  /** Timeout for first-turn repair prompt in milliseconds */
+  FIRST_TURN_REPAIR_TIMEOUT_MS: 25_000,
 } as const;
 
 /** Confidence calculation weights */
@@ -125,6 +130,11 @@ export class AgentExecutor {
       actions: [],
       sources: [],
       isDone: false,
+      _reactMetrics: {
+        firstTurnInvalid: 0,
+        firstTurnRepairSuccess: 0,
+        firstTurnRepairFailed: 0,
+      },
     };
 
     this.logger.log(`Starting agent execution for query: "${request.query}"`);
@@ -138,6 +148,18 @@ export class AgentExecutor {
         // Run one iteration of the agent
         await this.runIteration(request, state);
       } catch (error) {
+        const isTimeout = /timed? ?out/i.test(error.message);
+
+        // Retry once on timeout before giving up
+        if (isTimeout && !state._timeoutRetried) {
+          state._timeoutRetried = true;
+          this.logger.warn(
+            `Iteration ${state.iteration} timed out — retrying once`,
+          );
+          state.iteration--;
+          continue;
+        }
+
         this.logger.error(`Agent iteration failed: ${error.message}`);
         state.error = error.message;
         state.isDone = true;
@@ -145,12 +167,25 @@ export class AgentExecutor {
       }
     }
 
-    // If we hit max iterations without finishing, synthesize an answer
-    if (!state.isDone && !state.finalAnswer) {
-      state.finalAnswer = await this.synthesizeFinalAnswer(request, state);
+    // Synthesize an answer from tool results when the agent couldn't
+    // produce one itself (timeout, max-iterations, or parse failure)
+    if (!state.finalAnswer && state.actions.some((a) => a.success)) {
+      this.logger.log(
+        'No final answer from agent loop — synthesizing from tool results',
+      );
+      try {
+        state.finalAnswer = await this.synthesizeFinalAnswer(request, state);
+      } catch (synthesisError) {
+        this.logger.error(
+          `Synthesis fallback also failed: ${synthesisError.message}`,
+        );
+        // Fall through — the generic "unable to find" message will be used
+      }
     }
 
     const totalTime = Date.now() - startTime;
+
+    this.logReactMetrics(state, false);
 
     // Generate follow-up questions (async) while computing sync fields below
     const followUpQuestions = await this.generateFollowUpQuestions(
@@ -198,6 +233,11 @@ export class AgentExecutor {
       actions: [],
       sources: [],
       isDone: false,
+      _reactMetrics: {
+        firstTurnInvalid: 0,
+        firstTurnRepairSuccess: 0,
+        firstTurnRepairFailed: 0,
+      },
     };
 
     this.logger.log(
@@ -223,25 +263,51 @@ export class AgentExecutor {
       try {
         await this.runStreamingIteration(request, state, sessionId, onEvent);
       } catch (error) {
+        const isTimeout = /timed? ?out/i.test(error.message);
+
+        // Retry once on timeout before giving up
+        if (isTimeout && !state._timeoutRetried) {
+          state._timeoutRetried = true;
+          this.logger.warn(
+            `[Streaming] Iteration ${state.iteration} timed out — retrying once`,
+          );
+          // Don't increment iteration count for the retry
+          state.iteration--;
+          continue;
+        }
+
         this.logger.error(
           `[Streaming] Agent iteration failed: ${error.message}`,
         );
         state.error = error.message;
         state.isDone = true;
 
-        onEvent({
-          type: 'error',
-          timestamp: timestamp(),
-          sessionId,
-          message: error.message,
-          code: error instanceof AgentExecutionError ? error.code : 'UNKNOWN',
-        });
+        // Only emit error to the client when we have no successful tool
+        // results to fall back on. When results exist, the post-loop
+        // synthesis will attempt to produce an answer instead.
+        if (!state.actions.some((a) => a.success)) {
+          onEvent({
+            type: 'error',
+            timestamp: timestamp(),
+            sessionId,
+            message: error.message,
+            code: error instanceof AgentExecutionError ? error.code : 'UNKNOWN',
+          });
+        } else {
+          this.logger.log(
+            `[Streaming] Suppressing error event — ${state.actions.filter((a) => a.success).length} successful tool result(s) available for synthesis`,
+          );
+        }
         break;
       }
     }
 
-    // If we hit max iterations without finishing, synthesize an answer
-    if (!state.isDone && !state.finalAnswer) {
+    // Synthesize an answer from tool results when the agent couldn't
+    // produce one itself (timeout, max-iterations, or parse failure)
+    if (!state.finalAnswer && state.actions.some((a) => a.success)) {
+      this.logger.log(
+        '[Streaming] No final answer from agent loop — synthesizing from tool results',
+      );
       onEvent({
         type: 'thinking',
         timestamp: timestamp(),
@@ -249,10 +315,26 @@ export class AgentExecutor {
         iteration: state.iteration,
         maxIterations,
       });
-      state.finalAnswer = await this.synthesizeFinalAnswer(request, state);
+      try {
+        state.finalAnswer = await this.synthesizeFinalAnswer(request, state);
+      } catch (synthesisError) {
+        this.logger.error(
+          `[Streaming] Synthesis fallback also failed: ${synthesisError.message}`,
+        );
+        onEvent({
+          type: 'error',
+          timestamp: timestamp(),
+          sessionId,
+          message: `Synthesis failed: ${synthesisError.message}`,
+          code: 'SYNTHESIS_TIMEOUT',
+        });
+        // Fall through — the generic "unable to find" message will be used
+      }
     }
 
     const totalTime = Date.now() - startTime;
+
+    this.logReactMetrics(state, true);
 
     // Generate follow-up questions (async) while computing sync fields below
     const followUpQuestions = await this.generateFollowUpQuestions(
@@ -303,6 +385,9 @@ export class AgentExecutor {
 
     // Build the prompt with scratchpad
     const prompt = this.buildPrompt(request, state);
+    this.logger.debug(
+      `[Streaming] Prompt size: ${prompt.length} chars (~${Math.round(prompt.length / 4)} tokens)`,
+    );
 
     // Get the agent's response
     const response = await this.promptWithTimeout(
@@ -312,7 +397,22 @@ export class AgentExecutor {
     );
 
     // Parse the response (may contain multiple actions)
-    const parsed = this.parseAgentResponse(response);
+    const preferActionOverFinal = this.shouldUseActionOnlyFirstTurnPrompt(
+      request,
+      state,
+    );
+    let parsed = this.parseAgentResponse(response, {
+      preferActionWhenFinalAlsoPresent: preferActionOverFinal,
+    });
+
+    parsed = await this.repairFirstTurnResponseIfNeeded(
+      request,
+      state,
+      response,
+      parsed,
+      true,
+    );
+
     const firstAction = parsed.actions[0];
 
     // Create the reasoning step (include the full LLM prompt for transparency)
@@ -561,8 +661,8 @@ export class AgentExecutor {
    * Extract chart data from successful tool actions
    * Only generates charts when relevant tools provide aggregation data
    */
-  private extractChartsFromActions(state: AgentState): any[] {
-    const charts: any[] = [];
+  private extractChartsFromActions(state: AgentState): InsightChart[] {
+    const charts: (InsightChart | null)[] = [];
 
     this.logger.debug(`Extracting charts from ${state.actions.length} actions`);
 
@@ -695,14 +795,24 @@ export class AgentExecutor {
       // Daily volumes → Time-series chart
       if (action.tool === 'get_daily_volumes' && output.daily?.length) {
         charts.push(
-          this.buildTimeSeriesChart('Daily Volume Trend', output.daily),
+          this.buildTimeSeriesChart(
+            'Daily Volume Trend',
+            output.daily,
+            'Date',
+            'Volume',
+          ),
         );
       }
 
       // Trend analysis with daily data
       if (action.tool === 'analyze_trends' && output.dailyVolume?.length) {
         charts.push(
-          this.buildTimeSeriesChart('Volume Trend', output.dailyVolume),
+          this.buildTimeSeriesChart(
+            'Volume Trend',
+            output.dailyVolume,
+            'Date',
+            'Volume',
+          ),
         );
       }
 
@@ -723,19 +833,101 @@ export class AgentExecutor {
                 ? AgentExecutor.RAG_COLORS.red
                 : AgentExecutor.RAG_COLORS.amber,
             })),
+            'Anomaly Type',
+            'Count',
           ),
         );
       }
+
+      // Channel escalation → Time-series chart of daily escalations
+      if (
+        action.tool === 'analyze_channel_escalation' &&
+        output.dailyBreakdown?.length
+      ) {
+        charts.push(
+          this.buildTimeSeriesChart(
+            'Channel Escalations Over Time',
+            output.dailyBreakdown,
+            'Date',
+            'Escalations',
+          ),
+        );
+      }
+
+      // Topic analysis → Bar chart of top topics
+      if (action.tool === 'analyze_topics') {
+        this.logger.debug(
+          `analyze_topics chart check — topTopics type: ${typeof output.topTopics}, length: ${output.topTopics?.length ?? 'N/A'}, sample: ${JSON.stringify(output.topTopics?.[0] ?? null)}`,
+        );
+        if (output.topTopics?.length) {
+          charts.push(
+            this.buildBarChart(
+              'Top Topics',
+              output.topTopics.slice(0, 8).map((t: any) => ({
+                label: t.topic || t.name || t.key,
+                value: t.count || t.doc_count || 0,
+              })),
+              'Topic',
+              'Mentions',
+            ),
+          );
+        }
+      }
+
+      // Resolution times → Bar chart of avg/min/max
+      if (
+        action.tool === 'analyze_resolution_times' &&
+        output.avgResolutionDays !== undefined
+      ) {
+        charts.push(
+          this.buildBarChart(
+            'Resolution Times (Days)',
+            [
+              { label: 'Average', value: output.avgResolutionDays },
+              { label: 'Minimum', value: output.minResolutionDays },
+              { label: 'Maximum', value: output.maxResolutionDays },
+            ],
+            'Metric',
+            'Days',
+          ),
+        );
+      }
+
+      // Issue detection → Pie chart of issues vs clean communications
+      if (
+        action.tool === 'detect_issues' &&
+        output.totalCommunications !== undefined
+      ) {
+        const problematicCount = output.problematicCount || 0;
+        const cleanCount = (output.totalCommunications || 0) - problematicCount;
+        if (problematicCount > 0 || cleanCount > 0) {
+          charts.push(
+            this.buildPieChart('Issue Distribution', [
+              {
+                label: 'Problematic',
+                value: problematicCount,
+                color: AgentExecutor.RAG_COLORS.red,
+              },
+              {
+                label: 'Clean',
+                value: cleanCount > 0 ? cleanCount : 0,
+                color: AgentExecutor.RAG_COLORS.green,
+              },
+            ]),
+          );
+        }
+      }
     }
 
-    // Limit to 3 charts max to avoid overwhelming the UI
-    if (charts.length > 3) {
+    // Filter out nulls (e.g. empty time-series) and limit to 3 charts
+    const validCharts = charts.filter((c): c is InsightChart => c !== null);
+    if (validCharts.length > 3) {
       this.logger.warn(
-        `Built ${charts.length} charts but limiting to 3 — ${charts.length - 3} chart(s) dropped`,
+        `Built ${validCharts.length} charts but limiting to 3 — ${validCharts.length - 3} chart(s) dropped`,
       );
     }
-    this.logger.debug(`Returning ${Math.min(charts.length, 3)} charts`);
-    return charts.slice(0, 3);
+    this.logger.debug(`Returning ${Math.min(validCharts.length, 3)} charts`);
+    return validCharts.slice(0, 3);
   }
 
   /**
@@ -754,15 +946,20 @@ export class AgentExecutor {
    */
   private buildBarChart(
     title: string,
-    data: Array<{ label: string; value: number }>,
-  ): any {
+    data: Array<{ label: string; value: number; color?: string }>,
+    xLabel?: string,
+    yLabel?: string,
+  ): InsightChart {
     return {
       type: 'bar',
       title,
+      xLabel: xLabel || 'Category',
+      yLabel: yLabel || 'Count',
       data: data.slice(0, 6).map((item, index) => ({
         label: item.label,
         value: item.value,
         color:
+          item.color ||
           AgentExecutor.CATEGORICAL_COLORS[
             index % AgentExecutor.CATEGORICAL_COLORS.length
           ],
@@ -776,7 +973,7 @@ export class AgentExecutor {
   private buildPieChart(
     title: string,
     data: Array<{ label: string; value: number; color: string }>,
-  ): any {
+  ): InsightChart {
     return {
       type: 'pie',
       title,
@@ -790,7 +987,7 @@ export class AgentExecutor {
   private buildStatusPieChart(
     title: string,
     data: Array<{ label: string; value: number }>,
-  ): any {
+  ): InsightChart {
     return {
       type: 'pie',
       title,
@@ -813,16 +1010,26 @@ export class AgentExecutor {
   private buildTimeSeriesChart(
     title: string,
     dailyData: Array<{ date: string; count: number }>,
-  ): any {
+    xLabel?: string,
+    yLabel?: string,
+  ): InsightChart | null {
+    const validData = dailyData.filter(
+      (d) => d.date && !isNaN(new Date(d.date).getTime()),
+    );
+    if (validData.length === 0) return null;
+
     return {
       type: 'time-series',
       title,
-      data: dailyData.map((d) => ({
+      xLabel: xLabel || 'Date',
+      yLabel: yLabel || 'Volume',
+      data: validData.map((d) => ({
         label: new Date(d.date).toLocaleDateString('en-GB', {
           month: 'short',
           day: 'numeric',
         }),
         value: d.count,
+        date: d.date,
         color: AgentExecutor.CATEGORICAL_COLORS[0],
       })),
     };
@@ -847,7 +1054,22 @@ export class AgentExecutor {
     );
 
     // Parse the response (may contain multiple actions)
-    const parsed = this.parseAgentResponse(response);
+    const preferActionOverFinal = this.shouldUseActionOnlyFirstTurnPrompt(
+      request,
+      state,
+    );
+    let parsed = this.parseAgentResponse(response, {
+      preferActionWhenFinalAlsoPresent: preferActionOverFinal,
+    });
+
+    parsed = await this.repairFirstTurnResponseIfNeeded(
+      request,
+      state,
+      response,
+      parsed,
+      false,
+    );
+
     const firstAction = parsed.actions[0];
 
     // Create the reasoning step (include the full LLM prompt for transparency)
@@ -1114,6 +1336,10 @@ export class AgentExecutor {
    * descriptions and the "Your Capabilities" section (loaded from .skill.md files).
    */
   private buildPrompt(request: ResearchRequest, state: AgentState): string {
+    if (this.shouldUseActionOnlyFirstTurnPrompt(request, state)) {
+      return this.buildActionOnlyFirstTurnPrompt(request);
+    }
+
     const toolDescriptions = this.tools.getToolDescriptions(
       request.enabledTools,
     );
@@ -1139,6 +1365,176 @@ export class AgentExecutor {
       customerId: request.customerId || '',
       scratchpad,
     });
+  }
+
+  private shouldUseActionOnlyFirstTurnPrompt(
+    request: ResearchRequest,
+    state: AgentState,
+  ): boolean {
+    return (
+      state.iteration === 1 &&
+      state.actions.length === 0 &&
+      state.steps.length === 0 &&
+      !this.isMetaQuestion(request.query)
+    );
+  }
+
+  private buildActionOnlyFirstTurnPrompt(request: ResearchRequest): string {
+    const toolDescriptions = this.tools.getToolDescriptions(
+      request.enabledTools,
+    );
+
+    const conversationContext = request.conversationHistory
+      ? request.conversationHistory
+          .map((turn) => `${turn.role}: ${turn.content}`)
+          .join('\n')
+      : '';
+
+    return `You are in FIRST-STEP ACTION MODE.
+
+You MUST choose one or more tools and output only Thought + Action block(s).
+Do NOT output Final Answer.
+Do NOT fabricate data.
+
+User Request: ${request.query}
+
+${request.context ? `Context:\n${request.context}\n` : ''}
+${conversationContext ? `Conversation History:\n${conversationContext}\n` : ''}
+${request.customerId ? `Customer ID: ${request.customerId}\n` : ''}
+
+Available Tools:
+${toolDescriptions}
+
+Output format:
+Thought: [short reasoning]
+Action: {"tool": "tool_name", "input": {}}
+
+You may include multiple Action lines only when they are independent.`;
+  }
+
+  private async repairFirstTurnResponseIfNeeded(
+    request: ResearchRequest,
+    state: AgentState,
+    rawResponse: string,
+    parsed: {
+      thought: string;
+      actions: Array<{ action: string; actionInput: any }>;
+      finalAnswer?: string;
+    },
+    isStreaming: boolean,
+  ): Promise<{
+    thought: string;
+    actions: Array<{ action: string; actionInput: any }>;
+    finalAnswer?: string;
+  }> {
+    if (!this.shouldUseActionOnlyFirstTurnPrompt(request, state)) {
+      return parsed;
+    }
+
+    const attemptedFinalAnswer =
+      parsed.actions[0]?.action === 'Final Answer' || !!parsed.finalAnswer;
+    const noActions = parsed.actions.length === 0;
+
+    if (!attemptedFinalAnswer && !noActions) {
+      return parsed;
+    }
+
+    const mode = isStreaming ? '[Streaming] ' : '';
+    const reason = attemptedFinalAnswer
+      ? 'it provided Final Answer before using tools'
+      : 'it did not contain a parseable Action';
+
+    this.logger.warn(
+      `${mode}Iteration ${state.iteration}: First-turn response invalid (${reason}) - running one-shot repair prompt`,
+    );
+    this.incrementReactMetric(state, 'firstTurnInvalid');
+
+    const suggestedTool = this.suggestToolForQuery(request.query);
+    const repairPrompt = `Your previous response was rejected because ${reason}.
+
+You MUST now respond with at least one Action tool call.
+Do NOT output Final Answer.
+
+Original user request:
+${request.query}
+
+Rejected response:
+${rawResponse}
+
+Guidance:
+${suggestedTool}
+
+Required output format:
+Thought: [short reasoning]
+Action: {"tool": "tool_name", "input": {}}
+
+If useful, include additional independent Action lines.`;
+
+    try {
+      const repairedResponse = await this.promptWithTimeout(
+        repairPrompt,
+        this.promptTemplate.getTemplate('system:researcher'),
+        { rateLimitKey: 'llm:agent' },
+        AGENT_CONFIG.FIRST_TURN_REPAIR_TIMEOUT_MS,
+      );
+
+      const repairedParsed = this.parseAgentResponse(repairedResponse, {
+        preferActionWhenFinalAlsoPresent: true,
+      });
+      const repairedIsStillInvalid =
+        repairedParsed.actions.length === 0 ||
+        repairedParsed.actions[0]?.action === 'Final Answer' ||
+        !!repairedParsed.finalAnswer;
+
+      if (repairedIsStillInvalid) {
+        this.logger.warn(
+          `${mode}Iteration ${state.iteration}: Repair prompt did not produce valid tool action; continuing with normal rejection flow`,
+        );
+        this.incrementReactMetric(state, 'firstTurnRepairFailed');
+        return parsed;
+      }
+
+      this.logger.log(
+        `${mode}Iteration ${state.iteration}: Repair prompt recovered a valid tool action response`,
+      );
+      this.incrementReactMetric(state, 'firstTurnRepairSuccess');
+      return repairedParsed;
+    } catch (error) {
+      this.logger.warn(
+        `${mode}Iteration ${state.iteration}: Repair prompt failed (${error.message}); continuing with normal rejection flow`,
+      );
+      this.incrementReactMetric(state, 'firstTurnRepairFailed');
+      return parsed;
+    }
+  }
+
+  private incrementReactMetric(
+    state: AgentState,
+    metric:
+      | 'firstTurnInvalid'
+      | 'firstTurnRepairSuccess'
+      | 'firstTurnRepairFailed',
+  ): void {
+    if (!state._reactMetrics) {
+      state._reactMetrics = {
+        firstTurnInvalid: 0,
+        firstTurnRepairSuccess: 0,
+        firstTurnRepairFailed: 0,
+      };
+    }
+    state._reactMetrics[metric] += 1;
+  }
+
+  private logReactMetrics(state: AgentState, isStreaming: boolean): void {
+    const metrics = state._reactMetrics;
+    if (!metrics) {
+      return;
+    }
+
+    const prefix = isStreaming ? '[Streaming] ' : '';
+    this.logger.log(
+      `${prefix}ReAct first-turn metrics: first_turn_invalid=${metrics.firstTurnInvalid}, first_turn_repair_success=${metrics.firstTurnRepairSuccess}, first_turn_repair_failed=${metrics.firstTurnRepairFailed}`,
+    );
   }
 
   /**
@@ -1178,11 +1574,17 @@ export class AgentExecutor {
    *   - Plain: Action: tool_name\nAction Input: {...}
    *   - Multiple: Action: {...}\nAction: {...}  (parallel)
    */
-  private parseAgentResponse(response: string): {
+  private parseAgentResponse(
+    response: string,
+    options?: { preferActionWhenFinalAlsoPresent?: boolean },
+  ): {
     thought: string;
     actions: Array<{ action: string; actionInput: any }>;
     finalAnswer?: string;
   } {
+    const preferActionWhenFinalAlsoPresent =
+      options?.preferActionWhenFinalAlsoPresent ?? true;
+
     // Try to extract thought
     const thoughtMatch = response.match(
       /Thought:\s*([\s\S]*?)(?=Action:|Final Answer:|$)/i,
@@ -1191,13 +1593,6 @@ export class AgentExecutor {
 
     // Check for final answer
     const finalAnswerMatch = response.match(/Final Answer:\s*([\s\S]*?)$/i);
-    if (finalAnswerMatch) {
-      return {
-        thought,
-        actions: [{ action: 'Final Answer', actionInput: undefined }],
-        finalAnswer: finalAnswerMatch[1].trim(),
-      };
-    }
 
     // Find ALL Action: blocks (supports parallel multi-action)
     const actions: Array<{ action: string; actionInput: any }> = [];
@@ -1228,12 +1623,33 @@ export class AgentExecutor {
     }
 
     if (actions.length > 0) {
+      if (finalAnswerMatch) {
+        if (preferActionWhenFinalAlsoPresent) {
+          this.logger.warn(
+            'Agent response included both Action and Final Answer; preferring Action and ignoring Final Answer for this iteration',
+          );
+        } else {
+          return {
+            thought,
+            actions: [{ action: 'Final Answer', actionInput: undefined }],
+            finalAnswer: finalAnswerMatch[1].trim(),
+          };
+        }
+      }
       if (actions.length > 1) {
         this.logger.log(
           `Parsed ${actions.length} parallel actions: ${actions.map((a) => a.action).join(', ')}`,
         );
       }
       return { thought, actions };
+    }
+
+    if (finalAnswerMatch) {
+      return {
+        thought,
+        actions: [{ action: 'Final Answer', actionInput: undefined }],
+        finalAnswer: finalAnswerMatch[1].trim(),
+      };
     }
 
     // Fallback: Try plain format: Action: tool_name\nAction Input: {...}
@@ -1446,12 +1862,13 @@ Return only the questions, one per line.`;
     prompt: string,
     systemPrompt?: string,
     options?: { rateLimitKey?: string },
+    timeoutMs: number = AGENT_CONFIG.LLM_TIMEOUT_MS,
   ): Promise<string> {
     return this.llmClient.promptWithTimeout(
       prompt,
       systemPrompt,
       options,
-      AGENT_CONFIG.LLM_TIMEOUT_MS,
+      timeoutMs,
     );
   }
 }

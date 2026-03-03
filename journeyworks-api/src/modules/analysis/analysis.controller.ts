@@ -287,7 +287,179 @@ export class AnalysisController {
   }
 
   // ============================================================
-  // Dashboard API Endpoints
+  // Convenience GET Endpoints
+  // Used by the UI AnalysisService for dashboard widgets
+  // ============================================================
+
+  @Get('trends/sentiment')
+  @ApiOperation({ summary: 'Get sentiment trends over time' })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    description: 'Start date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    description: 'End date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'channel',
+    required: false,
+    description: 'Filter by channel',
+  })
+  @ApiQuery({
+    name: 'customerId',
+    required: false,
+    description: 'Filter by customer',
+  })
+  @ApiResponse({ status: 200, description: 'Sentiment trend data' })
+  async getSentimentTrends(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('channel') channel?: string,
+    @Query('customerId') customerId?: string,
+  ): Promise<AnalysisResult> {
+    if (dateFrom) parseDate(dateFrom);
+    if (dateTo) parseDate(dateTo);
+    return this.analysisService.analyze({
+      type: 'sentiment',
+      targetId: customerId,
+      channel,
+      timeRange: { from: dateFrom, to: dateTo },
+    });
+  }
+
+  @Get('trends/volume')
+  @ApiOperation({ summary: 'Get volume trends over time' })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    description: 'Start date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    description: 'End date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'channel',
+    required: false,
+    description: 'Filter by channel',
+  })
+  @ApiQuery({
+    name: 'customerId',
+    required: false,
+    description: 'Filter by customer',
+  })
+  @ApiResponse({ status: 200, description: 'Volume trend data' })
+  async getVolumeTrends(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('channel') channel?: string,
+    @Query('customerId') customerId?: string,
+  ): Promise<AnalysisResult> {
+    if (dateFrom) parseDate(dateFrom);
+    if (dateTo) parseDate(dateTo);
+    return this.analysisService.analyze({
+      type: 'trends',
+      targetId: customerId,
+      channel,
+      timeRange: { from: dateFrom, to: dateTo },
+    });
+  }
+
+  @Get('topics')
+  @ApiOperation({ summary: 'Get topic distribution (GET convenience)' })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    description: 'Start date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    description: 'End date (ISO format)',
+  })
+  @ApiQuery({
+    name: 'channel',
+    required: false,
+    description: 'Filter by channel',
+  })
+  @ApiQuery({
+    name: 'customerId',
+    required: false,
+    description: 'Filter by customer',
+  })
+  @ApiResponse({ status: 200, description: 'Topic distribution data' })
+  async getTopicDistribution(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('channel') channel?: string,
+    @Query('customerId') customerId?: string,
+  ): Promise<AnalysisResult> {
+    if (dateFrom) parseDate(dateFrom);
+    if (dateTo) parseDate(dateTo);
+    return this.analysisService.analyze({
+      type: 'topics',
+      targetId: customerId,
+      channel,
+      timeRange: { from: dateFrom, to: dateTo },
+    });
+  }
+
+  @Get('risk')
+  @ApiOperation({ summary: 'Get risk assessment overview' })
+  @ApiResponse({ status: 200, description: 'Risk assessment result' })
+  async getRiskOverview(): Promise<AnalysisResult> {
+    return this.analysisService.analyze({ type: 'risk-assessment' });
+  }
+
+  @Get('risk/:customerId')
+  @ApiOperation({ summary: 'Get risk assessment for a specific customer' })
+  @ApiParam({ name: 'customerId', description: 'Customer ID' })
+  @ApiResponse({ status: 200, description: 'Customer risk assessment' })
+  async getRiskForCustomer(
+    @Param('customerId') customerId: string,
+  ): Promise<AnalysisResult> {
+    validateId(customerId, 'customerId');
+    return this.analysisService.analyze({
+      type: 'risk-assessment',
+      targetId: customerId,
+    });
+  }
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get executive dashboard summary / KPIs' })
+  @ApiResponse({ status: 200, description: 'Dashboard summary' })
+  async getDashboardSummary(): Promise<AnalysisResult> {
+    // Aggregate several analyses into a single dashboard response
+    const [sentimentResult, trendsResult] = await Promise.all([
+      this.analysisService.analyze({ type: 'sentiment' }),
+      this.analysisService.analyze({ type: 'trends' }),
+    ]);
+
+    return {
+      type: 'sentiment' as AnalysisType,
+      summary: `Dashboard summary: ${sentimentResult.summary} ${trendsResult.summary}`,
+      confidence: Math.min(sentimentResult.confidence, trendsResult.confidence),
+      insights: [...sentimentResult.insights, ...trendsResult.insights],
+      metrics: {
+        sentiment: sentimentResult.metrics,
+        trends: trendsResult.metrics,
+      },
+      visualizations: [
+        ...(sentimentResult.visualizations || []),
+        ...(trendsResult.visualizations || []),
+      ],
+      processingTime:
+        (sentimentResult.processingTime || 0) +
+        (trendsResult.processingTime || 0),
+    };
+  }
+
+  // ============================================================
+  // Dashboard Chart Endpoints
   // ============================================================
 
   @Get('timeline/events')
