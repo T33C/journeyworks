@@ -105,10 +105,7 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
 
     // When a product-specific query was too sparse, show explanatory subtitle
     if (fallbackProduct) {
-      const label =
-        fallbackProduct.charAt(0).toUpperCase() +
-        fallbackProduct.slice(1).replace(/-/g, ' ');
-      return `All products (too few responses for ${label})`;
+      return 'All products (insufficient journey survey responses for selected criteria)';
     }
 
     if (

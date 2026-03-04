@@ -32,8 +32,8 @@ export class AnalysisDataService {
   /**
    * When a product-specific journey query returns too few survey responses
    * to be meaningful, we automatically retry with all products.  This signal
-   * holds the original product that was dropped so the waterfall component
-   * can display an explanatory subtitle.
+   * indicates that fallback occurred so the waterfall component can display
+   * a neutral explanatory subtitle about insufficient responses.
    * `null` means no fallback occurred (product-specific data was sufficient).
    */
   journeyFallbackProduct = signal<string | null>(null);
