@@ -175,6 +175,54 @@ if [ "$GENERATE_EMBEDDINGS" = true ]; then
             -d '{"query":{"exists":{"field":"embedding"}}}' 2>/dev/null | grep -o '"count":[0-9]*' | grep -o '[0-9]*' || echo "0")
         echo "$WITH_EMBEDDINGS $TOTAL"
     }
+
+    print_embedding_coverage_by_channel() {
+        AGG_JSON=$(curl -s "http://localhost:9280/journeyworks_communications/_search" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "size": 0,
+                "aggs": {
+                    "all_channels": {"terms": {"field": "channel", "size": 20}},
+                    "embedded": {
+                        "filter": {"exists": {"field": "embedding"}},
+                        "aggs": {"channels": {"terms": {"field": "channel", "size": 20}}}
+                    },
+                    "missing": {
+                        "filter": {"bool": {"must_not": [{"exists": {"field": "embedding"}}]}},
+                        "aggs": {"channels": {"terms": {"field": "channel", "size": 20}}}
+                    }
+                }
+            }' 2>/dev/null)
+
+        if [ -z "$AGG_JSON" ]; then
+            echo -e "${YELLOW}Could not fetch per-channel embedding coverage from Elasticsearch.${NC}"
+            return
+        fi
+
+        echo -e "${CYAN}Embedding coverage by channel:${NC}"
+        echo "$AGG_JSON" | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => (input += chunk));
+            process.stdin.on("end", () => {
+                const data = JSON.parse(input || "{}");
+                const allBuckets = data?.aggregations?.all_channels?.buckets || [];
+                const embeddedBuckets = data?.aggregations?.embedded?.channels?.buckets || [];
+                const missingBuckets = data?.aggregations?.missing?.channels?.buckets || [];
+
+                const embeddedMap = Object.fromEntries(embeddedBuckets.map((b) => [b.key, b.doc_count]));
+                const missingMap = Object.fromEntries(missingBuckets.map((b) => [b.key, b.doc_count]));
+
+                for (const bucket of allBuckets) {
+                    const channel = bucket.key;
+                    const total = bucket.doc_count || 0;
+                    const embedded = embeddedMap[channel] || 0;
+                    const missing = missingMap[channel] || 0;
+                    const status = missing === 0 ? "OK" : "MISSING";
+                    console.log(`  - ${channel}: ${embedded}/${total} embedded, ${missing} missing [${status}]`);
+                }
+            });
+        '
+    }
     
     COUNTS=$(get_embedding_counts)
     INITIAL_WITH=$(echo $COUNTS | cut -d' ' -f1)
@@ -257,12 +305,14 @@ if [ "$GENERATE_EMBEDDINGS" = true ]; then
         else
             echo -e "${GREEN}✓ All communications already have embeddings${NC}"
         fi
+
+        print_embedding_coverage_by_channel
         echo ""
 fi
 
 echo -e "${CYAN}Generated data includes:${NC}"
 echo -e "  • Customers with varying tiers (platinum, gold, silver, bronze)"
-echo -e "  • Communications across channels (email, phone, chat, social)"
+echo -e "  • Communications across channels (email, phone, chat, social, letter)"
 echo -e "  • AI classifications with categories and regulatory flags"
 echo -e "  • Message threads for email and chat conversations"
 echo -e "  • Cases linked to customers"
