@@ -374,7 +374,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
     effect(() => {
       const highlightedIds = this.stateService.highlightedIds();
-      this.applyHighlights(highlightedIds);
+      const selectedEventId = this.stateService.context().event?.id;
+      this.applyHighlights(highlightedIds, selectedEventId);
     });
 
     effect(() => {
@@ -423,12 +424,16 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     }, 500);
   }
 
-  private applyHighlights(highlightedIds: Set<string>) {
+  private applyHighlights(
+    highlightedIds: Set<string>,
+    selectedEventId?: string,
+  ) {
     const container = this.chartContainer?.nativeElement;
     if (!container) return;
 
     const svg = d3.select(container).select('svg');
     const surveysOnly = this.stateService.filters().surveysOnly;
+    const hasEventSelection = Boolean(selectedEventId);
 
     svg
       .selectAll('.bubble')
@@ -437,14 +442,17 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       .attr('opacity', (d: any) => {
         // Apply surveys filter first
         const baseOpacity = surveysOnly && d.surveyCount === 0 ? 0.15 : 0.85;
+        if (hasEventSelection) return Math.min(baseOpacity, 0.45);
         if (highlightedIds.size === 0) return baseOpacity;
         return highlightedIds.has(d.id) ? 1 : Math.min(baseOpacity, 0.3);
       })
       .attr('stroke', (d: any) => {
+        if (hasEventSelection) return 'white';
         if (highlightedIds.size === 0) return 'white';
         return highlightedIds.has(d.id) ? RAG.amber : 'white';
       })
       .attr('stroke-width', (d: any) => {
+        if (hasEventSelection) return 1;
         if (highlightedIds.size === 0) return 2;
         return highlightedIds.has(d.id) ? 4 : 1;
       });
@@ -455,8 +463,56 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       .transition()
       .duration(300)
       .attr('opacity', (d: any) => {
+        if (hasEventSelection) return 0.8;
         if (highlightedIds.size === 0) return 0.9;
         return highlightedIds.has(d.id) ? 1 : 0.3;
+      });
+
+    svg
+      .selectAll<SVGLineElement, unknown>('.timeline-event-marker')
+      .transition()
+      .duration(300)
+      .attr('opacity', function () {
+        const eventId = this.getAttribute('data-event-id') || '';
+        if (hasEventSelection) {
+          return eventId === selectedEventId ? 1 : 0.2;
+        }
+        if (highlightedIds.size > 0) {
+          return 0.2;
+        }
+        return 1;
+      })
+      .attr('stroke-width', function () {
+        const eventId = this.getAttribute('data-event-id') || '';
+        if (hasEventSelection && eventId === selectedEventId) {
+          return 3;
+        }
+        return 2;
+      });
+
+    svg
+      .selectAll<SVGTextElement, unknown>('.timeline-event-label')
+      .transition()
+      .duration(300)
+      .attr('opacity', function () {
+        const eventId = this.getAttribute('data-event-id') || '';
+        if (hasEventSelection) {
+          return eventId === selectedEventId ? 1 : 0.2;
+        }
+        if (highlightedIds.size > 0) {
+          return 0.2;
+        }
+        return 1;
+      });
+
+    svg
+      .selectAll('.bubble-badge')
+      .transition()
+      .duration(300)
+      .attr('opacity', (d: any) => {
+        if (hasEventSelection) return 0.35;
+        if (highlightedIds.size === 0) return 1;
+        return highlightedIds.has(d.bubble.id) ? 1 : 0.35;
       });
   }
 
@@ -559,10 +615,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     const chartContent = svg.append('g').attr('clip-path', 'url(#chart-clip)');
 
     // Scales
-    const leadDays = 3;
     const xExtent = d3.extent(bubbles, (d) => d.date) as [Date, Date];
     const extendedStart = new Date(xExtent[0]);
-    extendedStart.setDate(extendedStart.getDate() - leadDays);
     // Add 1 day padding at the end for bubbles near the edge
     const extendedEnd = new Date(xExtent[1]);
     extendedEnd.setDate(extendedEnd.getDate() + 1);
@@ -588,11 +642,10 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     const radiusScale = d3.scaleSqrt().domain([0, volumeMax]).range([4, 30]);
 
     // Social sentiment band
-    const socialBandData = bubbles.map((b) => {
-      const leadDate = new Date(b.date);
-      leadDate.setDate(leadDate.getDate() - leadDays);
-      return { date: leadDate, sentiment: b.socialSentiment };
-    });
+    const socialBandData = bubbles.map((b) => ({
+      date: b.date,
+      sentiment: b.socialSentiment,
+    }));
 
     const areaGenerator = d3
       .area<{ date: Date; sentiment: number }>()
@@ -695,9 +748,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       const minLabelSpacing = 80;
 
       sortedEvents.forEach((event) => {
-        const shiftedEventDate = new Date(event.date);
-        shiftedEventDate.setDate(shiftedEventDate.getDate() - leadDays);
-        const xPos = x(shiftedEventDate);
+        const xPos = x(event.date);
 
         let yLevel = 0;
         for (let i = 0; i < labelPositions.length; i++) {
@@ -713,6 +764,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
         svg
           .append('line')
+          .attr('class', 'timeline-event-marker')
+          .attr('data-event-id', event.id)
           .attr('x1', xPos)
           .attr('x2', xPos)
           .attr('y1', labelY + 8)
@@ -732,6 +785,8 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
         const textEl = svg
           .append('text')
+          .attr('class', 'timeline-event-label')
+          .attr('data-event-id', event.id)
           .attr('x', xPos)
           .attr('y', labelY)
           .attr('text-anchor', 'middle')
@@ -950,7 +1005,6 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     // Calculate full domain from all-time data
     const xExtent = d3.extent(allBubbles, (d) => d.date) as [Date, Date];
     const extendedStart = new Date(xExtent[0]);
-    extendedStart.setDate(extendedStart.getDate() - 3);
     const extendedEnd = new Date(xExtent[1]);
     extendedEnd.setDate(extendedEnd.getDate() + 1);
     this.fullXDomain = [extendedStart, extendedEnd];
@@ -1222,10 +1276,21 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
   }
 
   private onBubbleClick(bubble: SentimentBubble) {
+    const selectedBubble = this.stateService.context().selectedBubble;
+    if (selectedBubble?.id === bubble.id) {
+      this.stateService.clearSelection();
+      this.hideTooltip();
+      return;
+    }
     this.stateService.selectBubble(bubble);
   }
 
   private onEventClick(event: TimelineEvent) {
+    const selectedEvent = this.stateService.context().event;
+    if (selectedEvent?.id === event.id) {
+      this.stateService.clearSelection();
+      return;
+    }
     this.stateService.selectEvent(event);
   }
 

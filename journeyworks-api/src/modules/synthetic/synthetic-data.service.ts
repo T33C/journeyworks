@@ -26,12 +26,8 @@ import { EventsService } from '../events';
 import { ChunksService } from '../chunks';
 import { SurveysService } from '../surveys';
 import {
-  SyntheticCustomer,
   SyntheticCommunication,
-  SyntheticCase,
   SyntheticSocialMention,
-  SyntheticEvent,
-  SyntheticChunk,
   GenerationConfig,
   GenerationResult,
 } from './synthetic-data.types';
@@ -397,11 +393,16 @@ export class SyntheticDataService {
       mergedConfig.sentimentDistribution,
       socialDateRange,
     );
-    this.logger.log(`Generated ${generatedMentions.length} social mentions`);
+    const alignedMentions = this.alignSocialMentionsToCommunications(
+      generatedMentions,
+      allCommunications,
+      socialDateRange,
+    );
+    this.logger.log(`Generated ${alignedMentions.length} social mentions`);
 
     // Store social mentions in Elasticsearch
     this.logger.log('Storing social mentions in Elasticsearch...');
-    const socialDocs = generatedMentions.map((m) => ({
+    const socialDocs = alignedMentions.map((m) => ({
       id: m.id,
       platform: m.platform,
       author: m.author,
@@ -649,6 +650,112 @@ export class SyntheticDataService {
 
     this.logger.log('Cleared all synthetic data');
     return results;
+  }
+
+  /**
+   * Align social mentions to communications with a lead window so
+   * social sentiment naturally appears before communication spikes.
+   */
+  private alignSocialMentionsToCommunications(
+    mentions: SyntheticSocialMention[],
+    communications: SyntheticCommunication[],
+    dateRange: { start: Date; end: Date },
+  ): SyntheticSocialMention[] {
+    if (communications.length === 0 || mentions.length === 0) {
+      return mentions;
+    }
+
+    const validCommunications = communications.filter((comm) => {
+      const timestamp = new Date(comm.timestamp).getTime();
+      return Number.isFinite(timestamp);
+    });
+
+    if (validCommunications.length === 0) {
+      return mentions;
+    }
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const configuredMinLeadDays =
+      this.configService.get<number>('syntheticData.socialLeadDays.min') ?? 1;
+    const configuredMaxLeadDays =
+      this.configService.get<number>('syntheticData.socialLeadDays.max') ?? 5;
+    const minLeadDays = Math.max(
+      0,
+      Math.min(configuredMinLeadDays, configuredMaxLeadDays),
+    );
+    const maxLeadDays = Math.max(
+      minLeadDays,
+      Math.max(configuredMinLeadDays, configuredMaxLeadDays),
+    );
+    const minLeadMs = minLeadDays * dayMs;
+    const maxLeadMs = maxLeadDays * dayMs;
+
+    const configuredJitterHours =
+      this.configService.get<number>('syntheticData.socialLeadJitterHours') ??
+      10;
+    const jitterMs = Math.max(0, configuredJitterHours) * 60 * 60 * 1000;
+    const minTs = dateRange.start.getTime();
+    const maxTs = dateRange.end.getTime();
+    const maxSamplingAttempts = 6;
+
+    const alignedMentions = mentions.map((mention) => {
+      let anchorCommunication = validCommunications[0];
+      let selectedTs = minTs;
+
+      for (let attempt = 0; attempt < maxSamplingAttempts; attempt++) {
+        const candidateCommunication =
+          validCommunications[
+            Math.floor(Math.random() * validCommunications.length)
+          ];
+        const anchorTs = new Date(candidateCommunication.timestamp).getTime();
+        const leadMs = minLeadMs + Math.random() * (maxLeadMs - minLeadMs);
+        const randomJitter = (Math.random() * 2 - 1) * jitterMs;
+        const shiftedTs = anchorTs - leadMs + randomJitter;
+
+        anchorCommunication = candidateCommunication;
+
+        if (shiftedTs >= minTs && shiftedTs <= maxTs) {
+          selectedTs = shiftedTs;
+          break;
+        }
+
+        selectedTs = Math.min(maxTs, Math.max(minTs, shiftedTs));
+      }
+
+      const anchorSentiment = anchorCommunication.sentiment?.score ?? 0;
+      const scoreNoise = (Math.random() * 2 - 1) * 0.15;
+      const alignedScore = Math.max(
+        -1,
+        Math.min(1, anchorSentiment + scoreNoise),
+      );
+      const alignedLabel = this.getSentimentLabelFromScore(alignedScore);
+
+      return {
+        ...mention,
+        timestamp: new Date(selectedTs).toISOString(),
+        sentiment: {
+          ...mention.sentiment,
+          label: alignedLabel,
+          score: alignedScore,
+        },
+      };
+    });
+
+    alignedMentions.sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+
+    return alignedMentions;
+  }
+
+  private getSentimentLabelFromScore(
+    score: number,
+  ): 'negative' | 'mixed' | 'neutral' | 'positive' {
+    if (score <= -0.35) return 'negative';
+    if (score <= -0.08) return 'mixed';
+    if (score < 0.2) return 'neutral';
+    return 'positive';
   }
 
   /**
