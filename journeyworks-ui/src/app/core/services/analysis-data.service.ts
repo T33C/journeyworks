@@ -1,5 +1,5 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, of, delay, switchMap, map, catchError } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
+import { Observable, of, delay, map, catchError } from 'rxjs';
 import {
   TimelineEvent,
   SentimentBubble,
@@ -12,13 +12,6 @@ import {
 } from '../models/analysis.model';
 import { AnalysisApiService } from './analysis-api.service';
 
-/**
- * Minimum number of survey responses required to show a product-specific
- * journey chart. Below this threshold we fall back to all products so the
- * waterfall still displays meaningful NPS variation.
- */
-const MIN_JOURNEY_RESPONSES = 5;
-
 @Injectable({
   providedIn: 'root',
 })
@@ -28,15 +21,6 @@ export class AnalysisDataService {
 
   // Flag to use API vs mock data (can be toggled for demos)
   private useApi = true;
-
-  /**
-   * When a product-specific journey query returns too few survey responses
-   * to be meaningful, we automatically retry with all products.  This signal
-   * indicates that fallback occurred so the waterfall component can display
-   * a neutral explanatory subtitle about insufficient responses.
-   * `null` means no fallback occurred (product-specific data was sufficient).
-   */
-  journeyFallbackProduct = signal<string | null>(null);
 
   // Timeline Events - realistic banking scenarios
   private events: TimelineEvent[] = [
@@ -1376,35 +1360,10 @@ export class AnalysisDataService {
       // bubble window) so there is enough survey data to populate the chart.
       // We keep the product from context so the journey is product-specific.
       const effectiveFilters = this.mergeContextForJourney(context, filters);
-      const requestedProduct = effectiveFilters.product;
-      const isProductSpecific =
-        !!requestedProduct && requestedProduct !== 'all';
-
-      return this.apiService.getJourneyStages(effectiveFilters).pipe(
-        switchMap((stages) => {
-          const totalResponses = stages.reduce(
-            (sum, st) => sum + st.communications,
-            0,
-          );
-
-          // If a product filter was applied but there aren't enough survey
-          // responses to produce a meaningful waterfall, retry without the
-          // product filter so the chart isn't blank.
-          if (isProductSpecific && totalResponses < MIN_JOURNEY_RESPONSES) {
-            const fallbackFilters = { ...effectiveFilters };
-            delete fallbackFilters.product;
-            this.journeyFallbackProduct.set(requestedProduct!);
-            return this.apiService.getJourneyStages(fallbackFilters);
-          }
-
-          // Product-specific data was sufficient (or no product was set)
-          this.journeyFallbackProduct.set(null);
-          return of(stages);
-        }),
-        map((stages) => this.applyContextToStages(stages, context)),
-      );
+      return this.apiService
+        .getJourneyStages(effectiveFilters)
+        .pipe(map((stages) => this.applyContextToStages(stages, context)));
     }
-    this.journeyFallbackProduct.set(null);
     const stages = this.generateJourneyForContext(context);
     return of(stages).pipe(delay(100));
   }
@@ -1442,11 +1401,11 @@ export class AnalysisDataService {
 
   /**
    * Build filters for journey stages API.
-   * Unlike other charts, journey stages keep the global date range so the
-   * survey scope matches what the user sees in the timeline. When a bubble
-   * is clicked the context carries a single-day time window, but we ignore
-   * it and keep the wider global range from filters. We do pick up the
-   * bubble's product so the journey chart is product-specific.
+   * For general interactions, journey stages keep the global date range from
+   * dashboard filters so they match the visible timeline window.
+   *
+   * For bubble selections, use the exact clicked day so Journey scope matches
+   * the bubble survey count semantics.
    */
   private mergeContextForJourney(
     context?: AnalysisContext,
@@ -1454,9 +1413,19 @@ export class AnalysisDataService {
   ): Partial<FilterState> {
     const merged: Partial<FilterState> = { ...filters };
 
-    // Use product from context (clicked bubble / event) but keep global
-    // date range from the dashboard filters — do NOT narrow to the 1-day
-    // bubble window and do NOT drop the date range entirely.
+    // Bubble click: scope to the exact selected day.
+    if (context?.selectedBubble) {
+      if (context.timeWindow) {
+        merged.dateRangeObj = {
+          start: context.timeWindow.start,
+          end: context.timeWindow.end,
+        };
+      }
+
+      return merged;
+    }
+
+    // Non-bubble interactions: keep global date range, but allow product scoping.
     if (context?.product && context.product !== 'all') {
       merged.product = context.product;
     }

@@ -101,12 +101,6 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
   // Computed context description for subtitle
   contextDescription = computed(() => {
     const ctx = this.stateService.context();
-    const fallbackProduct = this.dataService.journeyFallbackProduct();
-
-    // When a product-specific query was too sparse, show explanatory subtitle
-    if (fallbackProduct) {
-      return 'All products (insufficient journey survey responses for selected criteria)';
-    }
 
     if (
       !ctx ||
@@ -180,7 +174,25 @@ export class JourneyWaterfallComponent implements OnInit, AfterViewInit {
     const container = this.chartContainer.nativeElement;
     const stages = this.stages();
 
-    if (!container || stages.length === 0) return;
+    if (!container) return;
+
+    if (stages.length === 0) {
+      d3.select(container).selectAll('*').remove();
+      d3.select(container)
+        .append('div')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('justify-content', 'center')
+        .style('height', '100%')
+        .style('text-align', 'center')
+        .style('color', '#9b9b9b')
+        .style('font-size', '12px')
+        .style('padding', '0 16px')
+        .text(
+          'Not enough survey responses for the selected timeline scope. Adjust the selection to view Sentiment Journey.',
+        );
+      return;
+    }
 
     d3.select(container).selectAll('*').remove();
 
