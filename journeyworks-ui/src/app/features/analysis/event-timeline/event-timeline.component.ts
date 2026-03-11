@@ -60,6 +60,20 @@ import { THEME, RAG, GREY, DATA_VIS } from '../../../core/config/chart.config';
             </button>
           </div>
         }
+        @if (selectedTimeWindow() && !pendingTimeWindow()) {
+          <div class="applied-range-chip">
+            <mat-icon class="chip-icon">insights</mat-icon>
+            <span class="chip-label">
+              Analysing
+              {{ selectedTimeWindow()!.start | date: 'd MMM' }}
+              –
+              {{ selectedTimeWindow()!.end | date: 'd MMM' }}
+            </span>
+            <button class="chip-action dismiss" (click)="clearAppliedRange()">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
       </div>
       <div #miniChartContainer class="mini-chart-area"></div>
       <div class="legend">
@@ -158,6 +172,25 @@ import { THEME, RAG, GREY, DATA_VIS } from '../../../core/config/chart.config';
         z-index: 10;
         transform: translateX(-50%);
         animation: chipFadeIn 0.2s ease-out;
+        white-space: nowrap;
+      }
+
+      .applied-range-chip {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #e9f1fb;
+        border: 1.5px solid #305a85;
+        border-radius: 20px;
+        padding: 4px 6px 4px 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        font-size: 12px;
+        font-weight: 500;
+        color: #1e3d5c;
+        z-index: 9;
         white-space: nowrap;
       }
 
@@ -319,6 +352,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
   @ViewChild('miniChartContainer') miniChartContainer!: ElementRef;
 
   events = signal<TimelineEvent[]>([]);
+  selectedTimeWindow = this.stateService.selectedTimeWindow;
 
   /** Pending time window from the main chart brush — shown as a chip until confirmed */
   pendingTimeWindow = signal<{
@@ -380,10 +414,22 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
     effect(() => {
       const timeWindow = this.stateService.selectedTimeWindow();
-      if (!timeWindow) {
+      if (timeWindow) {
+        if (this.miniXScale && this.miniChartBrush) {
+          this.syncBrushToDateRange(timeWindow.start, timeWindow.end);
+        } else {
+          this.currentXDomain = [timeWindow.start, timeWindow.end];
+          this.renderChart();
+        }
+      } else {
         this.clearBrushSelection();
       }
     });
+  }
+
+  clearAppliedRange() {
+    this.stateService.clearTimeWindow();
+    this.stateService.clearBrushDateRange();
   }
 
   /** Load all-time data for both charts (no date filter, only channel/product) */
@@ -638,6 +684,72 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     const yMax = Math.max(sentimentExtent[1], socialExtent[1], 0.5) + 0.15;
     const y = d3.scaleLinear().domain([yMin, yMax]).range([height, 0]);
 
+    const selectedWindow = this.stateService.selectedTimeWindow();
+    if (selectedWindow) {
+      const domainStart = x.domain()[0].getTime();
+      const domainEnd = x.domain()[1].getTime();
+      const windowStart = Math.max(selectedWindow.start.getTime(), domainStart);
+      const windowEnd = Math.min(selectedWindow.end.getTime(), domainEnd);
+
+      if (windowEnd > windowStart) {
+        const bandStart = x(new Date(windowStart));
+        const bandEnd = x(new Date(windowEnd));
+        const bandWidth = Math.max(1, bandEnd - bandStart);
+
+        chartContent
+          .append('rect')
+          .attr('class', 'applied-time-window-band')
+          .attr('x', bandStart)
+          .attr('y', 0)
+          .attr('width', bandWidth)
+          .attr('height', height)
+          .attr('fill', '#305a85')
+          .attr('fill-opacity', 0.09)
+          .attr('pointer-events', 'none');
+
+        chartContent
+          .append('line')
+          .attr('class', 'applied-time-window-boundary')
+          .attr('x1', bandStart)
+          .attr('x2', bandStart)
+          .attr('y1', 0)
+          .attr('y2', height)
+          .attr('stroke', '#305a85')
+          .attr('stroke-width', 1.25)
+          .attr('stroke-opacity', 0.75)
+          .attr('stroke-dasharray', '4,3')
+          .attr('pointer-events', 'none');
+
+        chartContent
+          .append('line')
+          .attr('class', 'applied-time-window-boundary')
+          .attr('x1', bandEnd)
+          .attr('x2', bandEnd)
+          .attr('y1', 0)
+          .attr('y2', height)
+          .attr('stroke', '#305a85')
+          .attr('stroke-width', 1.25)
+          .attr('stroke-opacity', 0.75)
+          .attr('stroke-dasharray', '4,3')
+          .attr('pointer-events', 'none');
+
+        chartContent
+          .append('text')
+          .attr('class', 'applied-time-window-label')
+          .attr('x', bandStart + bandWidth / 2)
+          .attr('y', 12)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', '10px')
+          .attr('font-weight', 600)
+          .attr('fill', '#1e3d5c')
+          .style('paint-order', 'stroke')
+          .attr('stroke', 'white')
+          .attr('stroke-width', '2px')
+          .attr('pointer-events', 'none')
+          .text('Applied analysis range');
+      }
+    }
+
     const volumeMax = d3.max(bubbles, (d) => d.volume) || 300;
     const radiusScale = d3.scaleSqrt().domain([0, volumeMax]).range([4, 30]);
 
@@ -857,7 +969,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       .style('cursor', 'pointer')
       .on('mouseover', (event, d) => this.showTooltip(event, d))
       .on('mouseout', () => this.hideTooltip())
-      .on('click', (_, d) => this.onBubbleClick(d));
+      .on('click', (event, d) => this.onBubbleClick(event, d));
 
     bubblesGroup
       .transition()
@@ -1161,6 +1273,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     const pending = this.pendingTimeWindow();
     if (!pending) return;
     this.stateService.setTimeWindow(pending.start, pending.end);
+    this.stateService.setBrushDateRange(pending.start, pending.end);
     this.pendingTimeWindow.set(null);
     // Clear the brush overlay since the selection is now committed
     const container = this.chartContainer?.nativeElement;
@@ -1275,14 +1388,63 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
     d3.selectAll('.d3-tooltip').remove();
   }
 
-  private onBubbleClick(bubble: SentimentBubble) {
-    const selectedBubble = this.stateService.context().selectedBubble;
-    if (selectedBubble?.id === bubble.id) {
-      this.stateService.clearSelection();
-      this.hideTooltip();
-      return;
+  private resolveClickedBubble(
+    event: MouseEvent,
+    fallback: SentimentBubble,
+  ): SentimentBubble {
+    const container = this.chartContainer?.nativeElement;
+    if (!container) return fallback;
+
+    const circles = d3
+      .select(container)
+      .selectAll<SVGCircleElement, SentimentBubble>('.bubble')
+      .nodes();
+
+    if (circles.length === 0) return fallback;
+
+    const candidates: Array<{
+      bubble: SentimentBubble;
+      distance: number;
+      surveyCount: number;
+    }> = [];
+
+    for (const circle of circles) {
+      const bubble = (circle as any).__data__ as SentimentBubble | undefined;
+      if (!bubble) continue;
+
+      const rect = circle.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const r = Math.max(rect.width, rect.height) / 2;
+      const dx = event.clientX - cx;
+      const dy = event.clientY - cy;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance <= r + 1) {
+        candidates.push({
+          bubble,
+          distance,
+          surveyCount: bubble.surveyCount || 0,
+        });
+      }
     }
-    this.stateService.selectBubble(bubble);
+
+    if (candidates.length === 0) return fallback;
+
+    candidates.sort((a, b) => {
+      if (b.surveyCount !== a.surveyCount) return b.surveyCount - a.surveyCount;
+      return a.distance - b.distance;
+    });
+
+    return candidates[0].bubble;
+  }
+
+  private onBubbleClick(event: MouseEvent, bubble: SentimentBubble) {
+    const resolvedBubble = this.resolveClickedBubble(event, bubble);
+    // Keep bubble selection idempotent: clicking the same bubble should
+    // keep the same scope rather than toggling back to global context.
+    this.stateService.selectBubble(resolvedBubble);
+    this.hideTooltip();
   }
 
   private onEventClick(event: TimelineEvent) {
