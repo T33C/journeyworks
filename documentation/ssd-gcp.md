@@ -173,23 +173,23 @@ _Estimates based on typical production usage (sustained use)._
 
 | Service                  | Configuration                               | Est. Monthly Cost |
 | ------------------------ | ------------------------------------------- | ----------------- |
-| **GKE Autopilot**        | ~10 vCPU, 40GB RAM total (Autoscaled)       | ~$400             |
-| **Cloud Load Balancing** | 1 Forwarding Rule + Data Processing         | ~$30              |
-| **Memorystore (Redis)**  | 5GB Standard Tier (HA)                      | ~$150             |
-| **Elastic Cloud**        | High Availability (3 Zones), 32GB RAM total | ~$400             |
-| **Cloud Composer**       | Small Environment (HA)                      | ~$350             |
-| **Document AI**          | Pay-per-use (approx 10k pages/mo)           | ~$300             |
-| **Vertex AI**            | Est. 75M tokens (30k docs + Social buffer)  | ~$400             |
-| **Networking/Egress**    | Est. 1TB Egress                             | ~$80              |
-| **Primary Region Total** |                                             | **~$2,110 / mo**  |
+| **GKE Autopilot**        | ~10 vCPU, 40GB RAM total (Autoscaled)       | ~£400             |
+| **Cloud Load Balancing** | 1 Forwarding Rule + Data Processing         | ~£30              |
+| **Memorystore (Redis)**  | 5GB Standard Tier (HA)                      | ~£150             |
+| **Elastic Cloud**        | High Availability (3 Zones), 32GB RAM total | ~£400             |
+| **Cloud Composer**       | Small Environment (HA)                      | ~£350             |
+| **Document AI**          | Pay-per-use (approx 10k pages/mo)           | ~£300             |
+| **Vertex AI**            | Est. 75M tokens (30k docs + Social buffer)  | ~£400             |
+| **Networking/Egress**    | Est. 1TB Egress                             | ~£80              |
+| **Primary Region Total** |                                             | **~£2,110 / mo**  |
 
 ### 6.1 External Licensing & Data Costs
 
 Non-GCP costs required for data ingestion:
 | License / Service | Description | Estimated Monthly Cost |
 |-------------------|-------------|------------------------|
-| **Social Media APIs** | Enterprise access (X/Twitter, Meta) or Aggregator (e.g., Gnip/Brandwatch) | ~$5,000 |
-| **Total External** | | **~$5,000 / mo** |
+| **Social Media APIs** | Enterprise access (X/Twitter, Meta) or Aggregator (e.g., Gnip/Brandwatch) | ~£5,000 |
+| **Total External** | | **~£5,000 / mo** |
 
 ### 6.2 Scalability Note: Unknown Social Volume
 
@@ -200,7 +200,7 @@ This architecture is uniquely positioned to handle the "unknown" quantity of soc
 
 _DR Region costs would be ~40% of Primary if running "Pilot Light" (minimal resources until failover)._
 
-**Estimated DR Region Cost**: ~$850/mo (Pilot Light configuration).
+**Estimated DR Region Cost**: ~£850/mo (Pilot Light configuration).
 
 ### 6.3 Non-Production Environments
 
@@ -212,15 +212,15 @@ SIT is used for integration testing and does not require production-grade throug
 
 | Service                  | Configuration                                  | Est. Monthly Cost |
 | ------------------------ | ---------------------------------------------- | ----------------- |
-| **GKE Autopilot**        | ~5 vCPU, 20GB RAM (reduced replicas)           | ~$200             |
-| **Cloud Load Balancing** | 1 Forwarding Rule                              | ~$25              |
-| **Memorystore (Redis)**  | 1GB Basic Tier (no HA)                         | ~$35              |
-| **Elastic Cloud**        | Single Zone, 16GB RAM                          | ~$150             |
-| **Cloud Composer**       | Small Environment (no HA)                      | ~$200             |
-| **Document AI**          | Pay-per-use (reduced test volume ~2k pages/mo) | ~$60              |
-| **Vertex AI**            | Est. 15M tokens (test data)                    | ~$80              |
-| **Networking/Egress**    | Minimal                                        | ~$20              |
-| **SIT Total**            |                                                | **~$770 / mo**    |
+| **GKE Autopilot**        | ~5 vCPU, 20GB RAM (reduced replicas)           | ~£200             |
+| **Cloud Load Balancing** | 1 Forwarding Rule                              | ~£25              |
+| **Memorystore (Redis)**  | 1GB Basic Tier (no HA)                         | ~£35              |
+| **Elastic Cloud**        | Single Zone, 16GB RAM                          | ~£150             |
+| **Cloud Composer**       | Small Environment (no HA)                      | ~£200             |
+| **Document AI**          | Pay-per-use (reduced test volume ~2k pages/mo) | ~£60              |
+| **Vertex AI**            | Est. 15M tokens (test data)                    | ~£80              |
+| **Networking/Egress**    | Minimal                                        | ~£20              |
+| **SIT Total**            |                                                | **~£770 / mo**    |
 
 _Note: SIT shares the same GCP project but uses a separate GKE namespace. No DR region is provisioned for SIT._
 
@@ -230,15 +230,15 @@ UAT mirrors production specifications to ensure realistic validation of performa
 
 | Service                  | Configuration                         | Est. Monthly Cost |
 | ------------------------ | ------------------------------------- | ----------------- |
-| **GKE Autopilot**        | ~10 vCPU, 40GB RAM (matches Prod)     | ~$400             |
-| **Cloud Load Balancing** | 1 Forwarding Rule + Data Processing   | ~$30              |
-| **Memorystore (Redis)**  | 5GB Standard Tier (HA)                | ~$150             |
-| **Elastic Cloud**        | High Availability (3 Zones), 32GB RAM | ~$400             |
-| **Cloud Composer**       | Small Environment (HA)                | ~$350             |
-| **Document AI**          | Pay-per-use (approx 10k pages/mo)     | ~$300             |
-| **Vertex AI**            | Est. 75M tokens (full test corpus)    | ~$400             |
-| **Networking/Egress**    | Est. 500GB Egress                     | ~$40              |
-| **UAT Total**            |                                       | **~$2,070 / mo**  |
+| **GKE Autopilot**        | ~10 vCPU, 40GB RAM (matches Prod)     | ~£400             |
+| **Cloud Load Balancing** | 1 Forwarding Rule + Data Processing   | ~£30              |
+| **Memorystore (Redis)**  | 5GB Standard Tier (HA)                | ~£150             |
+| **Elastic Cloud**        | High Availability (3 Zones), 32GB RAM | ~£400             |
+| **Cloud Composer**       | Small Environment (HA)                | ~£350             |
+| **Document AI**          | Pay-per-use (approx 10k pages/mo)     | ~£300             |
+| **Vertex AI**            | Est. 75M tokens (full test corpus)    | ~£400             |
+| **Networking/Egress**    | Est. 500GB Egress                     | ~£40              |
+| **UAT Total**            |                                       | **~£2,070 / mo**  |
 
 _Note: UAT does not include a DR region. External Social Media API costs may be shared with Production or use sandbox/test APIs at reduced cost._
 
@@ -246,15 +246,15 @@ _Note: UAT does not include a DR region. External Social Media API costs may be 
 
 | Environment                  | Monthly Cost | Annual Cost  |
 | ---------------------------- | ------------ | ------------ |
-| SIT (~50% Prod)              | ~$770        | ~$9,240      |
-| UAT (Prod-equivalent, no DR) | ~$2,070      | ~$24,840     |
-| **Total Non-Prod**           | **~$2,840**  | **~$34,080** |
+| SIT (~50% Prod)              | ~£770        | ~£9,240      |
+| UAT (Prod-equivalent, no DR) | ~£2,070      | ~£24,840     |
+| **Total Non-Prod**           | **~£2,840**  | **~£34,080** |
 
 ## 7. Comparison: GCP vs On-Prem
 
 | Feature            | On-Premise                       | GCP                                   |
 | ------------------ | -------------------------------- | ------------------------------------- |
-| **CapEx**          | High (Hardward purchase ~$70k+)  | Low ($0)                              |
+| **CapEx**          | High (Hardward purchase ~£70k+)  | Low (£0)                              |
 | **OpEx**           | Low (Power/Cooling/Personnel)    | Medium (Monthly bill)                 |
 | **Scalability**    | Limited by physical hardware     | Infinite (Autoscaling)                |
 | **Security**       | Perimeter security, full control | IAM, Workload Identity, Cloud Armor   |
@@ -267,8 +267,8 @@ _Note: UAT does not include a DR region. External Social Media API costs may be 
 
 GCP operates on a pure OpEx model.
 
-- **Infrastructure Bill**: ~$2,100/mo base (scales with usage).
-- **External Data/APIs**: ~$5,000/mo (Social Media).
+- **Infrastructure Bill**: ~£2,100/mo base (scales with usage).
+- **External Data/APIs**: ~£5,000/mo (Social Media).
 - **Operational Savings**: No dedicated hardware staff required. Patching/maintenance managed by Google (Autopilot/Cloud SQL).
 - **Commitment Discounts**: 1-year or 3-year CUDs (Committed Use Discounts) can reduce GKE/Compute costs by 30-50%.
 
@@ -302,9 +302,9 @@ Estimated monthly costs based on a specific location strategy:
 
 | Role Group          | Location | Count  | Est. Rate/Mo | Subtotal          |
 | ------------------- | -------- | ------ | ------------ | ----------------- |
-| Senior Leadership   | Poland   | 5      | ~$7,500      | $37,500           |
-| Core Engineering    | India    | 6      | ~$3,500      | $21,000           |
-| **Total Team Cost** |          | **11** |              | **~$58,500 / mo** |
+| Senior Leadership   | Poland   | 5      | ~£7,500      | £37,500           |
+| Core Engineering    | India    | 6      | ~£3,500      | £21,000           |
+| **Total Team Cost** |          | **11** |              | **~£58,500 / mo** |
 
 _Role Mapping: Poland = PO, SM, Arch, 2x Lead Dev. India = BA, Platform Eng, Data Eng, 2x Dev, QA._
 
@@ -321,13 +321,13 @@ _Role Mapping: Poland = PO, SM, Arch, 2x Lead Dev. India = BA, Platform Eng, Dat
 
 | Cost Category                 | Year 1       | Year 2       | Year 3       | 3-Year Total   |
 | ----------------------------- | ------------ | ------------ | ------------ | -------------- |
-| GCP Infra – Production (OpEx) | $35,520      | $35,520      | $35,520      | $106,560       |
-| GCP Infra – SIT (OpEx)        | $9,240       | $9,240       | $9,240       | $27,720        |
-| GCP Infra – UAT (OpEx)        | $24,840      | $24,840      | $24,840      | $74,520        |
-| External APIs (OpEx)          | $60,000      | $60,000      | $60,000      | $180,000       |
-| Team (OpEx)                   | $702,000     | $702,000     | $702,000     | $2,106,000     |
-| **Total**                     | **$831,600** | **$831,600** | **$831,600** | **$2,494,800** |
+| GCP Infra – Production (OpEx) | £35,520      | £35,520      | £35,520      | £106,560       |
+| GCP Infra – SIT (OpEx)        | £9,240       | £9,240       | £9,240       | £27,720        |
+| GCP Infra – UAT (OpEx)        | £24,840      | £24,840      | £24,840      | £74,520        |
+| External APIs (OpEx)          | £60,000      | £60,000      | £60,000      | £180,000       |
+| Team (OpEx)                   | £702,000     | £702,000     | £702,000     | £2,106,000     |
+| **Total**                     | **£831,600** | **£831,600** | **£831,600** | **£2,494,800** |
 
-> **Non-Prod environments add ~$34k/yr** (~$102k over 3 years) but are essential for quality assurance and risk mitigation before production releases.
+> **Non-Prod environments add ~£34k/yr** (~£102k over 3 years) but are essential for quality assurance and risk mitigation before production releases.
 >
-> **3-Year Savings vs On-Prem**: ~$193k (primarily CapEx avoidance and reduced ops overhead).
+> **3-Year Savings vs On-Prem**: ~£387k (primarily CapEx avoidance and reduced ops overhead).

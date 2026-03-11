@@ -1,282 +1,189 @@
-# AI-Enhanced Customer Complaints Platform
-
-## Alternative Implementation Options & Cost Comparison
-
-This document explores lower-cost alternatives to the full GCP/Vertex AI implementation, including on-premises, hybrid, and open-source approaches.
-
----
+# Solution Design Document: Cost Comparison & Alternatives
 
 ## Executive Comparison
 
-| Option                          | Year 1 Cost   | Year 2+ Cost  | Pros                                    | Cons                                    |
-| ------------------------------- | ------------- | ------------- | --------------------------------------- | --------------------------------------- |
-| **GCP Full (Baseline)**         | £800K - £1.2M | £375K - £530K | Fastest, fully managed, cutting-edge AI | Highest cost, vendor lock-in            |
-| **Hybrid (On-Prem + Cloud AI)** | £600K - £900K | £250K - £380K | Balance of control & capability         | Complexity                              |
-| **On-Prem Open Source**         | £500K - £750K | £180K - £280K | Lowest running cost, full control       | Slower, more dev effort, GPU investment |
-| **AWS Alternative**             | £750K - £1.1M | £320K - £480K | Mature ecosystem, Bedrock               | Similar to GCP                          |
-| **Azure Alternative**           | £700K - £1M   | £300K - £450K | Enterprise integration, OpenAI          | Good if Microsoft shop                  |
+This document explores alternative implementation models for the JourneyWorks platform, comparing the primary GCP Architecture (`ssd-gcp.md`) against a Hybrid On-Premises model (`ssd-on-prem.md`), a fully open-source hardware approach, and GPU Cloud alternatives.
+
+_Note: All 3-Year TCOs include comprehensive Team OpEx (estimated at £702,000/year), Hardware/Infrastructure, Licensing, and External Data APIs across all environments (Production, UAT, and SIT)._
+
+| Option                             | Year 1 Cost  | Year 2+ Cost | 3-Year TCO  | Pros                                           | Cons                               |
+| :--------------------------------- | :----------- | :----------- | :---------- | :--------------------------------------------- | :--------------------------------- |
+| **GCP Full Serverless (Baseline)** | **£831,600** | **£831,600** | **£2.49M**  | Lowest TCO, pay-per-use, zero hardware ops     | Cloud vendor dependency            |
+| **Hybrid (On-Prem + Vertex)**      | £1,123,860   | £879,060     | **£2.88M**  | Local data residency, avoids massive GPU CapEx | Higher 3-year TCO, K8s overhead    |
+| **Full On-Prem Open Source**       | ~£2,033,800  | ~£889,000    | **~£3.81M** | 100% data sovereignty, zero API egress         | Massive GPU CapEx, highly complex  |
+| **GPU Cloud + Self-Managed**       | ~£1,173,000  | ~£1,173,000  | **~£3.52M** | Avoids CapEx, fixed GPU availability           | GPU rental limits scalability down |
+
+> **Paradigm Shift:** In conventional projects, cloud can be more expensive. However, based on JourneyWorks' volume (~30,000 cases/mo translating to ~75M tokens/mo), the variable Serverless GCP model outcompetes fixed-cost On-Premise architectures. At this specific volume, buying physical infrastructure is significantly more expensive than simply invoking Vertex AI.
 
 ---
 
-## Option 1: On-Premises Open Source Stack
+## Option 1: GCP Full Serverless (Baseline)
+
+### Architecture Concept
+
+Relies on managed services (GKE Autopilot, managed Elastic Cloud, Cloud Composer) and native Vertex AI for the LLM.
+
+### Why it Wins on Cost
+
+- **Autopilot:** We only pay for the exact vCPU/RAM requested by the active pods. If volume drops, costs drop.
+- **AI API Efficiency:** 75 Million tokens through Gemini 1.5 costs only ~£400/month. This is drastically cheaper than running an LLM 24/7 on dedicated GPUs.
+
+### 3-Year TCO Breakdown
+
+| Category                    | Year 1       | Year 2       | Year 3       |
+| :-------------------------- | :----------- | :----------- | :----------- |
+| GCP Infra/APIs (Prod)       | £35,520      | £35,520      | £35,520      |
+| GCP Infra/APIs (SIT + UAT)  | £34,080      | £34,080      | £34,080      |
+| External Data APIs (Social) | £60,000      | £60,000      | £60,000      |
+| Team & Management           | £702,000     | £702,000     | £702,000     |
+| **Total**                   | **£831,600** | **£831,600** | **£831,600** |
+
+**3-Year TCO: £2,494,800**
+
+#### Year 1: Build & Deploy
+
+| Category                    | Investment   |
+| --------------------------- | ------------ |
+| GCP Infra/APIs (Prod)       | £35,520      |
+| GCP Infra/APIs (SIT + UAT)  | £34,080      |
+| External Data APIs (Social) | £60,000      |
+| Team & Management           | £702,000     |
+| **Total Year 1**            | **£831,600** |
+
+#### Year 2+: Operate & Enhance
+
+| Category                    | Annual Cost  |
+| --------------------------- | ------------ |
+| GCP Infra/APIs (Prod)       | £35,520      |
+| GCP Infra/APIs (SIT + UAT)  | £34,080      |
+| External Data APIs (Social) | £60,000      |
+| Team & Management           | £702,000     |
+| **Total Annual**            | **£831,600** |
+
+---
+
+## Option 2: Hybrid Approach (Recommended DB Alternative)
+
+### Architecture Concept
+
+The application orchestrator, Vector DB (Elasticsearch), and data pipelines run on bare-metal Kubernetes servers within an on-premises datacenter. AI calls are made securely across the internet/VPN to Vertex AI via PII-redacted gateways.
+
+### Hardware Details
+
+- 3x Control Plane + 5x Worker Nodes + 3x Elastic Nodes + 3x Redis per Production Datacenter.
+- Duplicated entirely for DR.
+- Separate physical clusters required for UAT and SIT.
+
+### 3-Year TCO Breakdown
+
+| Category                            | Year 1         | Year 2       | Year 3       |
+| :---------------------------------- | :------------- | :----------- | :----------- |
+| Hardware CapEx (Prod, DR, UAT, SIT) | £244,800       | £0           | £0           |
+| Licensing & Vertex API OpEx         | £157,560       | £157,560     | £157,560     |
+| DC Power / Environmentals           | £19,500        | £19,500      | £19,500      |
+| Team & Management                   | £702,000       | £702,000     | £702,000     |
+| **Total**                           | **£1,123,860** | **£879,060** | **£879,060** |
+
+**3-Year TCO: £2,881,980**  
+_(+£387K vs GCP Serverless)_
+
+#### Year 1: Build & Deploy
+
+| Category                            | Investment     |
+| ----------------------------------- | -------------- |
+| Hardware CapEx (Prod, DR, UAT, SIT) | £244,800       |
+| Licensing & Vertex API OpEx         | £157,560       |
+| DC Power / Environmentals           | £19,500        |
+| Team & Management                   | £702,000       |
+| **Total Year 1**                    | **£1,123,860** |
+
+#### Year 2+: Operate & Enhance
+
+| Category                    | Annual Cost  |
+| --------------------------- | ------------ |
+| Hardware CapEx              | £0           |
+| Licensing & Vertex API OpEx | £157,560     |
+| DC Power / Environmentals   | £19,500      |
+| Team & Management           | £702,000     |
+| **Total Annual**            | **£879,060** |
+
+---
+
+## Option 3: On-Premises Open Source Stack
+
+### Concept
+
+Total removal from cloud vendors. Deploying Open Source LLMs (like Llama 3.1 70B or Mixtral 8x22B) on internal infrastructure using tools like vLLM.
+
+### Hardware Reality Check
+
+To run a 70B parameter model at acceptable throughput for 50 concurrent analysts requires substantial GPU power.
+
+- **GPU Inference Server (e.g., 4x NVIDIA A100 80GB):** ~£150,000 each.
+- **Cluster Sizing:** 2 servers for Prod HA, 2 for DR, 1 for UAT, 1 for SIT = 6 Servers = **£900,000 CapEx**.
+- **The Savings?** You save the monthly Vertex AI fee (£400 Prod + £400 UAT + £80 SIT = ~£10,500 / year).
+- Spending £900,000 to save £10,500/year results in a functionally negative ROI.
 
 ### Architecture Overview
 
 ```mermaid
 flowchart TB
-    subgraph Sources["Data Sources"]
-        EMAIL[Email]
-        CALLS[Calls]
-        LETTERS[Letters]
-        SOCIAL[Social APIs]
-    end
-
     subgraph OnPrem["On-Premises Infrastructure"]
-        subgraph Ingest["Ingestion"]
-            KAFKA[Apache Kafka<br/>Message Queue]
-            MINIO[MinIO<br/>Object Storage]
-            AIRFLOW[Apache Airflow<br/>Orchestration]
-        end
-
         subgraph Process["Processing"]
-            SPARK[Apache Spark<br/>ETL Processing]
-            PRESIDIO[Presidio<br/>PII Masking]
-            WHISPER[Whisper<br/>Speech-to-Text]
-            TESSERACT[Tesseract<br/>OCR]
+            SPARK[Apache Spark]
+            PRESIDIO[Presidio PII Masking]
         end
 
-        subgraph AI["AI/ML Layer"]
-            OLLAMA[Ollama / vLLM<br/>LLM Serving]
-            LLAMA[Llama 3.1 70B<br/>or Mixtral 8x22B]
-            EMBED[sentence-transformers<br/>Embeddings]
-            LANGCHAIN[LangChain<br/>Orchestration]
+        subgraph AI["AI/ML Layer (GPU Cluster)"]
+            OLLAMA[vLLM Serving]
+            LLAMA[Llama 3.1 70B]
         end
 
         subgraph Data["Data Layer"]
-            PGVECTOR[(PostgreSQL<br/>+ pgvector)]
-            ELASTIC[(Elasticsearch<br/>Search)]
-            REDIS[(Redis<br/>Cache)]
-        end
-
-        subgraph Analytics["Analytics"]
-            SUPERSET[Apache Superset<br/>Dashboards]
-            JUPYTER[JupyterHub<br/>Analysis]
-            DBT[dbt<br/>Transforms]
+            ELASTIC[(Elasticsearch)]
+            REDIS[(Redis)]
         end
 
         subgraph Serve["Application"]
-            FASTAPI[FastAPI<br/>Backend APIs]
-            NGINX[NGINX<br/>Load Balancer]
-            ANGULAR[Angular<br/>Frontend]
+            API[NestJS API]
+            ANGULAR[Angular UI]
         end
     end
 
-    subgraph GPU["GPU Cluster"]
-        GPU1[NVIDIA A100/H100<br/>Inference]
-        GPU2[NVIDIA A100/H100<br/>Inference]
-    end
-
-    Sources --> KAFKA
-    KAFKA --> MINIO
-    AIRFLOW --> SPARK
-    SPARK --> Process
     Process --> AI
     AI --> Data
-    Data --> Analytics
     Data --> Serve
-    GPU --> AI
 ```
 
-### Technology Stack
+### 3-Year TCO Estimate
 
-| Layer              | Open Source Technology                 | Replaces (GCP)          |
-| ------------------ | -------------------------------------- | ----------------------- |
-| **LLM**            | Llama 3.1 70B, Mixtral 8x22B, Qwen 2.5 | Gemini Pro              |
-| **LLM Serving**    | vLLM, Ollama, TGI                      | Vertex AI Endpoints     |
-| **Embeddings**     | sentence-transformers, BGE             | Text Embeddings API     |
-| **Vector Store**   | pgvector, Milvus, Qdrant               | Vertex AI Vector Search |
-| **RAG Framework**  | LangChain, LlamaIndex                  | Vertex AI Search        |
-| **Agents**         | LangGraph, CrewAI, AutoGen             | Agent Builder           |
-| **OCR**            | Tesseract, PaddleOCR                   | Document AI             |
-| **Speech-to-Text** | Whisper (OpenAI open-source)           | Cloud Speech-to-Text    |
-| **PII Masking**    | Microsoft Presidio                     | Cloud DLP               |
-| **Data Pipeline**  | Apache Kafka, Spark, Airflow           | Pub/Sub, Dataflow       |
-| **Database**       | PostgreSQL + pgvector                  | BigQuery, Firestore     |
-| **Search**         | Elasticsearch / OpenSearch             | BigQuery Search         |
-| **Cache**          | Redis                                  | Memorystore             |
-| **Dashboards**     | Apache Superset, Grafana               | Looker                  |
-| **Object Storage** | MinIO                                  | Cloud Storage           |
+_(Assuming Hybrid baseline + GPU CapEx, minus Vertex AI costs)_
 
-### Hardware Requirements
-
-| Component               | Specification                  | Quantity | Est. Cost               |
-| ----------------------- | ------------------------------ | -------- | ----------------------- |
-| **GPU Servers**         | 4x NVIDIA A100 80GB or 2x H100 | 2        | £200,000 - £350,000     |
-| **Application Servers** | 32 vCPU, 128GB RAM             | 4        | £40,000                 |
-| **Database Servers**    | 64 vCPU, 512GB RAM, NVMe       | 2        | £50,000                 |
-| **Storage (NAS/SAN)**   | 100TB usable                   | 1        | £60,000                 |
-| **Networking**          | 25Gbps switches, firewalls     | 1        | £30,000                 |
-| **Total Hardware**      |                                |          | **£380,000 - £530,000** |
-
-> **Note:** GPU costs are the major factor. Consider leasing or GPU-as-a-Service for lower CapEx.
-
-### On-Prem Cost Breakdown
-
-#### Year 1 (Build + Infrastructure)
-
-| Category                  | Cost                      |
-| ------------------------- | ------------------------- |
-| **Hardware (CapEx)**      | £380,000 - £530,000       |
-| **Development**           | £350,000 - £500,000       |
-| **Data Centre / Hosting** | £40,000 - £60,000         |
-| **Licenses (if any)**     | £10,000 - £20,000         |
-| **Total Year 1**          | **£780,000 - £1,110,000** |
-
-#### Year 2+ (Operations)
-
-| Category                    | Annual Cost             |
-| --------------------------- | ----------------------- |
-| **Data Centre / Power**     | £40,000 - £60,000       |
-| **Hardware Maintenance**    | £30,000 - £50,000       |
-| **Operations Team (2 FTE)** | £120,000 - £160,000     |
-| **Software Updates**        | £15,000 - £25,000       |
-| **Total Annual**            | **£205,000 - £295,000** |
-
-#### 3-Year TCO
-
-| Year             | Cost                        |
-| ---------------- | --------------------------- |
-| Year 1           | £780,000 - £1,110,000       |
-| Year 2           | £205,000 - £295,000         |
-| Year 3           | £205,000 - £295,000         |
-| **3-Year Total** | **£1,190,000 - £1,700,000** |
-
-> **Comparison:** GCP 3-year TCO was £1,565,000 - £2,510,000. On-prem can save **20-35%** over 3 years.
+- **Year 1:** £1,123,860 (Hybrid) + £900,000 (GPUs) + £20,500 (Extra Power) - £10,560 (No Vertex) = **£2,033,800**
+- **Year 2+:** £879,060 (Hybrid) + £20,500 (Extra Power) - £10,560 (No Vertex) = **£889,000**
+- **3-Year TCO: ~£3.81M**
 
 ---
 
-## Option 2: Hybrid Approach (Recommended for Cost/Capability Balance)
-
-### Architecture
-
-```mermaid
-flowchart TB
-    subgraph OnPrem["On-Premises"]
-        INGEST[Data Ingestion<br/>Kafka, MinIO]
-        PROCESS[Processing<br/>Spark, Presidio]
-        DB[(PostgreSQL<br/>pgvector)]
-        CACHE[(Redis)]
-        ANGULAR[Angular Frontend]
-        API[FastAPI Backend]
-    end
-
-    subgraph Cloud["Cloud (GCP/AWS/Azure)"]
-        LLM[Cloud LLM API<br/>Gemini / GPT-4 / Claude]
-        EMBED[Embeddings API]
-        OCR[Document AI / Textract]
-        STT[Speech-to-Text]
-    end
-
-    INGEST --> PROCESS
-    PROCESS --> DB
-    PROCESS <-->|API Calls| Cloud
-    DB --> API
-    API --> ANGULAR
-    CACHE --> API
-```
+## Option 4: Self-Hosted GPU Cloud (Lambda Labs / CoreWeave)
 
 ### Concept
 
-- **On-Prem:** Data storage, processing, application serving, vector database
-- **Cloud:** LLM inference, embeddings, OCR, speech-to-text (pay-per-use)
+Run the Open Source stack, but rent GPUs from specialist AI cloud providers instead of buying them.
 
-This keeps sensitive data on-prem while using cloud AI APIs only for processing (with PII masked).
+- A100 80GB costs ~£1.50 - £2.00 / hour.
+- Running 4x A100s across environments 24/7 = **~£5,000 - £7,000 / month per environment**.
 
-### Hybrid Cost Breakdown
+### 3-Year TCO Estimate
 
-#### Year 1
+- **GPU Servers (Prod, UAT, SIT):** ~£15,000/month = £180,000/year.
+- **Other Infra (Bare Metal K8s Cloud):** ~£12,000/month = £144,000/year.
+- **Licenses & Data APIs:** £147,000/year.
+- **Team OpEx:** £702,000/year.
+- **Annual Total:** **~£1,173,000**
+- **3-Year TCO: ~£3.52M**
 
-| Category                     | Cost                    |
-| ---------------------------- | ----------------------- |
-| **Hardware (No GPU needed)** | £120,000 - £180,000     |
-| **Development**              | £400,000 - £550,000     |
-| **Cloud AI APIs**            | £60,000 - £100,000      |
-| **Data Centre**              | £30,000 - £50,000       |
-| **Total Year 1**             | **£610,000 - £880,000** |
-
-#### Year 2+
-
-| Category                  | Annual Cost             |
-| ------------------------- | ----------------------- |
-| **Cloud AI APIs**         | £80,000 - £140,000      |
-| **Data Centre / Hosting** | £30,000 - £50,000       |
-| **Operations (1.5 FTE)**  | £90,000 - £130,000      |
-| **Maintenance**           | £20,000 - £35,000       |
-| **Total Annual**          | **£220,000 - £355,000** |
-
-#### 3-Year TCO
-
-| Year             | Cost                        |
-| ---------------- | --------------------------- |
-| Year 1           | £610,000 - £880,000         |
-| Year 2           | £220,000 - £355,000         |
-| Year 3           | £230,000 - £370,000         |
-| **3-Year Total** | **£1,060,000 - £1,605,000** |
-
-> **Savings vs GCP Full:** 25-35% lower TCO with good capability balance.
-
----
-
-## Option 3: Lightweight Cloud (Minimal GCP)
-
-### Concept
-
-Use only essential GCP services, self-manage more components:
-
-| Use GCP For              | Self-Manage                              |
-| ------------------------ | ---------------------------------------- |
-| Gemini API (pay-per-use) | Cloud Run → GKE (cheaper at scale)       |
-| Cloud Storage            | BigQuery → PostgreSQL                    |
-| Basic Pub/Sub            | Vertex AI Search → pgvector + custom RAG |
-
-### Cost Reduction
-
-| Service           | GCP Full     | Minimal GCP   | Savings                    |
-| ----------------- | ------------ | ------------- | -------------------------- |
-| Vertex AI Search  | £2,400/year  | £0 (pgvector) | 100%                       |
-| BigQuery          | £15,000/year | PostgreSQL    | 80%                        |
-| Looker            | £30,000/year | Superset      | 100%                       |
-| Agent Builder     | £7,200/year  | LangGraph     | 100%                       |
-| **Total Savings** |              |               | **£40,000 - £60,000/year** |
-
----
-
-## Option 4: Self-Hosted GPU Cloud (Lambda Labs, CoreWeave, RunPod)
-
-### Concept
-
-Instead of buying GPUs, rent dedicated GPU instances from GPU cloud providers at lower cost than hyperscalers.
-
-### Pricing Comparison (per GPU-hour)
-
-| Provider        | A100 80GB     | H100          |
-| --------------- | ------------- | ------------- |
-| **GCP**         | £2.50 - £3.50 | £4.00 - £5.00 |
-| **AWS**         | £2.80 - £3.80 | £4.50 - £5.50 |
-| **Lambda Labs** | £1.20 - £1.50 | £2.00 - £2.50 |
-| **CoreWeave**   | £1.50 - £2.00 | £2.50 - £3.00 |
-| **RunPod**      | £1.00 - £1.30 | £1.80 - £2.20 |
-
-### Cost Estimate (GPU Cloud + Self-Managed)
-
-| Category                    | Monthly         | Annual                |
-| --------------------------- | --------------- | --------------------- |
-| **GPU Instances (2x A100)** | £2,500 - £4,000 | £30,000 - £48,000     |
-| **Compute (CPU VMs)**       | £500 - £1,000   | £6,000 - £12,000      |
-| **Storage**                 | £200 - £400     | £2,400 - £4,800       |
-| **Total Infrastructure**    |                 | **£38,400 - £64,800** |
-
-> **Comparison:** GCP infrastructure was £170,000 - £285,000/year. GPU cloud can be **60-75% cheaper**.
+Renting GPUs is cheaper than buying them at this scale but still costs dramatically more than Vertex's pay-as-you-go token model.
 
 ---
 
@@ -284,39 +191,24 @@ Instead of buying GPUs, rent dedicated GPU instances from GPU cloud providers at
 
 ### Concept
 
-Use smaller, efficient models instead of 70B+ parameter models:
+If we drop from a 70B model to an 8B model (e.g., Llama 3.1 8B):
 
-| Task           | Large Model  | Efficient Alternative | Quality Trade-off    |
-| -------------- | ------------ | --------------------- | -------------------- |
-| Classification | Gemini Pro   | Llama 3.1 8B, Phi-3   | Minimal (fine-tuned) |
-| Sentiment      | Gemini Pro   | DistilBERT, Phi-3     | Negligible           |
-| Extraction     | Gemini Pro   | Llama 3.1 8B          | Minimal              |
-| Generation     | Gemini Pro   | Llama 3.1 70B         | Moderate             |
-| Research       | Gemini Ultra | Llama 3.1 70B + RAG   | Moderate             |
-
-### Hardware Requirements (Smaller Models)
-
-| Model                     | GPU Required       | Cost                 |
-| ------------------------- | ------------------ | -------------------- |
-| Llama 3.1 8B              | 1x RTX 4090 (24GB) | £1,800               |
-| Llama 3.1 70B (quantized) | 2x RTX 4090        | £3,600               |
-| Mixtral 8x7B              | 2x RTX 4090        | £3,600               |
-| **Total**                 |                    | **£5,000 - £10,000** |
-
-> **Note:** Consumer GPUs can run quantized models effectively for moderate throughput.
+- Hardware cost drops to standard consumer/prosumer GPUs (e.g., RTX 4000/6000 Ada).
+- GPU Hardware cost becomes ~£50,000 across the estate.
+- **Quality Trade-off:** Intelligence and reasoning capacity drops significantly below Gemini 1.5 Pro. Not recommended for complex regulatory compliance handling.
 
 ---
 
 ## Comparison Summary
 
-### 3-Year TCO Comparison
+### 3-Year Total Cost of Ownership
 
 ```mermaid
 xychart-beta
-    title "3-Year Total Cost of Ownership (£K)"
-    x-axis ["GCP Full", "Hybrid", "On-Prem", "GPU Cloud", "Minimal Cloud"]
-    y-axis "Cost (£K)" 0 --> 2500
-    bar [2030, 1330, 1445, 1100, 1400]
+    title "3-Year Total Cost of Ownership (£M)"
+    x-axis ["GCP Full Serverless", "Hybrid (On-Prem)", "GPU Cloud Hosting", "Full On-Prem Open Source"]
+    y-axis "Cost (£M)" 2.0 --> 4.5
+    bar [2.49, 2.88, 3.69, 3.81]
 ```
 
 ### Feature vs Cost Trade-off
@@ -330,69 +222,38 @@ quadrantChart
     quadrant-2 Sweet Spot
     quadrant-3 Budget
     quadrant-4 Avoid
-    GCP Full: [0.85, 0.95]
-    Hybrid: [0.55, 0.80]
-    On-Prem Open Source: [0.40, 0.65]
-    GPU Cloud: [0.30, 0.70]
-    Minimal Cloud: [0.45, 0.55]
+    GCP Full Serverless: [0.15, 0.95]
+    Hybrid (On-Prem): [0.45, 0.90]
+    GPU Cloud: [0.75, 0.70]
+    On-Prem Open Source: [0.90, 0.75]
+    Small LLM On-Prem: [0.55, 0.35]
 ```
 
 ### Decision Matrix
 
-| Factor                     | GCP Full   | Hybrid   | On-Prem    | GPU Cloud  |
-| -------------------------- | ---------- | -------- | ---------- | ---------- |
-| **3-Year Cost**            | ⭐⭐       | ⭐⭐⭐⭐ | ⭐⭐⭐     | ⭐⭐⭐⭐⭐ |
-| **Time to Value**          | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐       | ⭐⭐⭐     |
-| **AI Capability**          | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐     | ⭐⭐⭐⭐   |
-| **Data Control**           | ⭐⭐       | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐     |
-| **Operational Simplicity** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐   | ⭐⭐       | ⭐⭐⭐     |
-| **Scalability**            | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐     | ⭐⭐⭐⭐   |
-| **Vendor Lock-in**         | ⭐         | ⭐⭐⭐   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐   |
+| Factor            | GCP Full   | Hybrid     | On-Prem Open Source | GPU Cloud |
+| :---------------- | :--------- | :--------- | :------------------ | :-------- |
+| **3-Year Cost**   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐   | ⭐                  | ⭐⭐      |
+| **Time to Value** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐     | ⭐⭐                | ⭐⭐⭐    |
+| **AI Capability** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐              | ⭐⭐⭐    |
+| **Data Control**  | ⭐⭐⭐     | ⭐⭐⭐⭐   | ⭐⭐⭐⭐⭐          | ⭐⭐⭐    |
+| **Scalability**   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐     | ⭐⭐                | ⭐⭐⭐    |
 
 ---
 
-## Recommendations
+## Recommendations & Next Steps
 
-### For Maximum Cost Savings
+### 1. Primary Recommendation: GCP Serverless
 
-**→ GPU Cloud (Lambda/CoreWeave) + Open Source Stack**
+**→ Proceed with the `ssd-gcp.md` Architecture.**
+Because of the highly efficient pricing of Gemini 1.5 and GKE Autopilot, this model is the clear winner for a 30k case/mo workload.
 
-- 3-Year TCO: ~£1.1M (55% of GCP)
-- Trade-off: More DevOps effort, slightly less cutting-edge AI
+### 2. Fallback Recommendation: Hybrid Approach
 
-### For Best Balance (Recommended)
+**→ Proceed with `ssd-on-prem.md` if Data Sovereignty trumps OpEx.**
+If the organization refuses to host documents in Cloud Storage or Elastic Cloud, hosting data on-premise but leveraging Vertex AI via secure API avoids the negative-ROI GPU CapEx trap.
 
-**→ Hybrid Approach**
+### Next Steps
 
-- 3-Year TCO: ~£1.3M (65% of GCP)
-- Keep data on-prem, use cloud AI APIs
-- Good capability, manageable complexity
-
-### For Regulated/Data-Sensitive Environments
-
-**→ Full On-Premises**
-
-- 3-Year TCO: ~£1.4M (70% of GCP)
-- Complete data sovereignty
-- Requires strong in-house ML/DevOps capability
-
-### For Fastest Delivery & Lowest Risk
-
-**→ GCP Full (with optimizations)**
-
-- 3-Year TCO: ~£1.8M (with discounts)
-- Fastest time to value
-- Best for teams without deep ML expertise
-
----
-
-## Next Steps
-
-1. **Assess Data Sensitivity** - Can PII-masked data go to cloud APIs?
-2. **Evaluate In-House Skills** - Do you have ML/DevOps expertise for on-prem?
-3. **Run Pilot Comparison** - Test open-source LLMs vs Gemini on your data
-4. **Calculate True TCO** - Include team training, recruitment, opportunity cost
-
----
-
-_Estimates prepared: December 2024_
+1. **Validate Data Security Agreements:** Confirm CMEK encryption and Google's non-training agreements satisfy the Compliance team so the GCP Full Serverless route can be greenlit.
+2. **Review TCO with Finance:** Present the £2.49M vs £2.88M difference to secure budget approval.

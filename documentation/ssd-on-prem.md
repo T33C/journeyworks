@@ -196,25 +196,25 @@ _Estimates are indicative for enterprise-grade hardware (e.g., Dell/HPE)._
 **Primary Site:**
 | Item | Spec | Qty | Unit Cost (Est) | Total |
 |------|------|-----|----------------|-------|
-| Control Plane Server | 1U, 8C, 32GB | 3 | $3,000 | $9,000 |
-| Worker Note Server | 1U, 16C, 64GB | 5 | $5,000 | $25,000 |
-| Database Server (ES) | 2U, 16C, 64GB, NVMe| 3 | $8,000 | $24,000 |
-| Redis Server | 1U, 4C, 32GB | 3 | $2,500 | $7,500 |
-| Networking | Top-of-Rack Switch 10G | 2 | $4,000 | $8,000 |
-| **Total Hardware (Primary)** | | | | **$73,500** |
+| Control Plane Server | 1U, 8C, 32GB | 3 | £3,000 | £9,000 |
+| Worker Node Server | 1U, 16C, 64GB | 5 | £5,000 | £25,000 |
+| Database Server (ES) | 2U, 16C, 64GB, NVMe| 3 | £8,000 | £24,000 |
+| Redis Server | 1U, 4C, 32GB | 3 | £2,500 | £7,500 |
+| Networking | Top-of-Rack Switch 10G | 2 | £4,000 | £8,000 |
+| **Total Hardware (Primary)** | | | | **£73,500** |
 
 **DR Site:**
 
-- **Total Hardware (DR)**: **$73,500** (Full Duplication)
+- **Total Hardware (DR)**: **£73,500** (Full Duplication)
 
 **Annual Software & Data Licensing (OpEx):**
 | License / Service | Description | Estimated Monthly Cost |
 |-------------------|-------------|------------------------|
-| **Social Media APIs** | Enterprise access (X/Twitter, Meta) or Aggregator (e.g., Gnip/Brandwatch) | ~$5,000 |
-| **Rancher/OpenShift** | K8s Enterprise Support | ~$1,250 |
-| **Elastic Enterprise** | Optional: ML/Security features | ~$1,500 |
-| **Google Vertex AI** | 75M Tokens (Gemini) | ~$400 |
-| **Total Licensing** | | **~$8,150 / mo** |
+| **Social Media APIs** | Enterprise access (X/Twitter, Meta) or Aggregator (e.g., Gnip/Brandwatch) | ~£5,000 |
+| **Rancher/OpenShift** | K8s Enterprise Support | ~£1,250 |
+| **Elastic Enterprise** | Optional: ML/Security features | ~£1,500 |
+| **Google Vertex AI** | 75M Tokens (Gemini) | ~£400 |
+| **Total Licensing** | | **~£8,150 / mo** |
 
 ### 6.1 Non-Production Environments
 
@@ -226,23 +226,23 @@ SIT is used for integration testing and does not require production-grade throug
 
 | Item                     | Spec                   | Qty | Unit Cost (Est) | Total       |
 | ------------------------ | ---------------------- | --- | --------------- | ----------- |
-| Control Plane Server     | 1U, 8C, 32GB           | 1   | $3,000          | $3,000      |
-| Worker Node Server       | 1U, 16C, 64GB          | 2   | $5,000          | $10,000     |
-| Database Server (ES)     | 1U, 16C, 32GB, SSD     | 1   | $5,500          | $5,500      |
-| Redis Server             | 1U, 4C, 16GB           | 1   | $1,800          | $1,800      |
-| Networking               | Top-of-Rack Switch 10G | 1   | $4,000          | $4,000      |
-| **Total Hardware (SIT)** |                        |     |                 | **$24,300** |
+| Control Plane Server     | 1U, 8C, 32GB           | 1   | £3,000          | £3,000      |
+| Worker Node Server       | 1U, 16C, 64GB          | 2   | £5,000          | £10,000     |
+| Database Server (ES)     | 1U, 16C, 32GB, SSD     | 1   | £5,500          | £5,500      |
+| Redis Server             | 1U, 4C, 16GB           | 1   | £1,800          | £1,800      |
+| Networking               | Top-of-Rack Switch 10G | 1   | £4,000          | £4,000      |
+| **Total Hardware (SIT)** |                        |     |                 | **£24,300** |
 
 _Note: SIT uses a single-node Elasticsearch instance and a single Redis node. No DR site is provisioned._
 
 **SIT Annual Software & Data Licensing (OpEx):**
 | License / Service | Description | Estimated Monthly Cost |
 |-------------------|-------------|------------------------|
-| **Social Media APIs** | Sandbox/test access (reduced tier) | ~$500 |
-| **Rancher/OpenShift** | K8s Enterprise Support (included in prod licence for non-prod use) | ~$0 |
-| **Elastic Enterprise** | Dev/Test licence | ~$500 |
-| **Google Vertex AI** | 15M Tokens (test volume) | ~$80 |
-| **Total SIT Licensing** | | **~$1,080 / mo** |
+| **Social Media APIs** | Sandbox/test access (reduced tier) | ~£500 |
+| **Rancher/OpenShift** | K8s Enterprise Support (included in prod licence for non-prod use) | ~£0 |
+| **Elastic Enterprise** | Dev/Test licence | ~£500 |
+| **Google Vertex AI** | 15M Tokens (test volume) | ~£80 |
+| **Total SIT Licensing** | | **~£1,080 / mo** |
 
 #### 6.1.2 UAT Environment (Production-Equivalent)
 
@@ -250,31 +250,31 @@ UAT mirrors production hardware specifications to ensure realistic validation of
 
 | Item                     | Spec                   | Qty | Unit Cost (Est) | Total       |
 | ------------------------ | ---------------------- | --- | --------------- | ----------- |
-| Control Plane Server     | 1U, 8C, 32GB           | 3   | $3,000          | $9,000      |
-| Worker Node Server       | 1U, 16C, 64GB          | 5   | $5,000          | $25,000     |
-| Database Server (ES)     | 2U, 16C, 64GB, NVMe    | 3   | $8,000          | $24,000     |
-| Redis Server             | 1U, 4C, 32GB           | 3   | $2,500          | $7,500      |
-| Networking               | Top-of-Rack Switch 10G | 2   | $4,000          | $8,000      |
-| **Total Hardware (UAT)** |                        |     |                 | **$73,500** |
+| Control Plane Server     | 1U, 8C, 32GB           | 3   | £3,000          | £9,000      |
+| Worker Node Server       | 1U, 16C, 64GB          | 5   | £5,000          | £25,000     |
+| Database Server (ES)     | 2U, 16C, 64GB, NVMe    | 3   | £8,000          | £24,000     |
+| Redis Server             | 1U, 4C, 32GB           | 3   | £2,500          | £7,500      |
+| Networking               | Top-of-Rack Switch 10G | 2   | £4,000          | £8,000      |
+| **Total Hardware (UAT)** |                        |     |                 | **£73,500** |
 
 _Note: UAT matches full production specification but does not include a DR site._
 
 **UAT Annual Software & Data Licensing (OpEx):**
 | License / Service | Description | Estimated Monthly Cost |
 |-------------------|-------------|------------------------|
-| **Social Media APIs** | Test access (may share production licence or use sandbox) | ~$2,000 |
-| **Rancher/OpenShift** | K8s Enterprise Support (included in prod licence for non-prod use) | ~$0 |
-| **Elastic Enterprise** | Production-equivalent licence | ~$1,500 |
-| **Google Vertex AI** | 75M Tokens (full test corpus) | ~$400 |
-| **Total UAT Licensing** | | **~$3,900 / mo** |
+| **Social Media APIs** | Test access (may share production licence or use sandbox) | ~£2,000 |
+| **Rancher/OpenShift** | K8s Enterprise Support (included in prod licence for non-prod use) | ~£0 |
+| **Elastic Enterprise** | Production-equivalent licence | ~£1,500 |
+| **Google Vertex AI** | 75M Tokens (full test corpus) | ~£400 |
+| **Total UAT Licensing** | | **~£3,900 / mo** |
 
 #### 6.1.3 Non-Production Cost Summary
 
 | Environment                  | Hardware (CapEx) | Monthly Licensing | Annual Licensing |
 | ---------------------------- | ---------------- | ----------------- | ---------------- |
-| SIT (~50% Prod)              | $24,300          | ~$1,080           | ~$12,960         |
-| UAT (Prod-equivalent, no DR) | $73,500          | ~$3,900           | ~$46,800         |
-| **Total Non-Prod**           | **$97,800**      | **~$4,980**       | **~$59,760**     |
+| SIT (~50% Prod)              | £24,300          | ~£1,080           | ~£12,960         |
+| UAT (Prod-equivalent, no DR) | £73,500          | ~£3,900           | ~£46,800         |
+| **Total Non-Prod**           | **£97,800**      | **~£4,980**       | **~£59,760**     |
 
 ## 7. Management Overview
 
@@ -282,8 +282,8 @@ _Note: UAT matches full production specification but does not include a DR site.
 
 Beyond hardware CapEx, the following annual OpEx is estimated:
 
-- **Data Center Power/Cooling**: ~$8,000/yr (per rack).
-- **Hardware Maintenance Contracts**: ~$5,000/yr.
+- **Data Center Power/Cooling**: ~£8,000/yr (per rack).
+- **Hardware Maintenance Contracts**: ~£5,000/yr.
 - **IT Operations Staff**: 0.5 FTE for ongoing hardware/network maintenance.
 
 ### 7.2 Implementation Roadmap
@@ -315,9 +315,9 @@ Estimated monthly costs based on a specific location strategy:
 
 | Role Group          | Location | Count  | Est. Rate/Mo | Subtotal          |
 | ------------------- | -------- | ------ | ------------ | ----------------- |
-| Senior Leadership   | Poland   | 5      | ~$7,500      | $37,500           |
-| Core Engineering    | India    | 6      | ~$3,500      | $21,000           |
-| **Total Team Cost** |          | **11** |              | **~$58,500 / mo** |
+| Senior Leadership   | Poland   | 5      | ~£7,500      | £37,500           |
+| Core Engineering    | India    | 6      | ~£3,500      | £21,000           |
+| **Total Team Cost** |          | **11** |              | **~£58,500 / mo** |
 
 _Role Mapping: Poland = PO, SM, Arch, 2x Lead Dev. India = BA, DevOps, Data Eng, 2x Dev, QA._
 
@@ -334,14 +334,14 @@ _Role Mapping: Poland = PO, SM, Arch, 2x Lead Dev. India = BA, DevOps, Data Eng,
 
 | Cost Category                        | Year 1         | Year 2       | Year 3       | 3-Year Total   |
 | ------------------------------------ | -------------- | ------------ | ------------ | -------------- |
-| Hardware – Production + DR (CapEx)   | $147,000       | $0           | $0           | $147,000       |
-| Hardware – SIT (CapEx)               | $24,300        | $0           | $0           | $24,300        |
-| Hardware – UAT (CapEx)               | $73,500        | $0           | $0           | $73,500        |
-| Licensing & APIs – Production (OpEx) | $97,800        | $97,800      | $97,800      | $293,400       |
-| Licensing & APIs – SIT (OpEx)        | $12,960        | $12,960      | $12,960      | $38,880        |
-| Licensing & APIs – UAT (OpEx)        | $46,800        | $46,800      | $46,800      | $140,400       |
-| Team (OpEx)                          | $702,000       | $702,000     | $702,000     | $2,106,000     |
-| DC Power/Maint (all envs)            | $19,500        | $19,500      | $19,500      | $58,500        |
-| **Total**                            | **$1,123,860** | **$879,060** | **$879,060** | **$2,881,980** |
+| Hardware – Production + DR (CapEx)   | £147,000       | £0           | £0           | £147,000       |
+| Hardware – SIT (CapEx)               | £24,300        | £0           | £0           | £24,300        |
+| Hardware – UAT (CapEx)               | £73,500        | £0           | £0           | £73,500        |
+| Licensing & APIs – Production (OpEx) | £97,800        | £97,800      | £97,800      | £293,400       |
+| Licensing & APIs – SIT (OpEx)        | £12,960        | £12,960      | £12,960      | £38,880        |
+| Licensing & APIs – UAT (OpEx)        | £46,800        | £46,800      | £46,800      | £140,400       |
+| Team (OpEx)                          | £702,000       | £702,000     | £702,000     | £2,106,000     |
+| DC Power/Maint (all envs)            | £19,500        | £19,500      | £19,500      | £58,500        |
+| **Total**                            | **£1,123,860** | **£879,060** | **£879,060** | **£2,881,980** |
 
-> **Non-Prod environments add ~$97.8k in CapEx (Year 1) and ~$59.8k/yr in licensing** (~$277k over 3 years) but are essential for quality assurance and risk mitigation before production releases.
+> **Non-Prod environments add ~£97.8k in CapEx (Year 1) and ~£59.8k/yr in licensing** (~£277k over 3 years) but are essential for quality assurance and risk mitigation before production releases.

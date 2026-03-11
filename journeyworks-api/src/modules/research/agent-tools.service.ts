@@ -262,6 +262,21 @@ export class AgentTools {
             type: 'string',
             description: 'Optional customer ID to filter results',
           },
+          channels: {
+            type: 'array',
+            description:
+              'Optional list of channels to filter (e.g., ["phone", "email"])',
+          },
+          startDate: {
+            type: 'string',
+            description:
+              'Optional ISO date for start of time window (e.g., 2026-02-28T00:00:00Z)',
+          },
+          endDate: {
+            type: 'string',
+            description:
+              'Optional ISO date for end of time window (e.g., 2026-03-06T23:59:59Z)',
+          },
         },
         required: ['query'],
       },
@@ -269,7 +284,14 @@ export class AgentTools {
         const results = await this.ragService.semanticSearch(
           input.query,
           input.topK || 5,
-          { customerId: input.customerId },
+          {
+            customerId: input.customerId,
+            channels: Array.isArray(input.channels)
+              ? input.channels
+              : undefined,
+            startDate: input.startDate,
+            endDate: input.endDate,
+          },
         );
         return results.map((r) => ({
           id: r.document.id,

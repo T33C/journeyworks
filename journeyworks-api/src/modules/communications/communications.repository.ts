@@ -283,12 +283,20 @@ export class CommunicationsRepository extends BaseElasticsearchRepository<Commun
       filterClauses.push({ range: { timestamp: dateRange } });
     }
 
-    // Text query for hybrid
+    // Text query for hybrid. Apply the same filters at query level so BM25
+    // results cannot bypass channel/date/customer/product constraints.
     const textQuery = {
-      multi_match: {
-        query: queryText,
-        fields: ['content^2', 'subject^1.5', 'summary'],
-        type: 'best_fields',
+      bool: {
+        must: [
+          {
+            multi_match: {
+              query: queryText,
+              fields: ['content^2', 'subject^1.5', 'summary'],
+              type: 'best_fields',
+            },
+          },
+        ],
+        ...(filterClauses.length > 0 ? { filter: filterClauses } : {}),
       },
     };
 
