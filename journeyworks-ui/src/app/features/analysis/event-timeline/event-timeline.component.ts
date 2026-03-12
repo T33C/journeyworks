@@ -856,21 +856,28 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
       const sortedEvents = [...events].sort(
         (a, b) => a.date.getTime() - b.date.getTime(),
       );
-      const labelPositions: { xPos: number; yLevel: number }[] = [];
-      const minLabelSpacing = 80;
+      const laneRightEdges: number[] = [];
+      const minLabelGap = 8;
 
       sortedEvents.forEach((event) => {
         const xPos = x(event.date);
+        const labelText =
+          event.label.length > 22
+            ? event.label.substring(0, 22) + '…'
+            : event.label;
+        // Approximate rendered width for 11px semi-bold text so lane assignment
+        // keeps adjacent labels from colliding.
+        const estimatedLabelWidth = Math.max(44, labelText.length * 6.3);
+        const halfLabelWidth = estimatedLabelWidth / 2;
 
         let yLevel = 0;
-        for (let i = 0; i < labelPositions.length; i++) {
-          if (Math.abs(xPos - labelPositions[i].xPos) < minLabelSpacing) {
-            if (labelPositions[i].yLevel === yLevel) {
-              yLevel++;
-            }
+        while (yLevel < laneRightEdges.length) {
+          if (xPos - halfLabelWidth >= laneRightEdges[yLevel] + minLabelGap) {
+            break;
           }
+          yLevel++;
         }
-        labelPositions.push({ xPos, yLevel });
+        laneRightEdges[yLevel] = xPos + halfLabelWidth;
 
         const labelY = -12 - yLevel * 14;
 
@@ -913,11 +920,7 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
                 : RAG.blue,
           )
           .style('cursor', 'pointer')
-          .text(
-            event.label.length > 22
-              ? event.label.substring(0, 22) + '…'
-              : event.label,
-          )
+          .text(labelText)
           .on('click', () => this.onEventClick(event));
 
         // Add native SVG tooltip showing the full event name
