@@ -159,7 +159,7 @@ describe('ResearchService', () => {
     );
     expect(conversationSetCall).toBeDefined();
     const [, savedHistory, ttl] = conversationSetCall!;
-    expect(ttl).toBe(3600);
+    expect(ttl).toBe(18000);
     expect(savedHistory).toHaveLength(20);
     expect(savedHistory[0].content).toBe('turn-3');
     expect(savedHistory[19].content).toBe('Contextual answer');
@@ -189,7 +189,7 @@ describe('ResearchService', () => {
     expect(cacheMock.set).toHaveBeenCalledWith(
       'research:conversation:conv-cache',
       expect.any(Array),
-      3600,
+      18000,
     );
   });
 
@@ -218,12 +218,12 @@ describe('ResearchService', () => {
     expect(cacheMock.set).toHaveBeenCalledWith(
       expect.stringContaining('research:followup:conv-new-session:'),
       cachedResponse,
-      3600,
+      18000,
     );
     expect(cacheMock.set).toHaveBeenCalledWith(
       'research:conversation:conv-new-session',
       expect.any(Array),
-      3600,
+      18000,
     );
   });
 
@@ -301,7 +301,7 @@ describe('ResearchService', () => {
     expect(cacheMock.set).toHaveBeenCalledWith(
       expect.stringContaining('insight:product:cards'),
       ragInsight,
-      3600,
+      18000,
     );
   });
 

@@ -59,10 +59,10 @@ export class ResearchService {
   private readonly logger = new Logger(ResearchService.name);
 
   // Configuration constants
-  private static readonly INSIGHT_CACHE_TTL = 3600; // 1 hour
-  private static readonly CONVERSATION_CACHE_TTL = 3600; // 1 hour
+  private static readonly INSIGHT_CACHE_TTL = 18000; // 5 hours
+  private static readonly CONVERSATION_CACHE_TTL = 18000; // 5 hours
   private static readonly CONVERSATION_CACHE_PREFIX = 'research:conversation:';
-  private static readonly FOLLOW_UP_CACHE_TTL = 3600; // 1 hour
+  private static readonly FOLLOW_UP_CACHE_TTL = 18000; // 5 hours
   private static readonly FOLLOW_UP_CACHE_PREFIX = 'research:followup:';
   private static readonly SHARED_FOLLOW_UP_CACHE_PREFIX =
     'research:followup:shared:';
@@ -1027,7 +1027,7 @@ export class ResearchService {
     const { context, question, useCache = true } = request;
     const cacheKey = this.buildInsightCacheKey(context);
 
-    // Check cache first (1 hour TTL)
+    // Check cache first (5 hour TTL)
     if (useCache) {
       const cached = await this.cache.get<ResearchInsight>(cacheKey);
       if (cached) {
@@ -1090,7 +1090,7 @@ export class ResearchService {
           context,
           insightData,
         );
-        // Cache the result for 1 hour
+        // Cache the result for 5 hours
         await this.cache.set(
           cacheKey,
           llmInsight,
