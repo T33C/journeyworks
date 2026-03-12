@@ -1441,8 +1441,13 @@ export class EventTimelineComponent implements OnInit, AfterViewInit {
 
   private onBubbleClick(event: MouseEvent, bubble: SentimentBubble) {
     const resolvedBubble = this.resolveClickedBubble(event, bubble);
-    // Keep bubble selection idempotent: clicking the same bubble should
-    // keep the same scope rather than toggling back to global context.
+    const selectedBubbleId = this.stateService.context().selectedBubble?.id;
+    if (selectedBubbleId === resolvedBubble.id) {
+      this.stateService.clearSelection();
+      this.hideTooltip();
+      return;
+    }
+
     this.stateService.selectBubble(resolvedBubble);
     this.hideTooltip();
   }

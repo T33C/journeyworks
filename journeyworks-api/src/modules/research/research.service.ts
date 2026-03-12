@@ -1085,10 +1085,11 @@ export class ResearchService {
         statisticalAnalysis,
       );
       if (llmInsight) {
-        // Use bubble volume if available (more accurate), otherwise use summary count
-        llmInsight.totalCommunications =
-          context.selectedBubble?.volume ??
-          insightData.summary.totalCommunications;
+        // Prefer context-specific totals when available (bubble/day or selected stage).
+        llmInsight.totalCommunications = this.resolveDisplayedTotal(
+          context,
+          insightData,
+        );
         // Cache the result for 1 hour
         await this.cache.set(
           cacheKey,
@@ -1107,10 +1108,8 @@ export class ResearchService {
     const fallbackInsight = this.resolveInsightFromContext(context);
     const insight: ResearchInsight = {
       ...fallbackInsight,
-      // Use bubble volume if available (more accurate), otherwise use summary count
-      totalCommunications:
-        context.selectedBubble?.volume ??
-        insightData.summary.totalCommunications,
+      // Prefer context-specific totals when available (bubble/day or selected stage).
+      totalCommunications: this.resolveDisplayedTotal(context, insightData),
       evidence:
         evidence.length > 0
           ? evidence
@@ -1317,7 +1316,39 @@ Explain the statistical findings in business terms the user can understand.`;
 
     // Key metrics — verbose includes the full breakdown
     parts.push('\n## Key Metrics');
-    if (verbose) {
+
+    const stage = context.journeyStage;
+    const hasStageCounts =
+      stage?.communications !== undefined &&
+      stage?.promoterPct !== undefined &&
+      stage?.passivePct !== undefined &&
+      stage?.detractorPct !== undefined;
+
+    if (hasStageCounts) {
+      const stageResponses = stage.communications as number;
+      const stagePromoters = stage.promoterPct as number;
+      const stagePassives = stage.passivePct as number;
+      const stageDetractors = stage.detractorPct as number;
+      const stageNps =
+        stage.npsScore !== undefined
+          ? stage.npsScore
+          : Math.round(stagePromoters - stageDetractors);
+
+      parts.push(`- Selected Stage Survey Responses: ${stageResponses}`);
+      parts.push(`- Selected Stage Estimated NPS: ${stageNps}`);
+      parts.push(`- Promoters: ${stagePromoters.toFixed(1)}%`);
+      parts.push(`- Passives: ${stagePassives.toFixed(1)}%`);
+      parts.push(`- Detractors: ${stageDetractors.toFixed(1)}%`);
+
+      if (verbose) {
+        parts.push(
+          `- Overall Communications (reference only): ${data.summary.totalCommunications}`,
+        );
+        parts.push(
+          `- Overall Social Mentions (reference only): ${data.summary.totalSocialMentions}`,
+        );
+      }
+    } else if (verbose) {
       parts.push(
         `- Total Communications Analyzed: ${data.summary.totalCommunications}`,
       );
@@ -1675,6 +1706,20 @@ Return ONLY valid JSON, no markdown formatting.`;
       if (context.journeyStage.npsScore !== undefined) {
         parts.push(`Stage NPS: ${context.journeyStage.npsScore}`);
       }
+      if (context.journeyStage.communications !== undefined) {
+        parts.push(
+          `Stage Survey Responses: ${context.journeyStage.communications}`,
+        );
+      }
+      if (
+        context.journeyStage.promoterPct !== undefined &&
+        context.journeyStage.passivePct !== undefined &&
+        context.journeyStage.detractorPct !== undefined
+      ) {
+        parts.push(
+          `Stage Distribution: Promoters ${context.journeyStage.promoterPct.toFixed(1)}%, Passives ${context.journeyStage.passivePct.toFixed(1)}%, Detractors ${context.journeyStage.detractorPct.toFixed(1)}%`,
+        );
+      }
     }
 
     if (context.selectedItems?.length) {
@@ -1744,6 +1789,28 @@ Return ONLY valid JSON, no markdown formatting.`;
       parts.push(`event:${context.event.id}`);
     } else if (context.journeyStage) {
       parts.push(`stage:${context.journeyStage.stage}`);
+      // Include stage metrics that influence prompt content to avoid stale cache hits.
+      if (context.journeyStage.npsScore !== undefined) {
+        parts.push(`stageNps:${context.journeyStage.npsScore}`);
+      }
+      if (context.journeyStage.communications !== undefined) {
+        parts.push(`stageComms:${context.journeyStage.communications}`);
+      }
+      if (context.journeyStage.promoterPct !== undefined) {
+        parts.push(
+          `stagePromoters:${context.journeyStage.promoterPct.toFixed(1)}`,
+        );
+      }
+      if (context.journeyStage.passivePct !== undefined) {
+        parts.push(
+          `stagePassives:${context.journeyStage.passivePct.toFixed(1)}`,
+        );
+      }
+      if (context.journeyStage.detractorPct !== undefined) {
+        parts.push(
+          `stageDetractors:${context.journeyStage.detractorPct.toFixed(1)}`,
+        );
+      }
     } else if (context.selectedItems?.length) {
       parts.push(`items:${context.selectedItems.join(',')}`);
     } else if (context.selectedBubble) {
@@ -1761,6 +1828,19 @@ Return ONLY valid JSON, no markdown formatting.`;
     }
 
     return parts.join(':');
+  }
+
+  /**
+   * Determine the most relevant total count for the current insight context.
+   */
+  private resolveDisplayedTotal(
+    context: AnalysisContext,
+    data: AggregatedInsightData,
+  ): number {
+    // Keep this aligned with evidence/query scope. Journey stage communications
+    // are survey-response counts (different domain), so they are intentionally
+    // excluded from totalCommunications.
+    return context.selectedBubble?.volume ?? data.summary.totalCommunications;
   }
 
   /**

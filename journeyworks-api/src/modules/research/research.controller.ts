@@ -148,6 +148,22 @@ class JourneyStageContextDto {
   @IsOptional()
   @IsNumber()
   npsScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  communications?: number;
+
+  @IsOptional()
+  @IsNumber()
+  promoterPct?: number;
+
+  @IsOptional()
+  @IsNumber()
+  passivePct?: number;
+
+  @IsOptional()
+  @IsNumber()
+  detractorPct?: number;
 }
 
 // AnalysisContextDto - validation DTO (more permissive than the strict AnalysisContext interface)
